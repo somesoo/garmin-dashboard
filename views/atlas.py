@@ -62,6 +62,11 @@ def _hero(activities: pd.DataFrame) -> None:
         shell.missing("activities.start_lat", "Odśwież tabele: `etl/load.py`.")
         return
 
+    # Hidden by default while its design is being reconsidered; the switch keeps
+    # it one click away instead of deleting the work.
+    if not st.toggle("Pokaż glob", value=False, key="globe_visible"):
+        return
+
     # One row per activity, built once per warehouse build. Grouping them into
     # markers is the browser's job, because it depends on the zoom.
     starts = globe.starts(with_gps, shell.build_id())
@@ -256,6 +261,8 @@ def _recent(activities: pd.DataFrame) -> None:
     shell.lead("Ostatnie aktywności")
     recent = activities.sort_values("start_local", ascending=False).head(10).copy()
     recent["start_local"] = pd.to_datetime(recent["start_local"]).dt.strftime("%d.%m %H:%M")
+    if "pace_min_km" in recent.columns:
+        recent["pace_min_km"] = shell.pace_column(recent["pace_min_km"])
     columns = {
         "start_local": "kiedy",
         "sport": "sport",

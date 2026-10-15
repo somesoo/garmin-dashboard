@@ -42,7 +42,7 @@ def _critical_speed() -> None:
     last, first = fitted.tail(1).iloc[0], fitted.head(1).iloc[0]
     columns = st.columns(5)
     columns[0].metric("CS", f"{last['cs_ms']:.2f} m/s", f"{last['cs_ms'] - first['cs_ms']:+.2f}")
-    columns[1].metric("CS jako tempo", f"{last['cs_pace_min_km']:.2f} min/km")
+    columns[1].metric("CS jako tempo", shell.pace(last["cs_pace_min_km"]))
     columns[2].metric("D′", f"{last['d_prime_m']:.0f} m")
     columns[3].metric("R² dopasowania", f"{last['r2']}")
     columns[4].metric("Prognoza 5 km", shell.clock(last.get("pred_5k_s")))

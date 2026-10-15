@@ -48,6 +48,8 @@ def render() -> None:
     frame = shown.sort_values("start_local", ascending=False)
     frame = frame[[c for c in COLUMNS if c in frame.columns]].copy()
     frame["start_local"] = pd.to_datetime(frame["start_local"]).dt.strftime("%d.%m.%Y %H:%M")
+    if "pace_min_km" in frame.columns:
+        frame["pace_min_km"] = shell.pace_column(frame["pace_min_km"])
     for column in ("best_1k_s", "best_5k_s"):
         if column in frame.columns:
             frame[column] = pd.to_numeric(frame[column], errors="coerce").map(
@@ -74,14 +76,14 @@ def render() -> None:
 
     shell.lead(
         "Tempo w czasie",
-        "Niżej = szybciej. Rozmiar punktu to dystans, kolor — tętno średnie.",
+        "Wyżej = szybciej. Rozmiar punktu to dystans, kolor — tętno średnie.",
     )
     tz.show(
         tz.scatter(
             runs, "start_local", "pace_min_km",
             color="avg_hr", color_kind="sequential", color_title="tętno",
             size="distance_km", hover=("name", "distance_km", "training_load"),
-            x_title="", y_title="min/km", reverse_y=True, height=380,
+            x_title="", y_title="tempo /km", reverse_y=True, pace_y=True, height=380,
         )
     )
 
@@ -94,7 +96,7 @@ def render() -> None:
         tz.scatter(
             runs, "avg_hr", "pace_min_km",
             size="distance_km", hover=("name", "distance_km"),
-            x_title="tętno średnie (bpm)", y_title="min/km",
-            reverse_y=True, height=380,
+            x_title="tętno średnie (bpm)", y_title="tempo /km",
+            reverse_y=True, pace_y=True, height=380,
         )
     )

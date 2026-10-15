@@ -71,6 +71,11 @@ Kolumny wyliczane w ETL (nie z API):
 
 ## Tabela `activities` (jeden wiersz = jeden trening)
 
+Tempo jest zapisane jako ułamek minut (5.72 = 5:43). **Nigdy nie pokazuj go
+w tej postaci**: kafelki przez `shell.pace`, tabele przez `shell.pace_column`,
+osie wykresów przez `scatter(pace_y=True)` / panel `"pace": True` /
+`route_map(pace=True)` (pod spodem `theme.pace_axis`, szybciej = wyżej).
+
 `activity_id`, `start_local`, `sport`, `distance_km`, `duration_min`,
 `pace_min_km` (min/km, **mniej = szybciej**), `speed_kmh`, `avg_hr`, `max_hr`,
 `training_load`, `te_aerobic`, `te_anaerobic`, `avg_power`, `norm_power`,
@@ -255,6 +260,8 @@ Jak to jest poskładane:
   (gitignorowane — to te same ślady GPS co `data/`) jako statyczny plik
   (~400 KB, delta-kodowane inty 1e-5°), który przeglądarka trzyma w cache.
   Powyżej ×6 glob przestaje się kręcić, a od ×28 znika siatka południków.
+- **Glob jest domyślnie schowany** (przełącznik „Pokaż glob” w Atlasie) — jego
+  wygląd jest do przemyślenia; kod i mapa ciepła zostają.
 - **Filtry nad globem**: *Kadr* (okolica / świat / miasta — `globe.place`
   dobiera zoom do kwantyli 4–96% śladów) i *Sport*. Strona *Trasy* nie ma już
   osobnej mapy gęstości — to jest ta mapa.

@@ -21,7 +21,7 @@ COLOUR_CHOICES = {
     "speed_ms": "prędkość",
 }
 COLOUR_UNITS = {
-    "pace_min_km": "min/km",
+    "pace_min_km": "tempo /km",
     "hr": "bpm",
     "elevation_m": "m n.p.m.",
     "speed_ms": "m/s",
@@ -47,8 +47,9 @@ def render() -> None:
 
     _explorer(routes, catalogue)
     st.caption(
-        "Wszystkie ślady naraz są teraz na globie w *Atlasie*: przybliż miasto, "
-        "a glob pokaże mapę ciepła — ile razy przebiegnięty jest każdy odcinek."
+        "Wszystkie ślady naraz są na globie w *Atlasie* (przełącznik „Pokaż "
+        "glob”): przybliż miasto, a glob pokaże mapę ciepła — ile razy "
+        "przebiegnięty jest każdy odcinek."
     )
 
 
@@ -110,8 +111,7 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
         columns = st.columns(5)
         columns[0].metric("Dystans", f"{summary.get('distance_km', float('nan')):.2f} km")
         columns[1].metric("Czas", f"{summary.get('duration_min', float('nan')):.0f} min")
-        pace = summary.get("pace_min_km")
-        columns[2].metric("Tempo", f"{pace:.2f} min/km" if pd.notna(pace) else "—")
+        columns[2].metric("Tempo", shell.pace(summary.get("pace_min_km")))
         columns[3].metric("Tętno śr.", f"{summary.get('avg_hr', float('nan')):.0f}")
         columns[4].metric("Load", f"{summary.get('training_load', float('nan')):.0f}")
 
@@ -121,6 +121,7 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
             color=colour_by,
             color_title=COLOUR_UNITS[colour_by],
             reverse_scale=(colour_by == "pace_min_km"),
+            pace=(colour_by == "pace_min_km"),
             height=560,
             # Tied to the activity, not the metric: recolouring keeps the view.
             uirevision=f"route-{int(chosen)}",
@@ -142,7 +143,8 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
     if "hr" in track.columns and track["hr"].notna().any():
         panels.append({"title": "Tętno (bpm)", "series": {"tętno": "hr"}, "kind": "line"})
     if "pace_min_km" in track.columns and track["pace_min_km"].notna().any():
-        panels.append({"title": "Tempo (min/km)", "series": {"tempo": "pace_min_km"}, "kind": "line"})
+        panels.append({"title": "Tempo (/km, wyżej = szybciej)", "series": {"tempo": "pace_min_km"},
+                       "kind": "line", "pace": True})
     if "cadence" in track.columns and track["cadence"].notna().any():
         panels.append({"title": "Kadencja", "series": {"kadencja": "cadence"}, "kind": "line"})
     if panels:

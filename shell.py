@@ -54,7 +54,7 @@ ACTIVITY_COLUMNS = {
     "kiedy": st.column_config.TextColumn("kiedy"),
     "km": st.column_config.NumberColumn("km", format="%.1f"),
     "min": st.column_config.NumberColumn("min", format="%.0f"),
-    "min/km": st.column_config.NumberColumn("min/km", format="%.2f"),
+    "min/km": st.column_config.TextColumn("tempo /km"),
     "tętno": st.column_config.NumberColumn("tętno", format="%.0f"),
     "tętno max": st.column_config.NumberColumn("tętno max", format="%.0f"),
     "load": st.column_config.NumberColumn("load", format="%.0f"),
@@ -216,6 +216,21 @@ def week_before(frame: pd.DataFrame) -> pd.Series | None:
 
 def missing(name: str, hint: str = "") -> None:
     st.caption(f"Tabela `{name}` jest pusta. {hint}".strip())
+
+
+def pace(minutes: float | None) -> str:
+    """Tile text for a pace: ``5:43 /km``."""
+    if minutes is None or pd.isna(minutes):
+        return "—"
+    seconds = int(round(float(minutes) * 60))
+    return f"{seconds // 60}:{seconds % 60:02d} /km"
+
+
+def pace_column(values: pd.Series) -> pd.Series:
+    """A pace column for tables, as ``m:ss`` text."""
+    return pd.to_numeric(values, errors="coerce").map(
+        lambda v: pace(v).removesuffix(" /km") if pd.notna(v) else None
+    )
 
 
 def clock(seconds: float | None) -> str:

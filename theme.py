@@ -448,6 +448,7 @@ def scatter(
     reverse_y: bool = False,
     color_title: str | None = None,
     color_mid: float | None = None,
+    pace_y: bool = False,
 ) -> go.Figure | None:
     """Points with an optional magnitude or polarity colour channel.
 
@@ -544,7 +545,13 @@ def scatter(
     fig.update_layout(**base_layout(legend=legend, height=height, hover="closest"))
     fig.update_xaxes(title_text=x_title if x_title is not None else x)
     fig.update_yaxes(title_text=y_title or y, autorange="reversed" if reverse_y else True)
-    return _dates(style_axes(fig), data[x])
+    fig = _dates(style_axes(fig), data[x])
+    if pace_y:
+        for trace in fig.data:
+            trace.text = [pace_text(v) for v in trace.y]
+            trace.hovertemplate = trace.hovertemplate.replace(f"{y}: %{{y}}", "tempo: %{text}/km")
+        pace_axis(fig, data[y], reverse=reverse_y)
+    return fig
 
 
 def heatmap(
@@ -662,6 +669,7 @@ def stacked_panels(
                     showlegend=legend_here,
                 )
             else:
+                pace = bool(panel.get("pace"))
                 fig.add_scatter(
                     x=xs,
                     y=values,
@@ -669,7 +677,8 @@ def stacked_panels(
                     mode="lines",
                     line=dict(width=2, color=color),
                     connectgaps=False,
-                    hovertemplate="%{y}<extra>" + label + "</extra>",
+                    text=[pace_text(v) for v in values] if pace else None,
+                    hovertemplate=("%{text}/km" if pace else "%{y}") + "<extra>" + label + "</extra>",
                     row=row,
                     col=1,
                     legendgroup=label,
@@ -689,6 +698,10 @@ def stacked_panels(
         )
     fig = style_axes(fig)
     fig.update_yaxes(nticks=4)
+    for row, (panel, labels) in enumerate(usable, start=1):
+        if panel.get("pace"):
+            values = pd.concat([pd.to_numeric(frame[panel["series"][l]], errors="coerce") for l in labels])
+            pace_axis(fig, values, row=row, robust=True)
     return _dates(fig, frame[x])
 
 
@@ -789,6 +802,47 @@ def _alpha(color: str, alpha: float) -> str:
     color = color.lstrip("#")
     r, g, b = (int(color[i : i + 2], 16) for i in (0, 2, 4))
     return f"rgba({r},{g},{b},{alpha})"
+
+
+def pace_text(minutes: Any) -> str | None:
+    """Decimal minutes per km as ``m:ss``: 5.72 is 5:43, not "five seventy-two"."""
+    if minutes is None or pd.isna(minutes):
+        return None
+    seconds = int(round(float(minutes) * 60))
+    return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def pace_axis(
+    fig: go.Figure,
+    values: Any,
+    *,
+    row: int | None = None,
+    reverse: bool = True,
+    robust: bool = False,
+) -> go.Figure:
+    """``m:ss`` ticks on a pace (min/km) y axis, faster at the top.
+
+    ``robust`` frames the 2nd-98th percentile, so a stop at the lights
+    (20 min/km for three seconds) does not squash the run into one line.
+    """
+    data = pd.to_numeric(pd.Series(values), errors="coerce").dropna()
+    if data.empty:
+        return fig
+    low, high = (data.quantile(0.02), data.quantile(0.98)) if robust else (data.min(), data.max())
+    low, high = float(low), float(high)
+    span = max(high - low, 0.1)
+    step = next(s for s in (0.25, 0.5, 1.0, 2.0, 5.0) if span / s <= 6)
+    first = (low // step) * step
+    ticks = [first + i * step for i in range(int((high - first) / step) + 2)]
+    pad = span * 0.06
+    rng = [high + pad, low - pad] if reverse else [low - pad, high + pad]
+    kwargs = dict(tickmode="array", tickvals=ticks, ticktext=[pace_text(t) for t in ticks],
+                  range=rng, autorange=False)
+    if row is not None:
+        fig.update_yaxes(row=row, col=1, **kwargs)
+    else:
+        fig.update_yaxes(**kwargs)
+    return fig
 
 
 def _hover_template(x: str, y: str, hover: Sequence[str], name: str | None) -> str:
@@ -1216,6 +1270,14 @@ def _map_layout(
     return fig
 
 
+def _pace_ticks(low: float, high: float) -> dict[str, Any]:
+    span = max(high - low, 0.1)
+    step = next(s for s in (0.25, 0.5, 1.0, 2.0) if span / s <= 5)
+    first = -(-low // step) * step
+    ticks = [first + i * step for i in range(int((high - first) / step) + 1)]
+    return dict(tickmode="array", tickvals=ticks, ticktext=[pace_text(v) for v in ticks])
+
+
 def route_map(
     points: pd.DataFrame,
     *,
@@ -1224,8 +1286,11 @@ def route_map(
     reverse_scale: bool = False,
     height: int = 520,
     uirevision: str | None = None,
+    pace: bool = False,
 ) -> go.Figure | None:
     """One GPS track as a line whose colour carries the measure.
+
+    ``pace`` writes the colour scale and the hover as ``m:ss`` per km.
 
     A line, not a string of dots: a route is a continuous thing, and sampled
     markers break it into beads that drift apart as you zoom in. The colour
@@ -1320,18 +1385,23 @@ def route_map(
                         thickness=10,
                         outlinewidth=0,
                         tickfont=dict(size=10, color=t["muted"]),
+                        **(_pace_ticks(low, high) if pace else {}),
                     ),
                 ),
                 hoverinfo="skip",
                 showlegend=False,
             )
         )
-        hover = (
-            "%{customdata[0]:.2f} km<br>"
-            + (color_title or color)
-            + ": %{customdata[1]:.1f}<extra></extra>"
-        )
-        custom = pd.DataFrame({"km": distance, "value": values}).to_numpy()
+        if pace:
+            hover = "%{customdata[0]:.2f} km<br>tempo: %{customdata[1]}/km<extra></extra>"
+            custom = pd.DataFrame({"km": distance, "value": values.map(pace_text)}).to_numpy()
+        else:
+            hover = (
+                "%{customdata[0]:.2f} km<br>"
+                + (color_title or color)
+                + ": %{customdata[1]:.1f}<extra></extra>"
+            )
+            custom = pd.DataFrame({"km": distance, "value": values}).to_numpy()
     else:
         fig.add_trace(
             go.Scattermap(
