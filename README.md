@@ -80,10 +80,12 @@ Bez tokenów wystarczy raz `.venv/bin/python etl/login.py`.
   Battery/stresu, Sleep Regularity Index z minutowego hipnogramu, środek snu
   i social jetlag, mapa doby (godzina × dzień) ze stresu i Body Battery.
 - **Trasy**: ślad GPS na mapie kolorowany tempem / tętnem / wysokością, profil
-  wysokości, tętno i tempo wzdłuż dystansu, oraz mapa gęstości wszystkich tras.
-  Zmiana kolorowanej metryki nie resetuje widoku mapy.
+  wysokości, tętno i tempo wzdłuż dystansu. Zmiana kolorowanej metryki nie
+  resetuje widoku mapy.
 - **Atlas** (strona startowa): obrotowy glob ze skupiskami wszystkich aktywności,
-  stan na dziś, ranking miejsc i ostatnie treningi.
+  który po przybliżeniu miasta zamienia się w mapę ciepła tras (ile razy
+  przebiegnięty jest każdy odcinek), z filtrem sportu i przelotem do miast;
+  dalej stan na dziś, ranking miejsc i ostatnie treningi.
 
 Surowy JSON jest źródłem prawdy — mapowanie można przepisać i odtworzyć tabele
 bez odpytywania API. Dzień raz pobrany nie jest pobierany ponownie, poza oknem
