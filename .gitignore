@@ -1,6 +1,7 @@
 # Dane osobiste: przenoszone przez scp, nigdy przez git.
 # Zawieraja historie zdrowia i slady GPS - nie trafiaja do repozytorium.
 data/
+*.tar.gz
 
 # Virtualenv: zalezny od platformy, tworzony osobno na kazdej maszynie.
 .venv/
