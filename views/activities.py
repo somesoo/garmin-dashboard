@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 import shell
@@ -44,11 +45,31 @@ def render() -> None:
     picked = st.multiselect("Sport", sports, default=sports, key="activities_sport")
     shown = activities[activities["sport"].isin(picked)] if picked else activities
 
-    frame = shown[[c for c in COLUMNS if c in shown.columns]].rename(columns=COLUMNS)
-    st.dataframe(frame, width="stretch", hide_index=True, height=440)
+    frame = shown.sort_values("start_local", ascending=False)
+    frame = frame[[c for c in COLUMNS if c in frame.columns]].copy()
+    frame["start_local"] = pd.to_datetime(frame["start_local"]).dt.strftime("%d.%m.%Y %H:%M")
+    for column in ("best_1k_s", "best_5k_s"):
+        if column in frame.columns:
+            frame[column] = pd.to_numeric(frame[column], errors="coerce").map(
+                lambda v: shell.clock(v) if pd.notna(v) else None
+            )
+    frame = frame.rename(columns=COLUMNS).rename(
+        columns={"najlepszy 1 km (s)": "najlepszy 1 km", "najlepszy 5 km (s)": "najlepszy 5 km"}
+    )
+    st.dataframe(frame, width="stretch", hide_index=True, height=440,
+                 column_config=shell.ACTIVITY_COLUMNS)
 
-    runs = shown[shown["sport"].astype(str).str.contains("running", na=False)]
+    runs = shown[shown["sport"].astype(str).str.contains("running", na=False)].copy()
     if runs.empty or not {"pace_min_km", "avg_hr"} <= set(runs.columns):
+        return
+    runs["start_local"] = pd.to_datetime(runs["start_local"])
+    # Same rule as the efficiency table: under 1 km or slower than a walk is a
+    # recording left running, and one 160 min/km point flattens the pace axis.
+    runs = runs[
+        (pd.to_numeric(runs["distance_km"], errors="coerce") >= 1.0)
+        & (pd.to_numeric(runs["pace_min_km"], errors="coerce") <= 12.0)
+    ]
+    if runs.empty:
         return
 
     shell.lead(
@@ -60,7 +81,7 @@ def render() -> None:
             runs, "start_local", "pace_min_km",
             color="avg_hr", color_kind="sequential", color_title="tętno",
             size="distance_km", hover=("name", "distance_km", "training_load"),
-            x_title="", y_title="min/km", reverse_y=True, height=420,
+            x_title="", y_title="min/km", reverse_y=True, height=380,
         )
     )
 
@@ -74,6 +95,6 @@ def render() -> None:
             runs, "avg_hr", "pace_min_km",
             size="distance_km", hover=("name", "distance_km"),
             x_title="tętno średnie (bpm)", y_title="min/km",
-            reverse_y=True, height=420,
+            reverse_y=True, height=380,
         )
     )

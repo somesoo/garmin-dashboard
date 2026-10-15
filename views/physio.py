@@ -175,7 +175,7 @@ def _economy() -> None:
     figure.update_layout(**tz.base_layout(legend=True, height=340, hover="closest"))
     figure.update_yaxes(title_text="m / uderzenie")
     tz.show(
-        tz.style_axes(figure),
+        tz.polish_dates(tz.style_axes(figure), view["day"]),
         table=view[["day", "distance_km", "avg_hr", "ef", "ef_roll10"]].tail(30),
         note="Rosnąca mediana przy tym samym tętnie to realny postęp tlenowy. Jeśli "
         "rośnie tylko dlatego, że biegasz szybciej na wyższym tętnie — to nie postęp, "
@@ -187,54 +187,80 @@ def _zones() -> None:
     zones = shell.table("intensity_distribution")
     shell.lead(
         "Rozkład intensywności",
-        "Udział czasu w strefach tętna, tygodniowo. Rampa ciemnieje ze strefą, bo "
-        "strefy są uporządkowane. Etykieta modelu to reguła opisowa (spolaryzowany: "
-        "≥70% łatwo, ≥10% mocno, <15% w środku), nie opublikowany indeks.",
+        "Udział czasu tygodniowo w trzech pasmach: łatwo (strefy 1–2), środek "
+        "(strefa 3) i mocno (strefy 4–5). Model spolaryzowany to dużo niebieskiego, "
+        "trochę pomarańczowego i mało szarego pośrodku. Etykieta modelu to reguła "
+        "opisowa (≥70% łatwo, ≥10% mocno, <15% w środku), nie opublikowany indeks.",
     )
     if zones.empty:
         shell.missing("intensity_distribution")
         return
-    view = zones.tail(52)
-    columns = [c for c in ("hr_z1_pct", "hr_z2_pct", "hr_z3_pct", "hr_z4_pct", "hr_z5_pct") if c in view.columns]
+    view = zones.copy()
+    view["week"] = pd.to_datetime(view["iso_week"] + "-1", format="%G-W%V-%u", errors="coerce")
+    view = shell.clip(view.dropna(subset=["week"]), "week")
+    if view.empty:
+        st.caption("Brak treningów z tętnem w tym zakresie.")
+        return
+    columns = ["easy_pct", "middle_pct", "hard_pct"]
+    colors = tz.intensity_colors()
     tz.show(
         tz.stacked(
-            view, "iso_week", columns,
-            {c: f"strefa {c[4]}" for c in columns},
-            y_title="% czasu", height=360,
+            view, "week", columns,
+            {"easy_pct": "łatwo", "middle_pct": "środek", "hard_pct": "mocno"},
+            y_title="% czasu", height=300,
+            colors={"easy_pct": colors["easy"], "middle_pct": colors["middle"], "hard_pct": colors["hard"]},
         ),
         table=view[["iso_week", "total_min", "easy_pct", "middle_pct", "hard_pct", "model"]]
         .sort_values("iso_week", ascending=False)
         .head(25),
-        note="Ostatnie tygodnie: "
+        note="Tygodnie w zakresie: "
         + " · ".join(f"{name} ×{count}" for name, count in view["model"].value_counts().items()),
+        key="zones",
     )
 
 
 def _predictions() -> None:
-    view = shell.clip(shell.daily())
-    columns = [c for c in ("race_5k_s", "race_10k_s", "race_hm_s", "race_marathon_s") if c in view.columns]
+    frame = shell.daily()
+    columns = [c for c in ("race_5k_s", "race_10k_s", "race_hm_s", "race_marathon_s") if c in frame.columns]
     if not columns:
         return
-    minutes = view[["day"] + columns].copy()
-    for column in columns:
-        minutes[column] = pd.to_numeric(minutes[column], errors="coerce") / 60
+    view = shell.clip(frame)
     labels = {
         "race_5k_s": "5 km",
         "race_10k_s": "10 km",
         "race_hm_s": "półmaraton",
         "race_marathon_s": "maraton",
     }
-    panels = [
-        {"title": labels[c], "series": {labels[c]: c}, "kind": "line"}
-        for c in columns
-        if minutes[c].notna().any()
-    ]
-    if not panels:
+    present = [c for c in columns if pd.to_numeric(view[c], errors="coerce").notna().any()]
+    if not present:
         return
-    shell.lead("Prognozy Garmina", "Przewidywane czasy (minuty) na podstawie ostatnich treningów.")
-    tz.show(tz.stacked_panels(minutes, "day", panels, height=130 * len(panels) + 60))
+    shell.lead(
+        "Prognozy Garmina",
+        "Przewidywane czasy na podstawie ostatnich treningów. Zmiana: względem "
+        "początku wybranego zakresu — w dół znaczy szybciej.",
+    )
+    tiles = st.columns(len(present))
+    for tile, column in zip(tiles, present):
+        values = pd.to_numeric(view[column], errors="coerce").dropna()
+        now, then = float(values.iloc[-1]), float(values.iloc[0])
+        change = now - then
+        # ASCII minus: Streamlit reads the arrow direction from the string, and a
+        # typographic "−" made a faster prediction show as a red rise.
+        sign = "-" if change < 0 else "+"
+        tile.metric(
+            labels[column],
+            _duration(now),
+            f"{sign}{shell.clock(abs(change))}" if abs(change) >= 1 else None,
+            delta_color="inverse",
+        )
+    minutes = view[["day", "race_5k_s"]].copy() if "race_5k_s" in view.columns else None
+    if minutes is not None:
+        minutes["5 km"] = pd.to_numeric(minutes["race_5k_s"], errors="coerce") / 60
+        shell.sub("Prognoza na 5 km (minuty)")
+        tz.show(tz.timeseries(minutes, "day", {"5 km": "5 km"}, height=220,
+                              end_labels=True, decimals=1), key="pred_5k")
 
-    garmin = pd.to_numeric(shell.daily().get("race_5k_s"), errors="coerce").dropna()
+    garmin = pd.to_numeric(frame.get("race_5k_s"), errors="coerce").dropna()
     cs_table = shell.table("critical_speed")
     model = cs_table.dropna(subset=["pred_5k_s"]).tail(1) if not cs_table.empty else pd.DataFrame()
     if not garmin.empty and not model.empty:
@@ -244,3 +270,9 @@ def _predictions() -> None:
             "potencjał z rekordów odcinków i jest zwykle optymistyczny — nie uwzględnia "
             "zmęczenia narastającego na pełnym dystansie."
         )
+
+
+def _duration(seconds: float) -> str:
+    seconds = int(round(seconds))
+    hours, rest = divmod(seconds, 3600)
+    return f"{hours}:{rest // 60:02d}:{rest % 60:02d}" if hours else shell.clock(seconds)

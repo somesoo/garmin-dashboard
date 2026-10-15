@@ -44,7 +44,7 @@ def render() -> None:
             frame[f"{column}_roll7"] = frame[column].rolling(7, min_periods=3).mean()
     view = shell.clip(frame)
     row = shell.latest_day()
-    week = frame.tail(8).head(7).mean(numeric_only=True)
+    week = shell.week_before(frame)
 
     st.title("Regeneracja")
     st.caption(

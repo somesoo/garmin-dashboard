@@ -182,11 +182,32 @@ Trzy reguły wymuszone strukturalnie:
    z szarym środkiem, kategorie uporządkowane (fazy snu, strefy HR) → rampa
    porządkowa.
 
-Buildery: `timeseries`, `bars`, `stacked`, `scatter`, `heatmap`,
-`stacked_panels`, `route_map`, `route_density`, `profile`
-(+ `geo_cells`/`geo_clusters` — binowanie punktów dla globu); dekoratory `band`,
-`threshold`, `zero_lines`; render przez `show(fig, table=..., note=...)`, który
-dokłada bliźniaczy widok tabelaryczny.
+Buildery: `trend`, `range_bars`, `trail`, `hbars`, `timeseries`, `bars`,
+`stacked`, `scatter`, `heatmap`, `stacked_panels`, `route_map`, `route_density`,
+`profile` (+ `geo_cells`/`geo_clusters` — binowanie punktów dla globu);
+dekoratory `band`, `threshold`, `zero_lines`; wspólna legenda nad grupą wykresów
+`key(...)`; render przez `show(fig, table=..., note=...)`, który dokłada
+bliźniaczy widok tabelaryczny.
+
+**Domyślny idiom dla dziennej metryki to `trend`**, nie `timeseries`: dni jako
+blade kropki, średnia krocząca jako jedyna wyraźna linia, osobista norma jako
+szary pas, ostatnia wartość podpisana na końcu linii. Surowa seria narysowana
+pełną linią (piła 90 odcinków + pomarańczowa średnia na wierzchu) to dokładnie
+to, co sprawiało, że dashboard wyglądał jak arkusz z 2005 roku. Kolejne zasady:
+
+- Zakres dnia (Body Battery min–max, okno snu) → `range_bars`; `clock=True`
+  daje oś godzin z wieczorem u góry.
+- Ranking kategorii (miejsca) → `hbars`, nie pionowe słupki z ukośnymi etykietami.
+- Udział części w czasie przy > 30 okresach → `stacked` sam przechodzi w warstwy
+  (`area`), bo 90 słupków ze szczelinami to kod kreskowy.
+- Fazy snu → `sleep_stage_colors()`, intensywność → `intensity_colors()`
+  (łatwo / środek / mocno). Pięć sąsiednich odcieni niebieskiego jest nie do
+  odróżnienia — nie wracaj do `ordinal_colors` dla tych dwóch zbiorów.
+- Daty na osiach są po polsku (`polish_dates`, wołane przez buildery samo);
+  wykres zbudowany ręcznie przez `go.Figure` trzeba przepuścić przez nie jawnie.
+- Kafelki (`shell.metrics`) porównują z `shell.week_before(frame)` i mają
+  czwarte pole `delta_color`: `"inverse"` dla tętna spoczynkowego / stresu,
+  `"off"` dla zmęczenia i ilorazów obciążenia.
 
 Zachowania, które wyglądają jak magia, ale są celowe:
 

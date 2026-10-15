@@ -146,12 +146,11 @@ def _now(frame: pd.DataFrame, row: pd.Series | None) -> None:
     shell.lead(
         "Stan na dziś",
         "Cztery liczby, które zmieniają decyzję o dzisiejszym treningu, i ich "
-        "przebieg w wybranym zakresie.",
+        "przebieg w wybranym zakresie. Zmiany: względem średniej z poprzednich 7 dni.",
     )
-    previous = frame.iloc[-2] if len(frame) > 1 else None
     shell.metrics(
         row,
-        previous,
+        shell.week_before(frame),
         [
             ("readiness", "Readiness", ""),
             ("hrv_last_night", "HRV noc", "ms"),
@@ -162,19 +161,14 @@ def _now(frame: pd.DataFrame, row: pd.Series | None) -> None:
 
     view = shell.clip(frame)
     pmc = shell.clip(shell.table("pmc"))
-    panels = [
-        {
-            "title": "Readiness",
-            "series": {"readiness": "readiness", "średnia 7 d": "readiness_roll7"},
-            "kind": "line",
-        },
-        {
-            "title": "HRV w nocy (ms)",
-            "series": {"HRV": "hrv_last_night", "średnia 7 d": "hrv_last_night_roll7"},
-            "kind": "line",
-        },
-    ]
-    tz.show(tz.stacked_panels(view, "day", panels, height=320))
+    tz.key([("dot", "dzień"), ("line", "średnia 7 d"), ("band", "norma HRV")])
+    shell.sub("Readiness")
+    tz.show(tz.trend(view, "day", {"readiness": ("readiness", "readiness_roll7")}, height=190),
+            key="atlas_readiness")
+    shell.sub("HRV w nocy")
+    tz.show(tz.trend(view, "day", {"HRV": ("hrv_last_night", "hrv_last_night_roll7")},
+                     band=("hrv_baseline_low", "hrv_baseline_high"), unit="ms", height=190),
+            key="atlas_hrv")
 
     if not pmc.empty:
         shell.sub(
@@ -227,10 +221,7 @@ def _places(activities: pd.DataFrame) -> None:
         places[column] = places[column].round(1)
     places["ostatnia"] = pd.to_datetime(places["ostatnia"]).dt.date
     top = places.head(12).copy()
-    tz.show(
-        tz.bars(top.sort_values("aktywności"), "miejsce", "aktywności", height=360),
-        table=places,
-    )
+    tz.show(tz.hbars(top, "miejsce", "aktywności"), table=places)
 
 
 def _recent(activities: pd.DataFrame) -> None:
@@ -251,7 +242,7 @@ def _recent(activities: pd.DataFrame) -> None:
         "location": "miejsce",
     }
     shown = recent[[c for c in columns if c in recent.columns]].rename(columns=columns)
-    st.dataframe(shown, width="stretch", hide_index=True)
+    st.dataframe(shown, width="stretch", hide_index=True, column_config=shell.ACTIVITY_COLUMNS)
 
 
 @st.dialog("Który trening otworzyć?")

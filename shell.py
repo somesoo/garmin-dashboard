@@ -48,6 +48,22 @@ PAGE_STYLE = """
 </style>
 """
 
+# Column formats for activity tables: raw floats ("130.3395") and seconds on
+# the start time are noise in a log you scan by eye.
+ACTIVITY_COLUMNS = {
+    "kiedy": st.column_config.TextColumn("kiedy"),
+    "km": st.column_config.NumberColumn("km", format="%.1f"),
+    "min": st.column_config.NumberColumn("min", format="%.0f"),
+    "min/km": st.column_config.NumberColumn("min/km", format="%.2f"),
+    "tętno": st.column_config.NumberColumn("tętno", format="%.0f"),
+    "tętno max": st.column_config.NumberColumn("tętno max", format="%.0f"),
+    "load": st.column_config.NumberColumn("load", format="%.0f"),
+    "TE tlenowy": st.column_config.NumberColumn("TE tlenowy", format="%.1f"),
+    "TE beztlenowy": st.column_config.NumberColumn("TE beztlenowy", format="%.1f"),
+    "kcal": st.column_config.NumberColumn("kcal", format="%.0f"),
+    "przewyższenie": st.column_config.NumberColumn("przewyższenie", format="%.0f m"),
+}
+
 WINDOWS = {"30 dni": 30, "90 dni": 90, "rok": 365, "wszystko": None}
 
 
@@ -188,6 +204,14 @@ def metrics(row: pd.Series | None, previous: pd.Series | None, specs: list[tuple
             delta = f"{diff:+.1f}".rstrip("0").rstrip(".") + (f" {unit}" if unit else "")
         shown = f"{float(value):.1f}".rstrip("0").rstrip(".")
         column.metric(label, f"{shown}{(' ' + unit) if unit else ''}", delta, delta_color=delta_color)
+
+
+def week_before(frame: pd.DataFrame) -> pd.Series | None:
+    """Mean of the seven days before the latest one: the baseline the tiles
+    compare against. Yesterday alone is too noisy a reference for HRV or sleep."""
+    if len(frame) < 3:
+        return None
+    return frame.sort_values("day").iloc[-8:-1].mean(numeric_only=True)
 
 
 def missing(name: str, hint: str = "") -> None:

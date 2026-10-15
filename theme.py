@@ -91,6 +91,29 @@ SLEEP_STAGE_LABELS = {
 ZONE_ORDER = ["hr_z1", "hr_z2", "hr_z3", "hr_z4", "hr_z5"]
 
 
+def sleep_stage_colors() -> dict[str, str]:
+    """Depth reads as lightness: deep is the strongest step, REM the faintest
+    sleep step, and waking is not on the sleep ramp at all (neutral grey).
+
+    Steps are spread across the 7-step ramp rather than taken adjacently: four
+    neighbouring blues were indistinguishable in thin stacked slices.
+    """
+    t = tokens()
+    ramp = t["sequential"]
+    return {"deep": ramp[6], "light": ramp[3], "rem": ramp[1], "awake": _alpha(t["muted"], 0.55)}
+
+
+def intensity_colors() -> dict[str, str]:
+    """Easy / middle / hard, the polarised-training reading of HR zones.
+
+    Easy takes the calm series blue, hard the warm accent, and the grey middle
+    is the "no man's land" the model is about -- three classes a reader can
+    tell apart at a glance, where five ramp steps of blue could not be.
+    """
+    t = tokens()
+    return {"easy": t["series"][0], "middle": _alpha(t["muted"], 0.55), "hard": t["series"][1]}
+
+
 def mode() -> str:
     """Which theme the browser is actually rendering."""
     try:
@@ -211,6 +234,8 @@ def timeseries(
     emphasis: str | None = None,
     markers: bool = False,
     fill: bool = False,
+    end_labels: bool = False,
+    decimals: int = 0,
 ) -> go.Figure | None:
     """Lines on a single value axis. ``series`` maps label -> column.
 
@@ -249,10 +274,18 @@ def timeseries(
             connectgaps=False,
             hovertemplate="%{y}<extra>" + label + "</extra>",
         )
+        if end_labels:
+            line = data[[x, column]].dropna()
+            if not line.empty:
+                value = float(line[column].iloc[-1])
+                text = f"{value:.{decimals}f}" if len(labels) == 1 else f"{label} {value:.{decimals}f}"
+                _end_label(fig, line[x].iloc[-1], value, text, color)
     fig.update_layout(**base_layout(legend=len(labels) > 1, height=height))
+    if end_labels:
+        fig.update_layout(margin=dict(l=8, r=78, t=40 if len(labels) > 1 else 12, b=8))
     if y_title:
         fig.update_yaxes(title_text=y_title)
-    return style_axes(fig)
+    return _dates(style_axes(fig), data[x])
 
 
 def bars(
@@ -289,7 +322,49 @@ def bars(
     fig.update_layout(**base_layout(legend=False, height=height))
     if y_title:
         fig.update_yaxes(title_text=y_title)
-    return style_axes(fig)
+    return _dates(style_axes(fig), data[x])
+
+
+def hbars(
+    frame: pd.DataFrame,
+    label: str,
+    value: str,
+    *,
+    unit: str = "",
+    decimals: int = 0,
+    height: int | None = None,
+) -> go.Figure | None:
+    """A ranking: horizontal bars, names readable on the left, value at the tip.
+
+    Vertical bars with category names make the reader tilt their head at
+    rotated labels; a ranked list of places reads top to bottom.
+    """
+    data, keep = _numeric(frame, [value])
+    if not keep:
+        return None
+    data = data.dropna(subset=[value]).sort_values(value)
+    if data.empty:
+        return None
+    t = tokens()
+    suffix = f" {unit}" if unit else ""
+    text = [f"{v:.{decimals}f}{suffix}" for v in data[value]]
+    fig = go.Figure(
+        go.Bar(
+            x=data[value], y=data[label].astype(str), orientation="h",
+            marker=dict(color=t["series"][0], line=dict(width=0), cornerradius=3),
+            text=text, textposition="outside", cliponaxis=False,
+            textfont=dict(family=FONT, size=12, color=t["ink_secondary"]),
+            hovertemplate="%{y}: %{x}" + suffix + "<extra></extra>",
+            width=0.62,
+        )
+    )
+    fig.update_layout(**base_layout(legend=False, height=height or 34 * len(data) + 30, hover="closest"))
+    fig.update_layout(margin=dict(l=8, r=40, t=8, b=8))
+    fig = style_axes(fig)
+    # The labels at the bar tips carry the values; the x axis would repeat them.
+    fig.update_xaxes(showticklabels=False, showgrid=False, showline=False)
+    fig.update_yaxes(showgrid=False, tickfont=dict(size=12, color=t["ink_secondary"]))
+    return fig
 
 
 def stacked(
@@ -302,11 +377,17 @@ def stacked(
     y_title: str | None = None,
     normalise: bool = False,
     reverse_ramp: bool = False,
+    colors: Mapping[str, str] | None = None,
+    area: bool | None = None,
 ) -> go.Figure | None:
     """Stacked bars for ordered parts of a whole, on the ordinal ramp.
 
     Segments are separated by a 2px surface gap rather than an outline, so the
     stack reads as parts of one bar instead of a set of bordered boxes.
+
+    Past ~30 periods the bars turn into a barcode -- ninety slivers separated by
+    gaps -- so ``area`` (auto by default) draws the same shares as stacked
+    layers. ``colors`` maps column -> colour when the ramp is not the right one.
     """
     data, keep = _numeric(frame, columns)
     if not keep or data.empty:
@@ -320,20 +401,36 @@ def stacked(
         # Sleep depth reads darkest-is-deepest; the plain ramp would put the
         # lightest step on deep sleep and invert the metaphor.
         ramp = list(reversed(ramp))
+    if colors:
+        ramp = [colors.get(column, color) for column, color in zip(keep, ramp)]
+    if area is None:
+        area = data[x].nunique() > 30
     t = tokens()
     fig = go.Figure()
     for color, column in zip(ramp, keep):
-        fig.add_bar(
-            x=data[x],
-            y=data[column],
-            name=(labels or {}).get(column, column),
-            marker=dict(color=color, line=dict(width=2, color=t["surface"])),
-            hovertemplate="%{y}<extra>" + (labels or {}).get(column, column) + "</extra>",
-        )
-    fig.update_layout(**base_layout(legend=True, height=height), barmode="stack")
+        name = (labels or {}).get(column, column)
+        if area:
+            fig.add_scatter(
+                x=data[x], y=data[column], name=name, mode="lines", stackgroup="one",
+                line=dict(width=0.6, color=t["surface"], shape="spline", smoothing=0.4),
+                fillcolor=color,
+                hovertemplate="%{y:.0f}<extra>" + name + "</extra>",
+            )
+        else:
+            fig.add_bar(
+                x=data[x],
+                y=data[column],
+                name=name,
+                marker=dict(color=color, line=dict(width=2, color=t["surface"])),
+                hovertemplate="%{y}<extra>" + name + "</extra>",
+            )
+    fig.update_layout(**base_layout(legend=True, height=height), barmode="stack",
+                      legend_traceorder="normal")
     if y_title:
         fig.update_yaxes(title_text=y_title)
-    return style_axes(fig)
+    if normalise:
+        fig.update_yaxes(range=[0, 100])
+    return _dates(style_axes(fig), data[x])
 
 
 def scatter(
@@ -358,7 +455,13 @@ def scatter(
     that folds into "pozostałe" rather than inventing a fourth hue.
     """
     needed = [c for c in (x, y) if c]
-    data, keep = _numeric(frame, needed + ([size] if size else []))
+    # A date axis must stay a date axis: coercing it "to numeric" turned
+    # timestamps into nanoseconds and labelled the axis 1.785x10^15.
+    x_dates = x in frame.columns and pd.api.types.is_datetime64_any_dtype(frame[x])
+    data, keep = _numeric(frame, ([y] if x_dates else needed) + ([size] if size else []))
+    if x_dates:
+        data[x] = frame[x]
+        keep = [x] + keep
     if len(keep) < 2 or data.empty:
         return None
     data = data.dropna(subset=[x, y])
@@ -403,7 +506,9 @@ def scatter(
         if values is not None and values.notna().mean() < 0.6:
             values = None
         if color and values is not None:
-            ramp = t["diverging"] if color_kind == "diverging" else t["sequential"]
+            # The two lightest sequential steps vanish into the surface as dots;
+            # a magnitude ramp on markers starts at the third.
+            ramp = t["diverging"] if color_kind == "diverging" else t["sequential"][2:]
             marker.update(
                 color=values,
                 colorscale=[[i / (len(ramp) - 1), c] for i, c in enumerate(ramp)],
@@ -437,9 +542,9 @@ def scatter(
         legend = False
 
     fig.update_layout(**base_layout(legend=legend, height=height, hover="closest"))
-    fig.update_xaxes(title_text=x_title or x)
+    fig.update_xaxes(title_text=x_title if x_title is not None else x)
     fig.update_yaxes(title_text=y_title or y, autorange="reversed" if reverse_y else True)
-    return style_axes(fig)
+    return _dates(style_axes(fig), data[x])
 
 
 def heatmap(
@@ -458,10 +563,16 @@ def heatmap(
     t = tokens()
     ramp = t["diverging"] if kind == "diverging" else t["sequential"]
     colorscale = [[i / (len(ramp) - 1), c] for i, c in enumerate(ramp)]
+    rows = list(grid.index)
+    if rows and all(hasattr(i, "month") and hasattr(i, "day") for i in rows):
+        # Date rows as "26 lip" text: plotly would otherwise parse them into an
+        # English date axis.
+        rows = [f"{i.day} {MONTHS_PL[i.month - 1]}" for i in rows]
     trace = go.Heatmap(
         z=grid.values,
         x=list(grid.columns),
-        y=[str(i) for i in grid.index],
+        y=[str(i) for i in rows],
+        hoverongaps=False,
         colorscale=colorscale,
         zmid=mid if kind == "diverging" else None,
         colorbar=dict(
@@ -481,7 +592,9 @@ def heatmap(
     if x_title:
         fig.update_xaxes(title_text=x_title)
     fig = style_axes(fig)
-    fig.update_yaxes(showgrid=False, autorange="reversed")
+    fig.update_yaxes(showgrid=False, autorange="reversed", nticks=12)
+    # Missing cells sit on a faint wash instead of punching white holes.
+    fig.update_layout(plot_bgcolor=_alpha(t["muted"], 0.08))
     return fig
 
 
@@ -495,7 +608,9 @@ def stacked_panels(
     """Small multiples sharing one x axis -- the honest answer to two scales.
 
     Each panel is ``{"title": str, "series": {label: column}, "kind": "line"
-    | "bar", "height": float}``.
+    | "bar", "height": float}``. A legend entry is shown once per label, not
+    once per panel -- six entries for "HRV, średnia 7 d, RHR, średnia 7 d..."
+    was a legend that explained nothing.
     """
     usable = []
     for panel in panels:
@@ -515,15 +630,18 @@ def stacked_panels(
         rows=len(usable),
         cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.10,
+        vertical_spacing=0.12,
         row_heights=[w / total for w in weights],
         subplot_titles=[panel.get("title", "") for panel, _ in usable],
     )
 
     t = tokens()
+    shown: set[str] = set()
     for row, (panel, labels) in enumerate(usable, start=1):
         colors = series_colors(len(labels))
         for color, label in zip(colors, labels):
+            legend_here = len(labels) > 1 and label not in shown
+            shown.add(label)
             column = panel["series"][label]
             values = pd.to_numeric(frame[column], errors="coerce")
             # Rows come from a frame shared by every panel; a series sampled on
@@ -540,7 +658,8 @@ def stacked_panels(
                     hovertemplate="%{y}<extra>" + label + "</extra>",
                     row=row,
                     col=1,
-                    showlegend=len(labels) > 1,
+                    legendgroup=label,
+                    showlegend=legend_here,
                 )
             else:
                 fig.add_scatter(
@@ -553,7 +672,8 @@ def stacked_panels(
                     hovertemplate="%{y}<extra>" + label + "</extra>",
                     row=row,
                     col=1,
-                    showlegend=len(labels) > 1,
+                    legendgroup=label,
+                    showlegend=legend_here,
                 )
 
     legend = any(len(labels) > 1 for _, labels in usable)
@@ -562,11 +682,14 @@ def stacked_panels(
     fig.update_layout(margin=dict(l=8, r=14, t=64 if legend else 34, b=8), bargap=0.1)
     for annotation in fig.layout.annotations:
         annotation.update(
+            text=f"<b>{annotation.text}</b>" if annotation.text else annotation.text,
             font=dict(size=12, color=t["ink_secondary"], family=FONT),
             x=0,
             xanchor="left",
         )
-    return style_axes(fig)
+    fig = style_axes(fig)
+    fig.update_yaxes(nticks=4)
+    return _dates(fig, frame[x])
 
 
 def band(fig: go.Figure, low: float, high: float, *, row: int | None = None) -> go.Figure:
@@ -697,6 +820,14 @@ def polish_dates(fig: go.Figure, values: pd.Series, *, row: int | None = None) -
     days = pd.to_datetime(pd.Series(values), errors="coerce").dropna()
     if days.empty:
         return fig
+    if days.max() - days.min() < pd.Timedelta(days=2):
+        # One night or one session: the axis is a clock, not a calendar.
+        kwargs = dict(tickformat="%H:%M", hoverformat="%H:%M")
+        if row is not None:
+            fig.update_xaxes(row=row, col=1, **kwargs)
+        else:
+            fig.update_xaxes(**kwargs)
+        return fig
     first, last = days.min().normalize(), days.max().normalize()
     span = (last - first).days
     if span <= 50:
@@ -714,6 +845,14 @@ def polish_dates(fig: go.Figure, values: pd.Series, *, row: int | None = None) -
         fig.update_xaxes(row=row, col=1, **kwargs)
     else:
         fig.update_xaxes(**kwargs)
+    return fig
+
+
+def _dates(fig: go.Figure, values: Any) -> go.Figure:
+    """Polish date ticks when the x values are dates; anything else untouched."""
+    series = pd.Series(values)
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return polish_dates(fig, series)
     return fig
 
 
@@ -739,6 +878,7 @@ def trend(
     unit: str = "",
     decimals: int = 0,
     height: int = 210,
+    smooth_label: str = "średnia 7 d",
 ) -> go.Figure | None:
     """Daily dots + rolling-mean line (+ normal band) on one value axis.
 
@@ -784,14 +924,15 @@ def trend(
         if smooth in keep:
             line = data[[x, smooth]].dropna()
             fig.add_scatter(
-                x=line[x], y=line[smooth], mode="lines", name=f"{prefix}średnia 7 d",
+                x=line[x], y=line[smooth], mode="lines", name=f"{prefix}{smooth_label}",
                 line=dict(width=2.6, color=color, shape="spline", smoothing=0.6),
-                hovertemplate=f"%{{y:.{decimals}f}}{suffix}<extra>{prefix}średnia 7 d</extra>",
+                hovertemplate=f"%{{y:.{decimals}f}}{suffix}<extra>{prefix}{smooth_label}</extra>",
                 showlegend=False,
             )
             if not line.empty:
                 value = float(line[smooth].iloc[-1])
-                text = f"{value:.{decimals}f}{suffix}" if len(labels) == 1 else f"{label} {value:.{decimals}f}"
+                number = f"{value:,.{decimals}f}".replace(",", "\u2009")
+                text = f"{number}{suffix}" if len(labels) == 1 else f"{label} {number}"
                 _end_label(fig, line[x].iloc[-1], value, text, color)
 
     fig.update_layout(**base_layout(legend=False, height=height))
@@ -810,8 +951,13 @@ def range_bars(
     *,
     unit: str = "",
     height: int = 220,
+    clock: bool = False,
 ) -> go.Figure | None:
     """One floating bar per day from its minimum to its maximum.
+
+    ``clock`` reads the values as hours on a continuous axis (25.5 = 01:30),
+    labels them as times and runs the axis downwards, evening on top -- the
+    way a sleep diary is drawn.
 
     The shape of a day (how far it charged, how far it drained) is the bar;
     three lines for max, min and wake drew the same information as three
@@ -825,12 +971,21 @@ def range_bars(
         return None
     t = tokens()
     suffix = f" {unit}" if unit else ""
+    if clock:
+        clock_low = data[low].map(_clock_text)
+        clock_high = data[high].map(_clock_text)
     fig = go.Figure(
         go.Bar(
             x=data[x], y=data[high] - data[low], base=data[low],
             marker=dict(color=_alpha(t["series"][0], 0.30), line=dict(width=0), cornerradius=3),
-            customdata=data[[low, high]].to_numpy(),
-            hovertemplate=f"%{{customdata[0]:.0f}} → %{{customdata[1]:.0f}}{suffix}<extra></extra>",
+            customdata=(
+                pd.DataFrame({"a": clock_low, "b": clock_high}).to_numpy()
+                if clock else data[[low, high]].to_numpy()
+            ),
+            hovertemplate=(
+                "%{customdata[0]} → %{customdata[1]}<extra></extra>" if clock
+                else f"%{{customdata[0]:.0f}} → %{{customdata[1]:.0f}}{suffix}<extra></extra>"
+            ),
             width=pd.Timedelta(hours=11).total_seconds() * 1000,
         )
     )
@@ -842,17 +997,37 @@ def range_bars(
         width=pd.Timedelta(hours=11).total_seconds() * 1000, hoverinfo="skip", showlegend=False,
     )
     # Written beside the bar, like the end label of a trend line.
+    end_text = (
+        f"{_clock_text(last[low])}–{_clock_text(last[high])}" if clock
+        else f"{last[low]:.0f}–{last[high]:.0f}"
+    )
     fig.add_annotation(
         x=last[x], y=float(last[high] + last[low]) / 2,
-        text=f"<b>{last[low]:.0f}–{last[high]:.0f}</b>",
+        text=f"<b>{end_text}</b>",
         showarrow=False, xanchor="left", xshift=10,
         font=dict(family=FONT, size=12, color=t["ink"]),
     )
     fig.update_layout(**base_layout(legend=False, height=height), barmode="overlay")
-    fig.update_layout(margin=dict(l=8, r=78, t=10, b=8))
+    fig.update_layout(margin=dict(l=8, r=96 if clock else 78, t=10, b=8))
     fig = style_axes(fig)
     fig.update_yaxes(nticks=5)
+    if clock:
+        top = float(data[low].quantile(0.02)) // 1
+        bottom = float(data[high].quantile(0.98)) // 1 + 1
+        hours = list(range(int(top), int(bottom) + 1))
+        step = 2 if len(hours) > 8 else 1
+        fig.update_yaxes(
+            range=[bottom, top], tickmode="array",
+            tickvals=hours[::step], ticktext=[_clock_text(h) for h in hours[::step]],
+        )
     return polish_dates(fig, data[x])
+
+
+def _clock_text(hours: float) -> str:
+    if hours is None or pd.isna(hours):
+        return "—"
+    minutes = int(round(float(hours) * 60)) % (24 * 60)
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
 def trail(

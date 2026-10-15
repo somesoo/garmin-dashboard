@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 import shell
@@ -102,7 +103,7 @@ def _foster(weekly) -> None:
         "Monotonia = średnia dzienna podzielona przez odchylenie w tygodniu. Tydzień "
         "siedmiu identycznych sesji punktuje wysoko nawet przy umiarkowanej objętości, "
         "a wysoki strain przy wysokiej monotonii to klasyczny podpis przeciążenia. "
-        "Rozmiar punktu to strain.",
+        "Każdy punkt to tydzień; ostatnie cztery są wyróżnione.",
     )
     if weekly.empty:
         shell.missing("load_weekly")
@@ -111,20 +112,26 @@ def _foster(weekly) -> None:
     if frame.empty:
         st.caption("Za mało tygodni z treningami.")
         return
+    frame = frame.copy()
+    frame["okres"] = "wcześniej"
+    frame.loc[frame.index[-4:], "okres"] = "ostatnie 4 tygodnie"
     figure = tz.scatter(
-        frame,
+        frame.sort_values("okres"),
         "load_sum",
         "monotony",
-        color="rhr",
-        color_kind="sequential",
-        color_title="RHR",
-        size="strain",
-        hover=("iso_week", "sessions", "hrv", "sleep_h"),
+        color="okres",
+        color_kind="categorical",
+        hover=("iso_week", "sessions", "strain"),
         x_title="load tygodniowy",
         y_title="monotonia",
-        height=420,
+        height=380,
     )
     if figure is not None:
+        # History recedes to grey; the recent weeks keep the accent.
+        for trace in figure.data:
+            if trace.name == "wcześniej":
+                trace.marker.color = tz._alpha(tz.tokens()["muted"], 0.45)
+        figure.data = tuple(sorted(figure.data, key=lambda trace: trace.name != "wcześniej"))
         tz.threshold(figure, 2.0, label="monotonia 2.0")
     tz.show(
         figure,
@@ -134,7 +141,10 @@ def _foster(weekly) -> None:
     )
 
     shell.sub("Strain tygodniowy")
-    tz.show(tz.bars(frame, "iso_week", "strain", height=260, y_title="strain"))
+    weeks = frame.assign(
+        week=pd.to_datetime(frame["iso_week"] + "-1", format="%G-W%V-%u", errors="coerce")
+    )
+    tz.show(tz.bars(weeks, "week", "strain", height=240), key="strain")
 
 
 def _banister(models: dict) -> None:
