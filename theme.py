@@ -1,0 +1,1070 @@
+"""The chart system: one palette, one plotly template, a few builders.
+
+Every figure in the dashboard is built here so the whole page reads as one
+system. Three rules this module enforces structurally, because they are the
+mistakes that otherwise creep back in:
+
+1. **No chart titles inside the figure.** Titles are Streamlit headings above
+   the plot. A plotly title and a top legend fight for the same band and end up
+   overlapping; moving the title out of the figure removes the collision class
+   entirely and gives the page one typographic hierarchy.
+2. **No dual axes.** ``timeseries`` takes a single value axis. Two measures of
+   different scale go into ``stacked_panels`` (small multiples sharing the x
+   axis) instead, because the alignment of two y-scales is arbitrary and invents
+   correlations that are not in the data.
+3. **Colour is assigned by the job it does**: identity -> the fixed categorical
+   order, magnitude -> one blue ramp light-to-dark, polarity -> blue/red with a
+   grey midpoint. Ordered categories (sleep depth, heart-rate zones) get the
+   ordinal ramp, never the categorical one.
+
+The palettes are the data-viz reference instance, validated with the skill's
+own checker against both surfaces this app actually renders on (light #fcfcfb,
+Streamlit dark #0e1117): categorical slots 1-3 pass all-pairs CVD and
+normal-vision floors in both modes, and the 4/5-step ordinal ramps pass
+monotonicity, step gap, single hue and light-end contrast.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Iterable, Mapping, Sequence
+
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+from plotly.subplots import make_subplots
+
+LIGHT: dict[str, Any] = {
+    "surface": "#fcfcfb",
+    "ink": "#0b0b0b",
+    "ink_secondary": "#52514e",
+    "muted": "#898781",
+    "grid": "#e1e0d9",
+    "axis": "#c3c2b7",
+    # Categorical identity, in fixed order. Slot 4+ does not exist on purpose:
+    # past three series a chart becomes small multiples or folds a tail into
+    # "pozostałe".
+    "series": ["#2a78d6", "#eb6834", "#1baf7a"],
+    # Single-hue magnitude ramp, light -> dark.
+    "sequential": ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"],
+    # Ordered categories: start no lighter than step 250 so the light end still
+    # separates from the surface.
+    "ordinal": ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#104281"],
+    # Polarity: warm/cool poles, neutral grey midpoint.
+    "diverging": ["#0d366b", "#2a78d6", "#9ec5f4", "#f0efec", "#f3a3a2", "#e34948", "#8f2322"],
+    "status": {
+        "good": "#0ca30c",
+        "warning": "#fab219",
+        "serious": "#ec835a",
+        "critical": "#d03b3b",
+    },
+}
+
+DARK: dict[str, Any] = {
+    "surface": "#0e1117",
+    "ink": "#ffffff",
+    "ink_secondary": "#c3c2b7",
+    "muted": "#898781",
+    "grid": "#2c2c2a",
+    "axis": "#383835",
+    "series": ["#3987e5", "#d95926", "#199e70"],
+    "sequential": ["#0d366b", "#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb"],
+    "ordinal": ["#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4"],
+    "diverging": ["#cde2fb", "#6da7ec", "#3987e5", "#383835", "#e66767", "#d03b3b", "#8f2322"],
+    "status": {
+        "good": "#0ca30c",
+        "warning": "#fab219",
+        "serious": "#ec835a",
+        "critical": "#d03b3b",
+    },
+}
+
+FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'
+
+# Stage and zone orders are meaningful, so they carry the ordinal ramp.
+SLEEP_STAGE_ORDER = ["deep", "light", "rem", "awake"]
+SLEEP_STAGE_LABELS = {
+    "deep": "głęboki",
+    "light": "lekki",
+    "rem": "REM",
+    "awake": "czuwanie",
+}
+ZONE_ORDER = ["hr_z1", "hr_z2", "hr_z3", "hr_z4", "hr_z5"]
+
+
+def mode() -> str:
+    """Which theme the browser is actually rendering."""
+    try:
+        value = st.context.theme.type  # Streamlit >= 1.46
+        if value in ("light", "dark"):
+            return value
+    except Exception:  # noqa: BLE001 - older Streamlit or no context
+        pass
+    try:
+        return "dark" if st.get_option("theme.base") == "dark" else "light"
+    except Exception:  # noqa: BLE001
+        return "light"
+
+
+def tokens() -> dict[str, Any]:
+    return DARK if mode() == "dark" else LIGHT
+
+
+def series_colors(count: int) -> list[str]:
+    """Categorical colours in fixed order; a 4th series is a design error."""
+    palette = tokens()["series"]
+    if count > len(palette):
+        raise ValueError(
+            f"{count} serii kategorialnych: uzyj stacked_panels albo zwin ogon "
+            f"do 'pozostale' (max {len(palette)})"
+        )
+    return palette[:count]
+
+
+def ordinal_colors(count: int) -> list[str]:
+    ramp = tokens()["ordinal"]
+    if count <= len(ramp):
+        return ramp[:count]
+    step = (len(ramp) - 1) / (count - 1)
+    return [ramp[round(i * step)] for i in range(count)]
+
+
+def base_layout(legend: bool, height: int, hover: str = "x unified") -> dict[str, Any]:
+    t = tokens()
+    return dict(
+        height=height,
+        # Small base margins; the axes carry automargin, so tick labels and axis
+        # titles push these out as far as they actually need. Fixing the margins
+        # by hand is how axis labels end up clipped at some window widths.
+        margin=dict(l=8, r=14, t=40 if legend else 12, b=8),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family=FONT, size=12, color=t["ink_secondary"]),
+        hovermode=hover,
+        hoverlabel=dict(
+            bgcolor=t["surface"],
+            bordercolor=t["axis"],
+            font=dict(family=FONT, size=12, color=t["ink"]),
+        ),
+        showlegend=legend,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.06,
+            xanchor="left",
+            x=0,
+            title=None,
+            bgcolor="rgba(0,0,0,0)",
+            font=dict(size=12),
+        ),
+        colorway=t["series"],
+        bargap=0.22,
+    )
+
+
+def style_axes(fig: go.Figure) -> go.Figure:
+    """Recessive hairline grid; solid, never dashed."""
+    t = tokens()
+    fig.update_xaxes(
+        showgrid=False,
+        zeroline=False,
+        linecolor=t["axis"],
+        tickfont=dict(color=t["muted"], size=11),
+        title_font=dict(color=t["muted"], size=11),
+        title_standoff=8,
+        automargin=True,
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor=t["grid"],
+        gridwidth=1,
+        zeroline=False,
+        linecolor="rgba(0,0,0,0)",
+        tickfont=dict(color=t["muted"], size=11),
+        title_font=dict(color=t["muted"], size=11),
+        title_standoff=8,
+        automargin=True,
+    )
+    return fig
+
+
+def _numeric(frame: pd.DataFrame, columns: Iterable[str]) -> tuple[pd.DataFrame, list[str]]:
+    """Drop columns the watch never recorded; cast the rest to one dtype."""
+    out = frame.copy()
+    keep: list[str] = []
+    for column in columns:
+        if column not in out.columns:
+            continue
+        values = pd.to_numeric(out[column], errors="coerce")
+        if values.notna().any():
+            out[column] = values
+            keep.append(column)
+    return out, keep
+
+
+def timeseries(
+    frame: pd.DataFrame,
+    x: str,
+    series: Mapping[str, str],
+    *,
+    height: int = 300,
+    y_title: str | None = None,
+    emphasis: str | None = None,
+    markers: bool = False,
+    fill: bool = False,
+) -> go.Figure | None:
+    """Lines on a single value axis. ``series`` maps label -> column.
+
+    ``emphasis`` names the one label that stays saturated while the rest drop
+    to the muted ink - the way to show one line against its context without
+    spending a categorical slot on each.
+    """
+    data, columns = _numeric(frame, series.values())
+    labels = [label for label, column in series.items() if column in columns]
+    if not labels or data.empty:
+        return None
+
+    colors = series_colors(len(labels)) if emphasis is None else None
+    t = tokens()
+    fig = go.Figure()
+    for index, label in enumerate(labels):
+        column = series[label]
+        if emphasis is None:
+            color = colors[index]
+            width = 2
+        elif label == emphasis:
+            color = t["series"][0]
+            width = 2.4
+        else:
+            color = t["muted"]
+            width = 1.4
+        fig.add_scatter(
+            x=data[x],
+            y=data[column],
+            name=label,
+            mode="lines+markers" if markers else "lines",
+            line=dict(width=width, color=color, shape="linear"),
+            marker=dict(size=8, color=color, line=dict(width=2, color=t["surface"])),
+            fill="tozeroy" if fill and len(labels) == 1 else None,
+            fillcolor=_alpha(color, 0.12) if fill and len(labels) == 1 else None,
+            connectgaps=False,
+            hovertemplate="%{y}<extra>" + label + "</extra>",
+        )
+    fig.update_layout(**base_layout(legend=len(labels) > 1, height=height))
+    if y_title:
+        fig.update_yaxes(title_text=y_title)
+    return style_axes(fig)
+
+
+def bars(
+    frame: pd.DataFrame,
+    x: str,
+    y: str,
+    *,
+    height: int = 260,
+    y_title: str | None = None,
+    diverging: bool = False,
+    label: str | None = None,
+) -> go.Figure | None:
+    """One measure as bars. ``diverging`` colours by sign (polarity, not rank)."""
+    data, columns = _numeric(frame, [y])
+    if not columns or data.empty:
+        return None
+    t = tokens()
+    if diverging:
+        colors = [
+            t["diverging"][1] if value >= 0 else t["diverging"][-2]
+            for value in data[y].fillna(0)
+        ]
+    else:
+        colors = t["series"][0]
+    fig = go.Figure(
+        go.Bar(
+            x=data[x],
+            y=data[y],
+            marker=dict(color=colors, line=dict(width=0)),
+            name=label or y,
+            hovertemplate="%{y}<extra>%{x}</extra>",
+        )
+    )
+    fig.update_layout(**base_layout(legend=False, height=height))
+    if y_title:
+        fig.update_yaxes(title_text=y_title)
+    return style_axes(fig)
+
+
+def stacked(
+    frame: pd.DataFrame,
+    x: str,
+    columns: Sequence[str],
+    labels: Mapping[str, str] | None = None,
+    *,
+    height: int = 320,
+    y_title: str | None = None,
+    normalise: bool = False,
+    reverse_ramp: bool = False,
+) -> go.Figure | None:
+    """Stacked bars for ordered parts of a whole, on the ordinal ramp.
+
+    Segments are separated by a 2px surface gap rather than an outline, so the
+    stack reads as parts of one bar instead of a set of bordered boxes.
+    """
+    data, keep = _numeric(frame, columns)
+    if not keep or data.empty:
+        return None
+    if normalise:
+        total = data[keep].sum(axis=1).replace(0, pd.NA)
+        for column in keep:
+            data[column] = (100 * data[column] / total).round(1)
+    ramp = ordinal_colors(len(keep))
+    if reverse_ramp:
+        # Sleep depth reads darkest-is-deepest; the plain ramp would put the
+        # lightest step on deep sleep and invert the metaphor.
+        ramp = list(reversed(ramp))
+    t = tokens()
+    fig = go.Figure()
+    for color, column in zip(ramp, keep):
+        fig.add_bar(
+            x=data[x],
+            y=data[column],
+            name=(labels or {}).get(column, column),
+            marker=dict(color=color, line=dict(width=2, color=t["surface"])),
+            hovertemplate="%{y}<extra>" + (labels or {}).get(column, column) + "</extra>",
+        )
+    fig.update_layout(**base_layout(legend=True, height=height), barmode="stack")
+    if y_title:
+        fig.update_yaxes(title_text=y_title)
+    return style_axes(fig)
+
+
+def scatter(
+    frame: pd.DataFrame,
+    x: str,
+    y: str,
+    *,
+    color: str | None = None,
+    color_kind: str = "sequential",
+    size: str | None = None,
+    hover: Sequence[str] = (),
+    height: int = 380,
+    x_title: str | None = None,
+    y_title: str | None = None,
+    reverse_y: bool = False,
+    color_title: str | None = None,
+    color_mid: float | None = None,
+) -> go.Figure | None:
+    """Points with an optional magnitude or polarity colour channel.
+
+    Categorical colour is capped at three groups by the palette; anything past
+    that folds into "pozostałe" rather than inventing a fourth hue.
+    """
+    needed = [c for c in (x, y) if c]
+    data, keep = _numeric(frame, needed + ([size] if size else []))
+    if len(keep) < 2 or data.empty:
+        return None
+    data = data.dropna(subset=[x, y])
+    if data.empty:
+        return None
+
+    t = tokens()
+    fig = go.Figure()
+    marker: dict[str, Any] = dict(
+        size=9 if size is None else None,
+        line=dict(width=2, color=t["surface"]),
+    )
+    if size and size in data.columns:
+        values = pd.to_numeric(data[size], errors="coerce").fillna(0)
+        span = float(values.max()) or 1.0
+        marker["size"] = (9 + 16 * values / span).clip(lower=7)
+
+    if color and color in frame.columns and color_kind == "categorical":
+        groups = list(dict.fromkeys(frame[color].dropna()))
+        if len(groups) > 3:
+            top = groups[:2]
+            data[color] = data[color].where(data[color].isin(top), "pozostałe")
+            groups = top + ["pozostałe"]
+        for group, hue in zip(groups, series_colors(len(groups))):
+            subset = data[data[color] == group]
+            if subset.empty:
+                continue
+            fig.add_scatter(
+                x=subset[x],
+                y=subset[y],
+                mode="markers",
+                name=str(group),
+                marker={**marker, "color": hue},
+                customdata=subset[list(hover)] if hover else None,
+                hovertemplate=_hover_template(x, y, hover, str(group)),
+            )
+        legend = True
+    else:
+        values = pd.to_numeric(data[color], errors="coerce") if color in data.columns else None
+        # A colour channel that is mostly missing paints the chart grey and
+        # stretches its scale across a handful of points: drop it instead.
+        if values is not None and values.notna().mean() < 0.6:
+            values = None
+        if color and values is not None:
+            ramp = t["diverging"] if color_kind == "diverging" else t["sequential"]
+            marker.update(
+                color=values,
+                colorscale=[[i / (len(ramp) - 1), c] for i, c in enumerate(ramp)],
+                colorbar=dict(
+                    title=dict(text=color_title or color, side="right", font=dict(size=11)),
+                    thickness=10,
+                    outlinewidth=0,
+                    tickfont=dict(size=10, color=t["muted"]),
+                ),
+            )
+            if color_kind == "diverging":
+                extent = float(values.abs().max() or 1)
+                mid = color_mid if color_mid is not None else 0.0
+                marker.update(cmin=mid - extent, cmax=mid + extent, cmid=mid)
+            else:
+                # Robust limits so one outlier does not flatten the ramp.
+                low, high = values.quantile(0.05), values.quantile(0.95)
+                if pd.notna(low) and pd.notna(high) and high > low:
+                    marker.update(cmin=float(low), cmax=float(high))
+        else:
+            marker["color"] = t["series"][0]
+        fig.add_scatter(
+            x=data[x],
+            y=data[y],
+            mode="markers",
+            marker=marker,
+            customdata=data[list(hover)] if hover else None,
+            hovertemplate=_hover_template(x, y, hover, None),
+            showlegend=False,
+        )
+        legend = False
+
+    fig.update_layout(**base_layout(legend=legend, height=height, hover="closest"))
+    fig.update_xaxes(title_text=x_title or x)
+    fig.update_yaxes(title_text=y_title or y, autorange="reversed" if reverse_y else True)
+    return style_axes(fig)
+
+
+def heatmap(
+    grid: pd.DataFrame,
+    *,
+    kind: str = "sequential",
+    height: int = 460,
+    x_title: str | None = None,
+    color_title: str | None = None,
+    mid: float | None = None,
+    text: pd.DataFrame | None = None,
+) -> go.Figure | None:
+    """Matrix of one measure. Sequential for magnitude, diverging for polarity."""
+    if grid is None or grid.empty:
+        return None
+    t = tokens()
+    ramp = t["diverging"] if kind == "diverging" else t["sequential"]
+    colorscale = [[i / (len(ramp) - 1), c] for i, c in enumerate(ramp)]
+    trace = go.Heatmap(
+        z=grid.values,
+        x=list(grid.columns),
+        y=[str(i) for i in grid.index],
+        colorscale=colorscale,
+        zmid=mid if kind == "diverging" else None,
+        colorbar=dict(
+            title=dict(text=color_title or "", side="right", font=dict(size=11)),
+            thickness=10,
+            outlinewidth=0,
+            tickfont=dict(size=10, color=t["muted"]),
+        ),
+        hovertemplate="%{y} · %{x}: %{z}<extra></extra>",
+        xgap=1,
+        ygap=1,
+    )
+    if text is not None:
+        trace.update(text=text.values, texttemplate="%{text}", textfont=dict(size=10))
+    fig = go.Figure(trace)
+    fig.update_layout(**base_layout(legend=False, height=height, hover="closest"))
+    if x_title:
+        fig.update_xaxes(title_text=x_title)
+    fig = style_axes(fig)
+    fig.update_yaxes(showgrid=False, autorange="reversed")
+    return fig
+
+
+def stacked_panels(
+    frame: pd.DataFrame,
+    x: str,
+    panels: Sequence[Mapping[str, Any]],
+    *,
+    height: int = 460,
+) -> go.Figure | None:
+    """Small multiples sharing one x axis -- the honest answer to two scales.
+
+    Each panel is ``{"title": str, "series": {label: column}, "kind": "line"
+    | "bar", "height": float}``.
+    """
+    usable = []
+    for panel in panels:
+        data, keep = _numeric(frame, panel["series"].values())
+        labels = [label for label, column in panel["series"].items() if column in keep]
+        if labels:
+            usable.append((panel, labels))
+    if not usable:
+        return None
+
+    weights = [panel.get("height", 1.0) for panel, _ in usable]
+    total = sum(weights)
+    fig = make_subplots(
+        rows=len(usable),
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.10,
+        row_heights=[w / total for w in weights],
+        subplot_titles=[panel.get("title", "") for panel, _ in usable],
+    )
+
+    t = tokens()
+    for row, (panel, labels) in enumerate(usable, start=1):
+        colors = series_colors(len(labels))
+        for color, label in zip(colors, labels):
+            column = panel["series"][label]
+            values = pd.to_numeric(frame[column], errors="coerce")
+            if panel.get("kind") == "bar":
+                fig.add_bar(
+                    x=frame[x],
+                    y=values,
+                    name=label,
+                    marker=dict(color=_alpha(color, 0.55), line=dict(width=0)),
+                    hovertemplate="%{y}<extra>" + label + "</extra>",
+                    row=row,
+                    col=1,
+                    showlegend=len(labels) > 1,
+                )
+            else:
+                fig.add_scatter(
+                    x=frame[x],
+                    y=values,
+                    name=label,
+                    mode="lines",
+                    line=dict(width=2, color=color),
+                    connectgaps=False,
+                    hovertemplate="%{y}<extra>" + label + "</extra>",
+                    row=row,
+                    col=1,
+                    showlegend=len(labels) > 1,
+                )
+
+    legend = any(len(labels) > 1 for _, labels in usable)
+    fig.update_layout(**base_layout(legend=legend, height=height))
+    # Panels need room for their own titles on top of the legend band.
+    fig.update_layout(margin=dict(l=8, r=14, t=64 if legend else 34, b=8), bargap=0.1)
+    for annotation in fig.layout.annotations:
+        annotation.update(
+            font=dict(size=12, color=t["ink_secondary"], family=FONT),
+            x=0,
+            xanchor="left",
+        )
+    return style_axes(fig)
+
+
+def band(fig: go.Figure, low: float, high: float, *, row: int | None = None) -> go.Figure:
+    """A shaded reference band (a target range), behind the marks."""
+    t = tokens()
+    kwargs = dict(y0=low, y1=high, fillcolor=_alpha(t["status"]["good"], 0.10), line_width=0)
+    if row is not None:
+        fig.add_hrect(row=row, col=1, **kwargs)
+    else:
+        fig.add_hrect(**kwargs)
+    return fig
+
+
+def _data_range(fig: go.Figure) -> tuple[float, float] | None:
+    values: list[float] = []
+    for trace in fig.data:
+        y = getattr(trace, "y", None)
+        if y is None:
+            continue
+        series = pd.to_numeric(pd.Series(list(y)), errors="coerce").dropna()
+        if not series.empty:
+            values.extend([float(series.min()), float(series.max())])
+    if not values:
+        return None
+    return min(values), max(values)
+
+
+def threshold(
+    fig: go.Figure,
+    value: float,
+    *,
+    label: str | None = None,
+    status: str = "critical",
+    row: int | None = None,
+) -> go.Figure:
+    """A dashed rule for a real threshold -- the one legitimate use of dashing.
+
+    Skipped when the threshold sits far outside the data: drawing it would
+    stretch the axis and squash every actual value into a corner.
+    """
+    span = _data_range(fig)
+    if span is not None:
+        low, high = span
+        margin = max((high - low) * 0.35, 1e-6)
+        if value > high + margin or value < low - margin:
+            return fig
+    t = tokens()
+    kwargs = dict(
+        y=value,
+        line_dash="dash",
+        line_width=1,
+        line_color=_alpha(t["status"][status], 0.75),
+        annotation_text=label,
+        annotation_position="top left",
+        annotation_font=dict(size=10, color=t["muted"]),
+    )
+    if row is not None:
+        fig.add_hline(row=row, col=1, **kwargs)
+    else:
+        fig.add_hline(**kwargs)
+    return fig
+
+
+def zero_lines(fig: go.Figure) -> go.Figure:
+    """Quadrant guides for a z-score scatter."""
+    t = tokens()
+    for adder in (fig.add_hline, fig.add_vline):
+        adder(0, line_width=1, line_color=t["axis"])
+    return fig
+
+
+def show(
+    fig: go.Figure | None,
+    *,
+    table: pd.DataFrame | None = None,
+    note: str | None = None,
+    empty: str = "Brak danych w tym zakresie.",
+    key: str | None = None,
+) -> None:
+    """Render a figure with its table-view twin.
+
+    Every chart ships a table: colour and position are never the only way to
+    read a value.
+    """
+    if fig is None:
+        st.caption(empty)
+        return
+    st.plotly_chart(fig, width="stretch", key=key, config={"displayModeBar": False})
+    if note:
+        st.caption(note)
+    if table is not None and not table.empty:
+        with st.expander("dane"):
+            st.dataframe(table, width="stretch", hide_index=True)
+
+
+def _alpha(color: str, alpha: float) -> str:
+    color = color.lstrip("#")
+    r, g, b = (int(color[i : i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+def _hover_template(x: str, y: str, hover: Sequence[str], name: str | None) -> str:
+    parts = [f"{x}: %{{x}}", f"{y}: %{{y}}"]
+    for index, field in enumerate(hover):
+        parts.append(f"{field}: %{{customdata[{index}]}}")
+    tail = f"<extra>{name}</extra>" if name else "<extra></extra>"
+    return "<br>".join(parts) + tail
+
+
+# ---------------------------------------------------------------- maps
+
+
+def _map_layout(
+    fig: go.Figure,
+    points: pd.DataFrame,
+    height: int,
+    zoom_pad: float = 0.12,
+    uirevision: str | None = None,
+    robust: bool = False,
+) -> go.Figure:
+    """Centre and zoom a map on its own track, with a neutral basemap.
+
+    The basemap style is a light raster for both themes: a dark basemap plus a
+    sequential ramp fights for the same lightness band, and the track is the
+    subject here, not the terrain.
+    """
+    t = tokens()
+    lat = pd.to_numeric(points["lat"], errors="coerce").dropna()
+    lon = pd.to_numeric(points["lon"], errors="coerce").dropna()
+    if lat.empty or lon.empty:
+        return fig
+
+    # Web Mercator: at zoom z the world is 256*2^z px wide, so the zoom that
+    # makes a bounding box fill the viewport is log2(360 * px / (256 * span)).
+    # Guessing a constant instead leaves the track as a dot in a sea of map.
+    if robust:
+        # Frame the bulk of the points, not their extremes: one trip abroad
+        # otherwise zooms the whole map out to continental scale, where a
+        # density radius of a few pixels renders nothing at all.
+        lat_low, lat_high = lat.quantile(0.02), lat.quantile(0.98)
+        lon_low, lon_high = lon.quantile(0.02), lon.quantile(0.98)
+    else:
+        lat_low, lat_high = lat.min(), lat.max()
+        lon_low, lon_high = lon.min(), lon.max()
+
+    lat_span = max(float(lat_high - lat_low), 1e-4)
+    lon_span = max(float(lon_high - lon_low), 1e-4)
+    viewport_width, viewport_height = 900.0, max(height, 240)
+    import math
+
+    # MapLibre (what plotly's map traces render with) uses 512px tiles, so the
+    # world is 512*2^z wide -- the 256px figure from the slippy-map era is one
+    # zoom level off and lands the track half outside the frame.
+    tile = 512.0
+    zoom_lon = math.log2(360 * viewport_width / (tile * lon_span * (1 + zoom_pad)))
+    # Latitude degrees shrink with cos(lat) on the mercator grid.
+    lat_scale = max(math.cos(math.radians(float(lat.mean()))), 0.1)
+    zoom_lat = math.log2(
+        360 * viewport_height * lat_scale / (tile * lat_span * (1 + zoom_pad))
+    )
+    fig.update_layout(
+        map=dict(
+            style="carto-positron",
+            center=dict(
+                lat=float((lat_low + lat_high) / 2), lon=float((lon_low + lon_high) / 2)
+            ),
+            zoom=max(8.0, min(16.0, min(zoom_lon, zoom_lat))),
+            # Set on the subplot as well as the layout: the subplot property is
+            # what actually guards the pan/zoom state, and inheriting it is one
+            # plotly version away from surprising us.
+            uirevision=uirevision,
+        ),
+        height=height,
+        margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family=FONT, size=12, color=t["ink_secondary"]),
+        hoverlabel=dict(
+            bgcolor=t["surface"],
+            bordercolor=t["axis"],
+            font=dict(family=FONT, size=12, color=t["ink"]),
+        ),
+        showlegend=False,
+        # Plotly keeps the current pan/zoom while this token is unchanged, so
+        # recolouring the track leaves the viewer where they were. The token
+        # changes with the activity, which is when a reset is what you want.
+        uirevision=uirevision,
+    )
+    return fig
+
+
+def route_map(
+    points: pd.DataFrame,
+    *,
+    color: str | None = None,
+    color_title: str | None = None,
+    reverse_scale: bool = False,
+    height: int = 520,
+    uirevision: str | None = None,
+) -> go.Figure | None:
+    """One GPS track as a line whose colour carries the measure.
+
+    A line, not a string of dots: a route is a continuous thing, and sampled
+    markers break it into beads that drift apart as you zoom in. The colour
+    runs along the line itself -- each segment takes the shade of the value at
+    its start -- so the shape and the measure share one mark instead of two.
+    """
+    if points is None or points.empty or "lat" not in points.columns:
+        return None
+    track = points.dropna(subset=["lat", "lon"]).copy()
+    if len(track) < 3:
+        return None
+
+    t = tokens()
+    fig = go.Figure()
+    # A single wide pass underneath keeps the route legible where it doubles
+    # back on itself and where one segment is a different shade from the next.
+    fig.add_trace(
+        go.Scattermap(
+            lat=track["lat"],
+            lon=track["lon"],
+            mode="lines",
+            line=dict(width=7, color=_alpha(t["ink"], 0.14)),
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+
+    values = pd.to_numeric(track[color], errors="coerce") if color in track.columns else None
+    distance = (
+        pd.to_numeric(track.get("distance_km"), errors="coerce")
+        if "distance_km" in track.columns
+        else pd.Series(range(len(track)), index=track.index, dtype="float64")
+    )
+
+    if values is not None and values.notna().any():
+        ramp = list(reversed(t["sequential"])) if reverse_scale else list(t["sequential"])
+        # Clamp to robust quantiles: a few stopped-at-the-lights samples at
+        # 20 min/km otherwise squash the whole run into one shade.
+        low, high = values.quantile(0.05), values.quantile(0.95)
+        if not (pd.notna(low) and pd.notna(high) and high > low):
+            low, high = values.min(), values.max()
+        low, high = float(low), float(high)
+        span = high - low or 1.0
+
+        lat = track["lat"].to_numpy()
+        lon = track["lon"].to_numpy()
+        filled = values.ffill().bfill().to_numpy()
+        # One trace per shade, each holding its own segments: plotly colours a
+        # line per trace, so a continuous gradient along one polyline is not on
+        # the table. Seven shades read as a gradient and cost seven traces.
+        steps = len(ramp)
+        bins: list[tuple[list[float], list[float]]] = [([], []) for _ in range(steps)]
+        for i in range(len(lat) - 1):
+            share = (float(filled[i]) - low) / span
+            index = min(steps - 1, max(0, int(share * steps)))
+            lats, lons = bins[index]
+            lats.extend((lat[i], lat[i + 1], None))
+            lons.extend((lon[i], lon[i + 1], None))
+        for index, (lats, lons) in enumerate(bins):
+            if not lats:
+                continue
+            fig.add_trace(
+                go.Scattermap(
+                    lat=lats,
+                    lon=lons,
+                    mode="lines",
+                    line=dict(width=4, color=ramp[index]),
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
+        # The colourbar needs a trace that carries a scale; this one is only
+        # ever a legend -- its markers are invisible.
+        fig.add_trace(
+            go.Scattermap(
+                lat=[float(lat[0])],
+                lon=[float(lon[0])],
+                mode="markers",
+                marker=dict(
+                    size=0.1,
+                    opacity=0,
+                    color=[low],
+                    cmin=low,
+                    cmax=high,
+                    colorscale=[[i / (len(ramp) - 1), c] for i, c in enumerate(ramp)],
+                    showscale=True,
+                    colorbar=dict(
+                        title=dict(text=color_title or color, side="right", font=dict(size=11)),
+                        thickness=10,
+                        outlinewidth=0,
+                        tickfont=dict(size=10, color=t["muted"]),
+                    ),
+                ),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+        hover = (
+            "%{customdata[0]:.2f} km<br>"
+            + (color_title or color)
+            + ": %{customdata[1]:.1f}<extra></extra>"
+        )
+        custom = pd.DataFrame({"km": distance, "value": values}).to_numpy()
+    else:
+        fig.add_trace(
+            go.Scattermap(
+                lat=track["lat"],
+                lon=track["lon"],
+                mode="lines",
+                line=dict(width=4, color=t["series"][0]),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+        hover = "%{customdata[0]:.2f} km<extra></extra>"
+        custom = distance.to_frame().to_numpy()
+
+    # Hover lives on an invisible marker layer: the values stay readable point
+    # by point without putting dots back on the map.
+    fig.add_trace(
+        go.Scattermap(
+            lat=track["lat"],
+            lon=track["lon"],
+            mode="markers",
+            marker=dict(size=12, opacity=0),
+            customdata=custom,
+            hovertemplate=hover,
+            showlegend=False,
+        )
+    )
+
+    # Start and finish, labelled rather than colour-coded. On a loop the two
+    # markers land on top of each other, so the labels go to opposite corners.
+    endpoints = (
+        ("start", track.iloc[0], "top right"),
+        ("koniec", track.iloc[-1], "bottom left"),
+    )
+    for label, row, position in endpoints:
+        fig.add_trace(
+            go.Scattermap(
+                lat=[row["lat"]],
+                lon=[row["lon"]],
+                mode="markers+text",
+                marker=dict(size=12, color=t["ink"]),
+                text=[label],
+                textposition=position,
+                textfont=dict(size=12, color=t["ink"]),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+    return _map_layout(fig, track, height, uirevision=uirevision)
+
+
+def route_density(
+    points: pd.DataFrame,
+    *,
+    height: int = 560,
+    uirevision: str | None = "density",
+) -> go.Figure | None:
+    """Every track at once: the tracks themselves, stacked.
+
+    Not a density raster. A raster is computed for one zoom level -- its blur
+    radius is in pixels -- so zooming in pulls it apart into a scatter of
+    blobs that no longer means anything. Drawing the routes as translucent
+    lines keeps the geometry: a corridor ridden fifty times is fifty lines on
+    top of each other and reads as dark at every zoom, and a one-off detour
+    stays a faint thread.
+    """
+    if points is None or points.empty or "lat" not in points.columns:
+        return None
+    track = points.dropna(subset=["lat", "lon"])
+    if track.empty:
+        return None
+
+    t = tokens()
+    # Five decimals is ~1 m, which is finer than the GPS behind it, and dropping
+    # the points that round onto their predecessor takes a megabyte off the
+    # payload of a full-warehouse view. Every one of these points has to cross
+    # the websocket and be parsed by plotly, so the ones that cannot be seen
+    # are pure cost.
+    track = track.assign(
+        lat=track["lat"].round(5).astype("float64"),
+        lon=track["lon"].round(5).astype("float64"),
+    )
+    lats: list[float] = []
+    lons: list[float] = []
+    if "activity_id" in track.columns:
+        order = ["activity_id"] + (["seq"] if "seq" in track.columns else [])
+        for _, one in track.sort_values(order).groupby("activity_id", sort=False):
+            moved = (one["lat"].diff() != 0) | (one["lon"].diff() != 0)
+            one = one[moved.fillna(True)]
+            if len(one) < 2:
+                continue
+            lats.extend(one["lat"].tolist())
+            lats.append(None)
+            lons.extend(one["lon"].tolist())
+            lons.append(None)
+    else:
+        lats = track["lat"].tolist()
+        lons = track["lon"].tolist()
+
+    fig = go.Figure(
+        go.Scattermap(
+            lat=lats,
+            lon=lons,
+            mode="lines",
+            # Thin and faint on purpose: the signal is how many of these land on
+            # top of each other, so a single pass must stay nearly invisible.
+            line=dict(width=1.6, color=_alpha(t["sequential"][-1], 0.16)),
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+    # An overview wants more air around the bounding box than a single track,
+    # and robust bounds so a single distant trip does not decide the frame.
+    return _map_layout(
+        fig, track, height, zoom_pad=0.35, uirevision=uirevision, robust=True
+    )
+
+
+def profile(
+    track: pd.DataFrame,
+    *,
+    x: str = "distance_km",
+    y: str = "elevation_m",
+    height: int = 220,
+    y_title: str = "m n.p.m.",
+) -> go.Figure | None:
+    """Elevation (or any stream) against distance, as a filled profile."""
+    data, keep = _numeric(track, [x, y])
+    if len(keep) < 2 or data.empty:
+        return None
+    data = data.dropna(subset=[x, y])
+    if data.empty:
+        return None
+    t = tokens()
+    fig = go.Figure(
+        go.Scatter(
+            x=data[x],
+            y=data[y],
+            mode="lines",
+            line=dict(width=2, color=t["series"][0]),
+            fill="tozeroy",
+            fillcolor=_alpha(t["series"][0], 0.14),
+            hovertemplate="%{x:.2f} km · %{y:.0f}<extra></extra>",
+        )
+    )
+    fig.update_layout(**base_layout(legend=False, height=height))
+    fig.update_yaxes(title_text=y_title)
+    fig.update_xaxes(title_text="dystans (km)")
+    fig = style_axes(fig)
+    low = float(data[y].min())
+    high = float(data[y].max())
+    pad = max((high - low) * 0.15, 4)
+    fig.update_yaxes(range=[low - pad, high + pad])
+    return fig
+
+
+def geo_cells(
+    frame: pd.DataFrame,
+    *,
+    lat: str = "start_lat",
+    lon: str = "start_lon",
+    grid: float = 0.35,
+) -> pd.Series:
+    """Coarse grid key for a set of coordinates.
+
+    A hundred runs from the same park are one place, not a hundred overlapping
+    dots. The key is shared by :func:`geo_clusters` and by the caller, so a
+    clicked marker resolves back to the activities inside it.
+    """
+    la = (pd.to_numeric(frame[lat], errors="coerce") / grid).round() * grid
+    lo = (pd.to_numeric(frame[lon], errors="coerce") / grid).round() * grid
+    return la.round(3).astype(str) + "," + lo.round(3).astype(str)
+
+
+def geo_clusters(
+    points: pd.DataFrame,
+    *,
+    lat: str = "start_lat",
+    lon: str = "start_lon",
+    label: str = "location",
+    when: str = "start_local",
+    grid: float = 0.35,
+) -> pd.DataFrame:
+    """One row per place: its centre, how many activities, how far, how recent."""
+    if points is None or points.empty or lat not in points.columns:
+        return pd.DataFrame()
+    frame = points.dropna(subset=[lat, lon]).copy()
+    if frame.empty:
+        return pd.DataFrame()
+    frame["cell"] = geo_cells(frame, lat=lat, lon=lon, grid=grid)
+    aggregation: dict[str, Any] = {
+        "count": (lat, "size"),
+        "lat": (lat, "mean"),
+        "lon": (lon, "mean"),
+    }
+    if "distance_km" in frame.columns:
+        aggregation["km"] = ("distance_km", "sum")
+    if label in frame.columns:
+        aggregation["name"] = (
+            label,
+            lambda s: s.dropna().mode().iloc[0] if s.notna().any() else "—",
+        )
+    if when in frame.columns:
+        aggregation["last"] = (when, "max")
+    clusters = frame.groupby("cell").agg(**aggregation).reset_index()
+    return clusters.sort_values("count", ascending=False).reset_index(drop=True)

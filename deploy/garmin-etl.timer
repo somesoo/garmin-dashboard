@@ -1,0 +1,13 @@
+# Raz dziennie rano, po nocnej synchronizacji zegarka z Garmin Connect.
+# Persistent=true: jesli serwer spal o 7:30, przebieg odpali sie po starcie.
+[Unit]
+Description=Codzienna aktualizacja danych Garmin
+
+[Timer]
+OnCalendar=*-*-* 07:30
+RandomizedDelaySec=10m
+Persistent=true
+Unit=garmin-etl.service
+
+[Install]
+WantedBy=timers.target

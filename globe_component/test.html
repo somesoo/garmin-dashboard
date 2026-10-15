@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<title>Glob — podgląd</title>
+<style>
+  html, body {margin: 0; background: #fcfcfb;}
+  body.dark {background: #0e1117;}
+  canvas {display: block;}
+</style>
+</head>
+<body>
+<canvas id="globe"></canvas>
+<script src="./vendor/d3-array.min.js"></script>
+<script src="./vendor/d3-geo.min.js"></script>
+<script type="module">
+/* Visual harness: open ./test.html?lat=85&theme=dark&zoom=4 through a local
+   HTTP server to see exactly what the renderer paints, with no Streamlit
+   around. The dashboard never serves this page. */
+import { createGlobe } from "./globe.js";
+
+const params = new URLSearchParams(location.search);
+const dark = params.get("theme") === "dark";
+if (dark) document.body.classList.add("dark");
+
+const LIGHT = {
+  ocean: "#cfe0f1", oceanLight: "#e8f1fa", land: "#e6e3d8", coast: "#b3b0a4",
+  border: "#c6c3b7", graticule: "rgba(120,140,160,0.22)", surface: "#fcfcfb",
+  ink: "#0b0b0b", glow: "#2a78d6",
+  ramp: ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"],
+};
+const DARK = {
+  ocean: "#0a111b", oceanLight: "#16263a", land: "#272c34", coast: "#4b525e",
+  border: "#3c424c", graticule: "rgba(120,140,160,0.18)", surface: "#0e1117",
+  ink: "#ffffff", glow: "#3987e5",
+  ramp: ["#0d366b", "#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb"],
+};
+
+// A few starts around Warsaw plus the trips, so clustering has something to
+// split as the zoom goes up.
+const DEMO = [];
+let id = 1;
+const seed = (lon, lat, n, place, spread) => {
+  for (let i = 0; i < n; i++) {
+    DEMO.push({
+      id: id++,
+      lon: lon + (Math.sin(i * 12.9898) * spread),
+      lat: lat + (Math.cos(i * 78.233) * spread),
+      name: place + " bieg " + (i + 1),
+      place,
+      sport: "running",
+      km: 8 + (i % 7),
+      min: 45 + (i % 20),
+      date: "0" + ((i % 9) + 1) + ".10.2026",
+      ts: i,
+    });
+  }
+};
+seed(21.0, 52.23, 60, "Warszawa", 0.06);
+seed(15.1, 53.68, 20, "Nowogard", 0.03);
+seed(17.0, 51.12, 17, "Wrocław", 0.04);
+seed(17.8, 59.24, 5, "Huddinge", 0.02);
+seed(55.1, 25.07, 1, "Dubaj", 0.0);
+
+const globe = createGlobe(document.getElementById("globe"), {});
+globe.setTheme(dark ? DARK : LIGHT);
+globe.setSpin(false);
+globe.resize(1100, 620, 1);
+globe.setActivities(DEMO);
+
+fetch("./world.json")
+  .then((r) => r.json())
+  .then((world) => {
+    // ?from=&to= narrows the land to a slice of polygons, which is how you
+    // bisect your way to one that renders wrong.
+    const from = Number(params.get("from") ?? 0);
+    const to = Number(params.get("to") ?? world.land.coordinates.length);
+    globe.setWorld({
+      land: { type: "MultiPolygon", coordinates: world.land.coordinates.slice(from, to) },
+      borders: world.borders,
+    });
+    globe.jumpTo(
+      Number(params.get("lon") ?? 20),
+      Number(params.get("lat") ?? 35),
+      Number(params.get("zoom") ?? 1)
+    );
+    globe.drawOnce();
+    document.title = "gotowe";
+  });
+</script>
+</body>
+</html>

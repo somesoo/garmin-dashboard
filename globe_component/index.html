@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<title>Glob</title>
+<style>
+  html, body {margin: 0; padding: 0; background: transparent; overflow: hidden;}
+  #stage {position: relative; width: 100%;}
+  canvas {display: block; cursor: grab; touch-action: none;}
+  canvas:active {cursor: grabbing;}
+  #tip {
+    position: absolute; pointer-events: none; opacity: 0; transition: opacity .12s;
+    transform: translate(-50%, -115%); white-space: nowrap; z-index: 2;
+    font: 12px/1.45 "Source Sans Pro", -apple-system, Segoe UI, sans-serif;
+    padding: .4rem .55rem; border-radius: .4rem; border: 1px solid var(--edge, #ccc);
+    background: var(--card, #fff); color: var(--ink, #111);
+    box-shadow: 0 6px 20px rgba(0,0,0,.14);
+  }
+  #tip b {font-weight: 620;}
+  #tip i {opacity: .62; font-style: normal;}
+  #zoom {
+    position: absolute; right: 14px; bottom: 14px; z-index: 3;
+    display: flex; flex-direction: column; gap: 4px;
+    font: 15px/1 "Source Sans Pro", -apple-system, Segoe UI, sans-serif;
+  }
+  #zoom button {
+    width: 30px; height: 30px; cursor: pointer; border-radius: 8px;
+    border: 1px solid var(--edge, #ccc); background: var(--card, #fff);
+    color: var(--ink, #111); opacity: .78;
+  }
+  #zoom button:hover {opacity: 1;}
+  #scale {
+    position: absolute; left: 14px; bottom: 14px; z-index: 3; opacity: .55;
+    font: 11px/1 "Source Sans Pro", -apple-system, Segoe UI, sans-serif;
+    color: var(--ink, #111);
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="globe"></canvas>
+  <div id="tip"></div>
+  <div id="zoom">
+    <button id="in" title="Przybliż">+</button>
+    <button id="out" title="Oddal">−</button>
+    <button id="reset" title="Cały glob">○</button>
+  </div>
+  <div id="scale"></div>
+</div>
+<script src="./vendor/d3-array.min.js"></script>
+<script src="./vendor/d3-geo.min.js"></script>
+<script type="module">
+import { createGlobe } from "./globe.js";
+
+/* The Streamlit component protocol, by hand: this component is a static page,
+   so there is no bundler and no component library -- three postMessage calls
+   are the whole contract. */
+function send(type, data) {
+  window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, "*");
+}
+const setFrameHeight = (height) => send("streamlit:setFrameHeight", { height });
+const setValue = (value) =>
+  send("streamlit:setComponentValue", { value, dataType: "json" });
+
+const stage = document.getElementById("stage");
+const canvas = document.getElementById("globe");
+const tip = document.getElementById("tip");
+const scale = document.getElementById("scale");
+
+let clicks = 0;
+let height = 620;
+let lastFrame = null;
+
+const globe = createGlobe(canvas, {
+  onPick(cluster) {
+    clicks += 1;
+    setValue({
+      clicks,
+      count: cluster.count,
+      name: cluster.name,
+      // A single activity is a link to that activity; a group is a question.
+      activity: cluster.activity ? cluster.activity.id : null,
+      ids: cluster.ids.slice(0, 60),
+    });
+  },
+  onHover(cluster, x, y) {
+    if (!cluster) {
+      tip.style.opacity = 0;
+      return;
+    }
+    const bits = [];
+    if (cluster.count === 1) {
+      const a = cluster.activity;
+      bits.push(`<b>${a.name || "Trening"}</b>`);
+      bits.push([a.date, a.sport, a.km ? a.km + " km" : null, a.min ? a.min + " min" : null]
+        .filter(Boolean).join(" · "));
+      bits.push("<i>kliknij, aby otworzyć trasę</i>");
+    } else {
+      bits.push(`<b>${cluster.name}</b>`);
+      bits.push(`${cluster.count} aktywności`);
+      bits.push("<i>kliknij, aby wybrać · przybliż, aby rozdzielić</i>");
+    }
+    tip.innerHTML = bits.join("<br>");
+    tip.style.left = x + "px";
+    tip.style.top = y + "px";
+    tip.style.opacity = 1;
+  },
+  onZoom(zoom) {
+    scale.textContent = zoom <= 1.01 ? "cały glob" : `×${zoom.toFixed(1)}`;
+  },
+});
+
+document.getElementById("in").onclick = () => globe.zoomBy(1.8);
+document.getElementById("out").onclick = () => globe.zoomBy(1 / 1.8);
+document.getElementById("reset").onclick = () => globe.setZoom(1, null);
+
+function fit() {
+  const width = Math.max(240, stage.clientWidth || window.innerWidth);
+  globe.resize(width, height, window.devicePixelRatio || 1);
+  setFrameHeight(height);
+}
+window.addEventListener("resize", fit);
+
+// Static asset next to this page: fetched once and then served from the browser
+// cache, so a rerun never ships the world outline again.
+fetch("./world.json")
+  .then((r) => r.json())
+  .then((world) => globe.setWorld(world));
+
+window.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type !== "streamlit:render") return;
+  const args = data.args || {};
+
+  if (args.height && args.height !== height) {
+    height = args.height;
+    fit();
+  }
+  if (args.theme) {
+    globe.setTheme(args.theme);
+    const root = document.documentElement.style;
+    root.setProperty("--card", args.theme.card || "#fff");
+    root.setProperty("--edge", args.theme.edge || "#ccc");
+    root.setProperty("--ink", args.theme.ink || "#111");
+  }
+  if (args.activities) globe.setActivities(args.activities);
+  if (typeof args.speed === "number") globe.setSpeed(args.speed);
+  globe.setSpin(!!args.spin);
+
+  // The frame token changes only when the viewer asks for another region, so
+  // an ordinary rerun never yanks the globe out of the angle it is at.
+  if (args.frame && args.frame !== lastFrame) {
+    const first = lastFrame === null;
+    lastFrame = args.frame;
+    const zoom = args.target.zoom || null;
+    if (first) globe.jumpTo(args.target.lon, args.target.lat, zoom);
+    else globe.flyTo(args.target.lon, args.target.lat, zoom);
+  }
+  fit();
+});
+
+send("streamlit:componentReady", { apiVersion: 1 });
+fit();
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# Jednorazowy przebieg ETL: dociaga brakujace dni i przebudowuje tabele.
+# Odpalany przez garmin-etl.timer, nie wlaczaj go przez "systemctl enable".
+# Kod wyjscia 2 znaczy "token Garmina wygasl" - wtedy trzeba sie zalogowac
+# recznie przez etl/login.py.
+[Unit]
+Description=Garmin Dashboard ETL
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=garmin
+Group=garmin
+WorkingDirectory=/opt/garmin-dashboard
+Environment=HOME=/home/garmin
+Environment=GARMIN_TOKENSTORE=/home/garmin/.garminconnect
+ExecStart=/opt/garmin-dashboard/.venv/bin/python etl/run.py --days 14
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full

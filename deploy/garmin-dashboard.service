@@ -1,0 +1,31 @@
+# Streamlit trzyma dashboard w gorze. Bind na 127.0.0.1: na zewnatrz
+# wychodzi tylko przez tunel SSH albo reverse proxy (patrz nginx-garmin.conf).
+# Kopiuj do /etc/systemd/system/ i dostosuj User= oraz sciezki.
+[Unit]
+Description=Garmin Dashboard (Streamlit)
+After=network-online.target
+Wants=network-online.target
+# Nigdy nie poddawaj sie przy restartach: proces ma po prostu zyc.
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+User=garmin
+Group=garmin
+WorkingDirectory=/opt/garmin-dashboard
+Environment=HOME=/home/garmin
+Environment=GARMIN_TOKENSTORE=/home/garmin/.garminconnect
+ExecStart=/opt/garmin-dashboard/.venv/bin/python -m streamlit run app.py \
+    --server.address 127.0.0.1 \
+    --server.port 8501 \
+    --server.headless true \
+    --browser.gatherUsageStats false
+# always, nie on-failure: podnies proces nawet gdy sam sie zamknal czysto.
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,22 @@
+# Dane osobiste: przenoszone przez scp, nigdy przez git.
+# Zawieraja historie zdrowia i slady GPS - nie trafiaja do repozytorium.
+data/
+
+# Virtualenv: zalezny od platformy, tworzony osobno na kazdej maszynie.
+.venv/
+
+# Tokeny Garmina. Trzymane w katalogu domowym, ale na wypadek gdyby ktos
+# ustawil GARMIN_TOKENSTORE na sciezke w repo:
+.garminconnect/
+garmin_tokens.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.part
+
+# Edytory i OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
