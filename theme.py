@@ -500,6 +500,9 @@ def stacked_panels(
     usable = []
     for panel in panels:
         data, keep = _numeric(frame, panel["series"].values())
+        # A panel needs a line, not a lone point: one weigh-in in 90 days draws
+        # an empty-looking axis that only says "no data" in a roundabout way.
+        keep = [column for column in keep if data[column].notna().sum() >= 3]
         labels = [label for label, column in panel["series"].items() if column in keep]
         if labels:
             usable.append((panel, labels))
@@ -523,9 +526,14 @@ def stacked_panels(
         for color, label in zip(colors, labels):
             column = panel["series"][label]
             values = pd.to_numeric(frame[column], errors="coerce")
+            # Rows come from a frame shared by every panel; a series sampled on
+            # its own clock (night HR vs HRV) is NaN on everyone else's rows,
+            # and without dropping those the line breaks into dashes.
+            present = values.notna()
+            xs, values = frame.loc[present, x], values[present]
             if panel.get("kind") == "bar":
                 fig.add_bar(
-                    x=frame[x],
+                    x=xs,
                     y=values,
                     name=label,
                     marker=dict(color=_alpha(color, 0.55), line=dict(width=0)),
@@ -536,7 +544,7 @@ def stacked_panels(
                 )
             else:
                 fig.add_scatter(
-                    x=frame[x],
+                    x=xs,
                     y=values,
                     name=label,
                     mode="lines",
@@ -666,6 +674,290 @@ def _hover_template(x: str, y: str, hover: Sequence[str], name: str | None) -> s
         parts.append(f"{field}: %{{customdata[{index}]}}")
     tail = f"<extra>{name}</extra>" if name else "<extra></extra>"
     return "<br>".join(parts) + tail
+
+
+# ---------------------------------------------------------------- daily trends
+#
+# The idiom for one noisy daily measure: the days as faint dots, the 7-day
+# mean as the one saturated line, the person's own normal range as a wash
+# behind both, and the latest value written at the end of the line. The raw
+# series drawn as a full-strength line is what made every chart look like a
+# 2005 spreadsheet: ninety jagged segments shouting over the trend.
+
+MONTHS_PL = ["sty", "lut", "mar", "kwi", "maj", "cze", "lip", "sie", "wrz", "paź", "lis", "gru"]
+
+
+def polish_dates(fig: go.Figure, values: pd.Series, *, row: int | None = None) -> go.Figure:
+    """Polish tick labels on a date axis; plotly only ships English months.
+
+    Ticks are chosen for the span: Mondays under ~7 weeks, month starts under
+    ~8 months, every other month beyond. The year is written on the first tick
+    and on every January, so it appears once, not under one random label.
+    """
+    days = pd.to_datetime(pd.Series(values), errors="coerce").dropna()
+    if days.empty:
+        return fig
+    first, last = days.min().normalize(), days.max().normalize()
+    span = (last - first).days
+    if span <= 50:
+        ticks = pd.date_range(first, last, freq="W-MON")
+        text = [f"{d.day} {MONTHS_PL[d.month - 1]}" for d in ticks]
+    else:
+        step = "MS" if span <= 240 else ("2MS" if span <= 550 else "3MS")
+        ticks = pd.date_range(first + pd.offsets.MonthBegin(0), last, freq=step)
+        text = []
+        for index, d in enumerate(ticks):
+            label = MONTHS_PL[d.month - 1]
+            text.append(f"{label} {d.year}" if index == 0 or d.month == 1 else label)
+    kwargs = dict(tickmode="array", tickvals=list(ticks), ticktext=text, hoverformat="%d.%m.%Y")
+    if row is not None:
+        fig.update_xaxes(row=row, col=1, **kwargs)
+    else:
+        fig.update_xaxes(**kwargs)
+    return fig
+
+
+def _end_label(fig: go.Figure, x: Any, y: float, text: str, color: str) -> None:
+    t = tokens()
+    fig.add_scatter(
+        x=[x], y=[y], mode="markers",
+        marker=dict(size=9, color=color, line=dict(width=2, color=t["surface"])),
+        hoverinfo="skip", showlegend=False,
+    )
+    fig.add_annotation(
+        x=x, y=y, text=f"<b>{text}</b>", showarrow=False, xanchor="left", xshift=9,
+        font=dict(family=FONT, size=12, color=t["ink"]),
+    )
+
+
+def trend(
+    frame: pd.DataFrame,
+    x: str,
+    series: Mapping[str, tuple[str, str]],
+    *,
+    band: tuple[str, str] | None = None,
+    unit: str = "",
+    decimals: int = 0,
+    height: int = 210,
+) -> go.Figure | None:
+    """Daily dots + rolling-mean line (+ normal band) on one value axis.
+
+    ``series`` maps label -> (raw column, smoothed column). One entry is the
+    usual case; two share the axis when they share a unit (day vs sleep
+    stress). The end of each smoothed line carries its value, so the reader
+    does not have to trace it back to the axis.
+    """
+    columns = [c for pair in series.values() for c in pair] + (list(band) if band else [])
+    data, keep = _numeric(frame, columns)
+    labels = [label for label, (raw, smooth) in series.items() if smooth in keep or raw in keep]
+    if not labels or data.empty:
+        return None
+    data = data.sort_values(x)
+    t = tokens()
+    fig = go.Figure()
+
+    if band and all(c in keep for c in band):
+        low, high = band
+        edge = data[[x, low, high]].dropna()
+        # Lower edge first, then the upper one filled down to it.
+        fig.add_scatter(x=edge[x], y=edge[low], mode="lines", line=dict(width=0),
+                        hoverinfo="skip", showlegend=False)
+        fig.add_scatter(
+            x=edge[x], y=edge[high], mode="lines", line=dict(width=0), fill="tonexty",
+            fillcolor=_alpha(t["muted"], 0.16), name="norma",
+            customdata=edge[[low]].to_numpy(),
+            hovertemplate=f"%{{customdata[0]:.{decimals}f}}–%{{y:.{decimals}f}}<extra>norma</extra>",
+            showlegend=False,
+        )
+
+    suffix = f" {unit}" if unit else ""
+    for color, label in zip(series_colors(len(labels)), labels):
+        raw, smooth = series[label]
+        prefix = "" if len(labels) == 1 else f"{label}: "
+        if raw in keep:
+            fig.add_scatter(
+                x=data[x], y=data[raw], mode="markers", name=f"{prefix}dzień",
+                marker=dict(size=6, color=_alpha(color, 0.38), line=dict(width=0)),
+                hovertemplate=f"%{{y:.{decimals}f}}{suffix}<extra>{prefix}dzień</extra>",
+                showlegend=False,
+            )
+        if smooth in keep:
+            line = data[[x, smooth]].dropna()
+            fig.add_scatter(
+                x=line[x], y=line[smooth], mode="lines", name=f"{prefix}średnia 7 d",
+                line=dict(width=2.6, color=color, shape="spline", smoothing=0.6),
+                hovertemplate=f"%{{y:.{decimals}f}}{suffix}<extra>{prefix}średnia 7 d</extra>",
+                showlegend=False,
+            )
+            if not line.empty:
+                value = float(line[smooth].iloc[-1])
+                text = f"{value:.{decimals}f}{suffix}" if len(labels) == 1 else f"{label} {value:.{decimals}f}"
+                _end_label(fig, line[x].iloc[-1], value, text, color)
+
+    fig.update_layout(**base_layout(legend=False, height=height))
+    # Room on the right for the end label.
+    fig.update_layout(margin=dict(l=8, r=78, t=10, b=8))
+    fig = style_axes(fig)
+    fig.update_yaxes(nticks=4)
+    return polish_dates(fig, data[x])
+
+
+def range_bars(
+    frame: pd.DataFrame,
+    x: str,
+    low: str,
+    high: str,
+    *,
+    unit: str = "",
+    height: int = 220,
+) -> go.Figure | None:
+    """One floating bar per day from its minimum to its maximum.
+
+    The shape of a day (how far it charged, how far it drained) is the bar;
+    three lines for max, min and wake drew the same information as three
+    tangled zig-zags.
+    """
+    data, keep = _numeric(frame, [low, high])
+    if len(keep) < 2:
+        return None
+    data = data.dropna(subset=[low, high]).sort_values(x)
+    if data.empty:
+        return None
+    t = tokens()
+    suffix = f" {unit}" if unit else ""
+    fig = go.Figure(
+        go.Bar(
+            x=data[x], y=data[high] - data[low], base=data[low],
+            marker=dict(color=_alpha(t["series"][0], 0.30), line=dict(width=0), cornerradius=3),
+            customdata=data[[low, high]].to_numpy(),
+            hovertemplate=f"%{{customdata[0]:.0f}} → %{{customdata[1]:.0f}}{suffix}<extra></extra>",
+            width=pd.Timedelta(hours=11).total_seconds() * 1000,
+        )
+    )
+    # The latest day is the one being asked about.
+    last = data.iloc[-1]
+    fig.add_bar(
+        x=[last[x]], y=[last[high] - last[low]], base=[last[low]],
+        marker=dict(color=t["series"][0], line=dict(width=0), cornerradius=3),
+        width=pd.Timedelta(hours=11).total_seconds() * 1000, hoverinfo="skip", showlegend=False,
+    )
+    # Written beside the bar, like the end label of a trend line.
+    fig.add_annotation(
+        x=last[x], y=float(last[high] + last[low]) / 2,
+        text=f"<b>{last[low]:.0f}–{last[high]:.0f}</b>",
+        showarrow=False, xanchor="left", xshift=10,
+        font=dict(family=FONT, size=12, color=t["ink"]),
+    )
+    fig.update_layout(**base_layout(legend=False, height=height), barmode="overlay")
+    fig.update_layout(margin=dict(l=8, r=78, t=10, b=8))
+    fig = style_axes(fig)
+    fig.update_yaxes(nticks=5)
+    return polish_dates(fig, data[x])
+
+
+def trail(
+    frame: pd.DataFrame,
+    x: str,
+    y: str,
+    *,
+    when: str = "day",
+    recent: int = 7,
+    corners: Mapping[str, str] | None = None,
+    hover: Sequence[str] = (),
+    x_title: str | None = None,
+    y_title: str | None = None,
+    height: int = 420,
+) -> go.Figure | None:
+    """A cloud of past days with the last ``recent`` days drawn as a path.
+
+    The question a z-score quadrant answers is "where am I now and which way
+    am I heading", so history is grey context and only the recent week is in
+    colour, joined in order and ending on a labelled "dziś". ``corners`` maps
+    "tl"/"tr"/"bl"/"br" to the name of that quadrant, written in the corner.
+    """
+    data, keep = _numeric(frame, [x, y])
+    if len(keep) < 2:
+        return None
+    data = data.dropna(subset=[x, y]).sort_values(when)
+    if data.empty:
+        return None
+    t = tokens()
+    accent = t["series"][0]
+    history, latest = data.iloc[:-recent], data.iloc[-recent:]
+    extent = max(float(data[[x, y]].abs().max().max()), 1.0) * 1.12
+
+    fig = go.Figure()
+    for adder in (fig.add_hline, fig.add_vline):
+        adder(0, line_width=1, line_color=t["axis"])
+    fig.add_scatter(
+        x=history[x], y=history[y], mode="markers", name="wcześniej",
+        marker=dict(size=8, color=_alpha(t["muted"], 0.35), line=dict(width=0)),
+        customdata=history[[when, *hover]].to_numpy() if hover else history[[when]].to_numpy(),
+        hovertemplate=_trail_hover(hover), showlegend=False,
+    )
+    fig.add_scatter(
+        x=latest[x], y=latest[y], mode="lines+markers", name=f"ostatnie {recent} dni",
+        line=dict(width=1.6, color=_alpha(accent, 0.55)),
+        marker=dict(size=9, color=accent, line=dict(width=2, color=t["surface"])),
+        customdata=latest[[when, *hover]].to_numpy() if hover else latest[[when]].to_numpy(),
+        hovertemplate=_trail_hover(hover), showlegend=False,
+    )
+    today = latest.iloc[-1]
+    fig.add_scatter(
+        x=[today[x]], y=[today[y]], mode="markers",
+        marker=dict(size=15, color=accent, line=dict(width=3, color=t["surface"])),
+        hoverinfo="skip", showlegend=False,
+    )
+    fig.add_annotation(
+        x=today[x], y=today[y], text="<b>dziś</b>", showarrow=False, xanchor="left", xshift=12,
+        font=dict(family=FONT, size=12, color=t["ink"]),
+    )
+    spots = {"tl": (0.01, 0.99, "left", "top"), "tr": (0.99, 0.99, "right", "top"),
+             "bl": (0.01, 0.01, "left", "bottom"), "br": (0.99, 0.01, "right", "bottom")}
+    for corner, name in (corners or {}).items():
+        px, py, xa, ya = spots[corner]
+        fig.add_annotation(
+            x=px, y=py, xref="x domain", yref="y domain", text=name, showarrow=False,
+            xanchor=xa, yanchor=ya, font=dict(family=FONT, size=12, color=t["muted"]),
+        )
+    fig.update_layout(**base_layout(legend=False, height=height, hover="closest"))
+    fig = style_axes(fig)
+    fig.update_xaxes(range=[-extent, extent], title_text=x_title, showgrid=True,
+                     gridcolor=t["grid"], dtick=1)
+    fig.update_yaxes(range=[-extent, extent], title_text=y_title, dtick=1)
+    return fig
+
+
+def _trail_hover(hover: Sequence[str]) -> str:
+    parts = ["%{customdata[0]|%d.%m.%Y}", "HRV %{x:+.1f} σ · RHR %{y:+.1f} σ"]
+    for index, field in enumerate(hover, start=1):
+        parts.append(f"{field}: %{{customdata[{index}]}}")
+    return "<br>".join(parts) + "<extra></extra>"
+
+
+def key(items: Sequence[tuple[str, str]]) -> None:
+    """One shared legend for a group of small charts, written once above them.
+
+    ``items`` are (kind, label) with kind in dot / line / band / bar. The
+    marks use the chart colours; the words stay in the text tokens.
+    """
+    t = tokens()
+    accent = t["series"][0]
+    glyphs = {
+        "dot": f'<svg width="10" height="10"><circle cx="5" cy="5" r="3.2" fill="{_alpha(accent, 0.45)}"/></svg>',
+        "line": f'<svg width="18" height="10"><path d="M1 5 H17" stroke="{accent}" stroke-width="2.6" stroke-linecap="round"/></svg>',
+        "band": f'<svg width="16" height="10"><rect x="0" y="1" width="16" height="8" rx="2" fill="{_alpha(t["muted"], 0.3)}"/></svg>',
+        "bar": f'<svg width="10" height="12"><rect x="2" y="0" width="6" height="12" rx="2" fill="{t["sequential"][2]}"/></svg>',
+    }
+    spans = "".join(
+        f'<span style="display:inline-flex;align-items:center;gap:6px;margin-right:18px">'
+        f'{glyphs[kind]}<span>{label}</span></span>'
+        for kind, label in items
+    )
+    st.markdown(
+        f'<div style="font-size:0.8rem;color:{t["ink_secondary"]};margin:0.2rem 0 0.4rem 0">{spans}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 # ---------------------------------------------------------------- maps
