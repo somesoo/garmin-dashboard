@@ -46,7 +46,10 @@ def render() -> None:
         return
 
     _explorer(routes, catalogue)
-    _everything(routes, catalogue)
+    st.caption(
+        "Wszystkie ślady naraz są teraz na globie w *Atlasie*: przybliż miasto, "
+        "a glob pokaże mapę ciepła — ile razy przebiegnięty jest każdy odcinek."
+    )
 
 
 def _catalogue(routes: pd.DataFrame, activities: pd.DataFrame) -> pd.DataFrame:
@@ -159,41 +162,3 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
             f"open('{int(chosen)}.gpx', 'wb').write(data)",
             language="python",
         )
-
-
-@st.fragment
-def _everything(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
-    shell.lead(
-        "Wszystkie ślady naraz",
-        "Gęstość punktów GPS. Nakładanie setek półprzezroczystych linii zamienia "
-        "się w kleks; gęstość utrzymuje czytelność powtarzanych korytarzy i od razu "
-        "pokazuje, które pętle są naprawdę domyślne.",
-    )
-    # A place filter, not just a sport filter: the tracks span several countries,
-    # and a density map framed on all of them at once is a blank regional view
-    # with the tracks too thin to see.
-    places = (
-        catalogue.dropna(subset=["location"])["location"].value_counts().index.tolist()
-    )
-    options = places[:12] + ["wszystko"]
-    left, right = st.columns([2, 3], vertical_alignment="bottom")
-    with left:
-        place = st.selectbox("Miejsce", options, index=0, key="density_place")
-    with right:
-        sports = sorted(catalogue["sport"].dropna().unique())
-        picked = st.multiselect("Sport", sports, default=sports, key="density_sport")
-
-    chosen = catalogue
-    if place != "wszystko":
-        chosen = chosen[chosen["location"] == place]
-    if picked:
-        chosen = chosen[chosen["sport"].isin(picked)]
-
-    ids = set(chosen["activity_id"].dropna().astype("int64"))
-    points = routes[pd.to_numeric(routes["activity_id"], errors="coerce").isin(ids)]
-    tz.show(
-        tz.route_density(points, height=600, uirevision=f"density-{place}"),
-        note=f"{len(ids)} tras · {len(points):,} punktów".replace(",", " "),
-        empty="Brak śladów dla tego filtra.",
-        key="density_all",
-    )

@@ -21,3 +21,6 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+
+# GPS tracks the globe component fetches as a static file (written per build).
+globe_component/cache/

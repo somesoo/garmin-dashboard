@@ -1239,6 +1239,9 @@ def route_map(
         return None
 
     t = tokens()
+    # The basemap is light in both themes, so the marks on it take the light
+    # palette too; the dark ramp ends in near-white, which vanishes on it.
+    m = LIGHT
     fig = go.Figure()
     # A single wide pass underneath keeps the route legible where it doubles
     # back on itself and where one segment is a different shade from the next.
@@ -1247,7 +1250,7 @@ def route_map(
             lat=track["lat"],
             lon=track["lon"],
             mode="lines",
-            line=dict(width=7, color=_alpha(t["ink"], 0.14)),
+            line=dict(width=7, color=_alpha(m["ink"], 0.14)),
             hoverinfo="skip",
             showlegend=False,
         )
@@ -1261,7 +1264,7 @@ def route_map(
     )
 
     if values is not None and values.notna().any():
-        ramp = list(reversed(t["sequential"])) if reverse_scale else list(t["sequential"])
+        ramp = list(reversed(m["sequential"])) if reverse_scale else list(m["sequential"])
         # Clamp to robust quantiles: a few stopped-at-the-lights samples at
         # 20 min/km otherwise squash the whole run into one shade.
         low, high = values.quantile(0.05), values.quantile(0.95)
@@ -1335,7 +1338,7 @@ def route_map(
                 lat=track["lat"],
                 lon=track["lon"],
                 mode="lines",
-                line=dict(width=4, color=t["series"][0]),
+                line=dict(width=4, color=m["series"][0]),
                 hoverinfo="skip",
                 showlegend=False,
             )
@@ -1369,82 +1372,15 @@ def route_map(
                 lat=[row["lat"]],
                 lon=[row["lon"]],
                 mode="markers+text",
-                marker=dict(size=12, color=t["ink"]),
+                marker=dict(size=12, color=m["ink"]),
                 text=[label],
                 textposition=position,
-                textfont=dict(size=12, color=t["ink"]),
+                textfont=dict(size=12, color=m["ink"]),
                 hoverinfo="skip",
                 showlegend=False,
             )
         )
     return _map_layout(fig, track, height, uirevision=uirevision)
-
-
-def route_density(
-    points: pd.DataFrame,
-    *,
-    height: int = 560,
-    uirevision: str | None = "density",
-) -> go.Figure | None:
-    """Every track at once: the tracks themselves, stacked.
-
-    Not a density raster. A raster is computed for one zoom level -- its blur
-    radius is in pixels -- so zooming in pulls it apart into a scatter of
-    blobs that no longer means anything. Drawing the routes as translucent
-    lines keeps the geometry: a corridor ridden fifty times is fifty lines on
-    top of each other and reads as dark at every zoom, and a one-off detour
-    stays a faint thread.
-    """
-    if points is None or points.empty or "lat" not in points.columns:
-        return None
-    track = points.dropna(subset=["lat", "lon"])
-    if track.empty:
-        return None
-
-    t = tokens()
-    # Five decimals is ~1 m, which is finer than the GPS behind it, and dropping
-    # the points that round onto their predecessor takes a megabyte off the
-    # payload of a full-warehouse view. Every one of these points has to cross
-    # the websocket and be parsed by plotly, so the ones that cannot be seen
-    # are pure cost.
-    track = track.assign(
-        lat=track["lat"].round(5).astype("float64"),
-        lon=track["lon"].round(5).astype("float64"),
-    )
-    lats: list[float] = []
-    lons: list[float] = []
-    if "activity_id" in track.columns:
-        order = ["activity_id"] + (["seq"] if "seq" in track.columns else [])
-        for _, one in track.sort_values(order).groupby("activity_id", sort=False):
-            moved = (one["lat"].diff() != 0) | (one["lon"].diff() != 0)
-            one = one[moved.fillna(True)]
-            if len(one) < 2:
-                continue
-            lats.extend(one["lat"].tolist())
-            lats.append(None)
-            lons.extend(one["lon"].tolist())
-            lons.append(None)
-    else:
-        lats = track["lat"].tolist()
-        lons = track["lon"].tolist()
-
-    fig = go.Figure(
-        go.Scattermap(
-            lat=lats,
-            lon=lons,
-            mode="lines",
-            # Thin and faint on purpose: the signal is how many of these land on
-            # top of each other, so a single pass must stay nearly invisible.
-            line=dict(width=1.6, color=_alpha(t["sequential"][-1], 0.16)),
-            hoverinfo="skip",
-            showlegend=False,
-        )
-    )
-    # An overview wants more air around the bounding box than a single track,
-    # and robust bounds so a single distant trip does not decide the frame.
-    return _map_layout(
-        fig, track, height, zoom_pad=0.35, uirevision=uirevision, robust=True
-    )
 
 
 def profile(

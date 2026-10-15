@@ -16,11 +16,35 @@
  * spherical clip.
  *
  * What stays local is everything d3 has no opinion about: the clustering of
- * activities per zoom level, the animation, and the interaction.
+ * activities per zoom level, the heat layer of GPS tracks, the animation, and
+ * the interaction.
+ *
+ * The heat layer: past HEAT_ZOOM the globe is at city scale and the start
+ * markers give way to the tracks themselves, each stretch coloured and
+ * thickened by how many distinct activities ran through it. Counting happens
+ * here, not in Python, so changing the sport filter sends a list of ids and the
+ * browser recounts -- the tracks themselves arrive once, as a cached file.
  */
 
 export const MIN_ZOOM = 1;
-export const MAX_ZOOM = 160;
+// Street level: at 3000x a kilometre is a few hundred pixels.
+export const MAX_ZOOM = 3000;
+// Where the tracks take over from the start markers, and where spinning stops
+// (a turning globe at city scale is a map sliding out from under the cursor).
+export const HEAT_ZOOM = 14;
+const SPIN_ZOOM = 6;
+
+// Pass-count classes: lower bound and base line width in px.
+// Width carries as much of the class as colour does: neighbouring steps of one
+// blue ramp are close, a 1 px thread against a 5 px band is not.
+export const HEAT_CLASSES = [
+  { from: 1, label: "1×", width: 1.2 },
+  { from: 2, label: "2–3×", width: 2.0 },
+  { from: 4, label: "4–7×", width: 2.9 },
+  { from: 8, label: "8–15×", width: 3.9 },
+  { from: 16, label: "16× i więcej", width: 5.0 },
+];
+const CELL_M = 20;
 
 const RAD = Math.PI / 180;
 
@@ -68,19 +92,29 @@ export function createGlobe(canvas, options = {}) {
   const ctx = canvas.getContext("2d");
   const projection = d3.geoOrthographic().clipAngle(90).precision(0.4);
   const path = d3.geoPath(projection, ctx);
+  // Tracks are dense already; adaptive resampling on tens of thousands of
+  // points per frame would buy nothing visible and cost the frame rate.
+  const trackProjection = d3.geoOrthographic().clipAngle(90).precision(0);
+  const trackPath = d3.geoPath(trackProjection, ctx);
   const sphere = { type: "Sphere" };
 
   const state = {
     world: null,
     graticule: null,
     graticuleStep: null,
+    allActivities: [],
     activities: [],
+    selected: null,
+    tracks: null,
+    heat: null,
     clusters: [],
     theme: {
       ocean: "#cfe0f1", oceanLight: "#e8f1fa", land: "#e6e3d8", coast: "#b3b0a4",
       border: "#c6c3b7", graticule: "rgba(120,140,160,0.22)", surface: "#fcfcfb",
       ink: "#0b0b0b", glow: "#2a78d6",
       ramp: ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"],
+      heat: ["#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"],
+      casing: "rgba(255,255,255,0.92)",
     },
     rot: { lon: 20, lat: 35 },
     zoom: 1,
@@ -104,10 +138,11 @@ export function createGlobe(canvas, options = {}) {
   const radius = () => baseRadius() * state.zoom;
 
   function aim() {
-    projection
-      .translate([state.size.w / 2, state.size.h / 2])
-      .scale(radius())
-      .rotate([-state.rot.lon, -state.rot.lat]);
+    for (const p of [projection, trackProjection]) {
+      p.translate([state.size.w / 2, state.size.h / 2])
+        .scale(radius())
+        .rotate([-state.rot.lon, -state.rot.lat]);
+    }
   }
 
   // Front of the sphere: d3 clips paths for us, but a marker is drawn by hand
@@ -124,7 +159,7 @@ export function createGlobe(canvas, options = {}) {
   // its parks, then into single activities -- and a single activity is a link
   // straight to that activity.
   function rebin() {
-    const grid = Math.max(0.0015, (26 * 180) / (Math.PI * radius()));
+    const grid = Math.max(0.0002, (26 * 180) / (Math.PI * radius()));
     const buckets = new Map();
     for (const activity of state.activities) {
       const key =
@@ -156,6 +191,130 @@ export function createGlobe(canvas, options = {}) {
     state.maxCount = Math.max(1, ...state.clusters.map((c) => c.count));
   }
 
+  /* --------------------------------------------------------------- heat */
+
+  function applySelection() {
+    const keep = state.selected;
+    state.activities = keep
+      ? state.allActivities.filter((a) => keep.has(a.id))
+      : state.allActivities.slice();
+    rebin();
+    computeHeat();
+  }
+
+  // Grid cell of a point. Longitude cells widen with latitude, using the
+  // latitude band's cosine so the grid is stable inside one city.
+  const DLAT = CELL_M / 111320;
+  function cellKey(lat, lon) {
+    const band = Math.cos((Math.floor(lat) + 0.5) * RAD);
+    const dlon = DLAT / Math.max(band, 0.1);
+    const i = Math.floor(lat / DLAT);
+    const j = Math.floor(lon / dlon);
+    return (i + 1e6) * 1e8 + (j + 5e7);
+  }
+
+  /* How many distinct activities pass through every ~20 m cell, then each
+     track segment drawn in the class of its busier end. Same method as the
+     Python side used: densify to half a cell, count per activity once, and
+     spread each count to the 3x3 neighbourhood so a few metres of GPS offset
+     does not split one corridor into parallel threads. */
+  function computeHeat() {
+    if (!state.tracks) {
+      state.heat = null;
+      return;
+    }
+    const ids = state.selected ? [...state.selected] : [...state.tracks.keys()];
+    const counts = new Map();
+    const step = CELL_M / 2;
+    for (const id of ids) {
+      const t = state.tracks.get(id);
+      if (!t) continue;
+      const cells = new Set();
+      for (let k = 0; k + 3 < t.length; k += 2) {
+        const la0 = t[k], lo0 = t[k + 1], la1 = t[k + 2], lo1 = t[k + 3];
+        const dy = (la1 - la0) * 111320;
+        const dx = (lo1 - lo0) * 111320 * Math.cos(la0 * RAD);
+        const n = Math.max(1, Math.ceil(Math.hypot(dx, dy) / step));
+        for (let s = 0; s < n; s++) {
+          const f = s / n;
+          cells.add(cellKey(la0 + (la1 - la0) * f, lo0 + (lo1 - lo0) * f));
+        }
+      }
+      if (t.length >= 2) cells.add(cellKey(t[t.length - 2], t[t.length - 1]));
+      for (const key of cells) {
+        for (let di = -1; di <= 1; di++) {
+          for (let dj = -1; dj <= 1; dj++) {
+            const k2 = key + di * 1e8 + dj;
+            counts.set(k2, (counts.get(k2) || 0) + 1);
+          }
+        }
+      }
+    }
+
+    const classes = HEAT_CLASSES.map(() => ({ type: "MultiLineString", coordinates: [] }));
+    const casing = { type: "MultiLineString", coordinates: [] };
+    const classOf = (n) => {
+      let c = 0;
+      for (let x = 0; x < HEAT_CLASSES.length; x++) if (n >= HEAT_CLASSES[x].from) c = x;
+      return c;
+    };
+    for (const id of ids) {
+      const t = state.tracks.get(id);
+      if (!t || t.length < 4) continue;
+      const line = [];
+      for (let k = 0; k < t.length; k += 2) line.push([t[k + 1], t[k]]);
+      casing.coordinates.push(line);
+      let run = null;
+      let runClass = -1;
+      for (let k = 0; k + 3 < t.length; k += 2) {
+        const a = counts.get(cellKey(t[k], t[k + 1])) || 1;
+        const b = counts.get(cellKey(t[k + 2], t[k + 3])) || 1;
+        const c = classOf(Math.max(a, b));
+        if (c !== runClass) {
+          run = [[t[k + 1], t[k]]];
+          classes[c].coordinates.push(run);
+          runClass = c;
+        }
+        run.push([t[k + 3], t[k + 2]]);
+      }
+    }
+    state.heat = { classes, casing };
+  }
+
+  function heatAlpha() {
+    // Fade in over a doubling of zoom rather than popping in at one step.
+    return Math.max(0, Math.min(1, (state.zoom - HEAT_ZOOM / 2) / (HEAT_ZOOM / 2)));
+  }
+
+  function drawHeat() {
+    const alpha = heatAlpha();
+    if (!state.heat || alpha <= 0) return;
+    // Lines thicken a little as the street grows under them.
+    const k = Math.max(0.75, Math.min(1.35, Math.log10(state.zoom) / 2.2));
+    const widest = HEAT_CLASSES[HEAT_CLASSES.length - 1].width * k;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    // White casing under everything: it separates the tracks from the land
+    // and from each other where two classes meet.
+    ctx.beginPath();
+    trackPath(state.heat.casing);
+    ctx.strokeStyle = state.theme.casing;
+    ctx.lineWidth = widest + 2.5;
+    ctx.stroke();
+    HEAT_CLASSES.forEach((cls, index) => {
+      const geometry = state.heat.classes[index];
+      if (!geometry.coordinates.length) return;
+      ctx.beginPath();
+      trackPath(geometry);
+      ctx.strokeStyle = state.theme.heat[Math.min(index, state.theme.heat.length - 1)];
+      ctx.lineWidth = cls.width * k;
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
   /* -------------------------------------------------------------- paint */
 
   function graticule() {
@@ -170,6 +329,10 @@ export function createGlobe(canvas, options = {}) {
   }
 
   function markerRadius(cluster) {
+    if (state.heat && heatAlpha() >= 1) {
+      // At street scale a start is a small handle on its track, not a blob.
+      return cluster.count === 1 ? 4 : 5 + Math.min(4, Math.log2(cluster.count));
+    }
     const share = Math.sqrt(cluster.count / state.maxCount);
     return (4 + 10 * share) * (Math.min(baseRadius(), 320) / 300);
   }
@@ -211,11 +374,14 @@ export function createGlobe(canvas, options = {}) {
       ctx.stroke();
     }
 
-    ctx.beginPath();
-    path(graticule());
-    ctx.strokeStyle = state.theme.graticule;
-    ctx.lineWidth = 0.6;
-    ctx.stroke();
+    // At street scale a meridian is just a stray straight line through town.
+    if (state.zoom < HEAT_ZOOM * 2) {
+      ctx.beginPath();
+      path(graticule());
+      ctx.strokeStyle = state.theme.graticule;
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    }
 
     if (state.world) {
       ctx.beginPath();
@@ -225,7 +391,10 @@ export function createGlobe(canvas, options = {}) {
       ctx.stroke();
     }
 
+    drawHeat();
+
     // Places, far side first so the near ones sit on top.
+    const street = state.heat && heatAlpha() >= 1;
     const visible = [];
     for (let i = 0; i < state.clusters.length; i++) {
       const cluster = state.clusters[i];
@@ -239,23 +408,24 @@ export function createGlobe(canvas, options = {}) {
     for (const item of visible) {
       const r = markerRadius(item.cluster);
       const fade = Math.min(1, item.depth * 4);
-      const glow = ctx.createRadialGradient(item.x, item.y, r * 0.6, item.x, item.y, r * 3);
-      glow.addColorStop(0, rgba(state.theme.glow, 0.28 * fade));
-      glow.addColorStop(1, rgba(state.theme.glow, 0));
-      ctx.beginPath();
-      ctx.arc(item.x, item.y, r * 3, 0, 2 * Math.PI);
-      ctx.fillStyle = glow;
-      ctx.fill();
+      if (!street) {
+        const glow = ctx.createRadialGradient(item.x, item.y, r * 0.6, item.x, item.y, r * 3);
+        glow.addColorStop(0, rgba(state.theme.glow, 0.28 * fade));
+        glow.addColorStop(1, rgba(state.theme.glow, 0));
+        ctx.beginPath();
+        ctx.arc(item.x, item.y, r * 3, 0, 2 * Math.PI);
+        ctx.fillStyle = glow;
+        ctx.fill();
+      }
 
       ctx.beginPath();
       ctx.arc(item.x, item.y, item.i === state.hover ? r * 1.3 : r, 0, 2 * Math.PI);
-      ctx.fillStyle = rampColor(
-        state.theme.ramp,
-        0.25 + 0.75 * Math.sqrt(item.cluster.count / state.maxCount)
-      );
+      ctx.fillStyle = street
+        ? state.theme.ink
+        : rampColor(state.theme.ramp, 0.25 + 0.75 * Math.sqrt(item.cluster.count / state.maxCount));
       ctx.globalAlpha = fade;
       ctx.fill();
-      ctx.lineWidth = item.i === state.hover ? 2 : 1;
+      ctx.lineWidth = street ? 2 : item.i === state.hover ? 2 : 1;
       ctx.strokeStyle = rgba(state.theme.surface, 0.85);
       ctx.stroke();
       ctx.globalAlpha = 1;
@@ -277,7 +447,7 @@ export function createGlobe(canvas, options = {}) {
     return (
       state.fly !== null ||
       state.zoomTo !== null ||
-      (state.spin && !state.dragging) ||
+      (state.spin && !state.dragging && state.zoom < SPIN_ZOOM) ||
       state.dirty
     );
   }
@@ -309,7 +479,7 @@ export function createGlobe(canvas, options = {}) {
         state.fly = null;
       }
       state.dirty = true;
-    } else if (state.spin && !state.dragging) {
+    } else if (state.spin && !state.dragging && state.zoom < SPIN_ZOOM) {
       // Slower as the globe fills with one region: 9 deg/s at street level
       // would be a blur.
       state.rot.lon = wrapLon(state.rot.lon + (state.speed / Math.sqrt(state.zoom)) * dt);
@@ -455,11 +625,44 @@ export function createGlobe(canvas, options = {}) {
       kick();
     },
     setActivities(activities) {
-      state.activities = (activities || []).map((a, index) => ({
+      state.allActivities = (activities || []).map((a, index) => ({
         ...a,
         ts: a.ts == null ? index : a.ts,
       }));
-      rebin();
+      applySelection();
+      kick();
+    },
+    /* Tracks as {id: [lat0, lon0, dlat, dlon, ...]} in 1e-5 degree integers,
+       delta-encoded (see globe.tracks_url). Decoded once into flat
+       [lat, lon, lat, lon, ...] arrays. */
+    setTracks(encoded) {
+      const tracks = new Map();
+      for (const [id, flat] of Object.entries(encoded || {})) {
+        const out = new Float64Array(flat.length);
+        let lat = 0;
+        let lon = 0;
+        for (let k = 0; k < flat.length; k += 2) {
+          lat += flat[k];
+          lon += flat[k + 1];
+          out[k] = lat / 1e5;
+          out[k + 1] = lon / 1e5;
+        }
+        tracks.set(Number(id), out);
+      }
+      state.tracks = tracks;
+      computeHeat();
+      kick();
+    },
+    /* Activity ids the filters keep; null keeps everything. */
+    setSelection(ids) {
+      const next = ids ? new Set(ids.map(Number)) : null;
+      const same =
+        (next === null && state.selected === null) ||
+        (next && state.selected && next.size === state.selected.size &&
+          [...next].every((id) => state.selected.has(id)));
+      if (same) return;
+      state.selected = next;
+      applySelection();
       kick();
     },
     setTheme(theme) {

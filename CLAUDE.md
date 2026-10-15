@@ -183,8 +183,7 @@ Trzy reguły wymuszone strukturalnie:
    porządkowa.
 
 Buildery: `trend`, `range_bars`, `trail`, `hbars`, `timeseries`, `bars`,
-`stacked`, `scatter`, `heatmap`, `stacked_panels`, `route_map`, `route_density`,
-`profile` (+ `geo_cells`/`geo_clusters` — binowanie punktów dla globu);
+`stacked`, `scatter`, `heatmap`, `stacked_panels`, `route_map`, `profile` (+ `geo_cells`/`geo_clusters` — binowanie punktów dla globu);
 dekoratory `band`, `threshold`, `zero_lines`; wspólna legenda nad grupą wykresów
 `key(...)`; render przez `show(fig, table=..., note=...)`, który dokłada
 bliźniaczy widok tabelaryczny.
@@ -246,7 +245,20 @@ Jak to jest poskładane:
 - `globe_component/world.json` — Natural Earth 110 m jako GeoJSON
   (MultiPolygon + MultiLineString), współrzędne do 0,01°, oczka < 1,2° wycięte
   (112 KB). Przeglądarka pobiera go raz i trzyma we własnym cache.
-- **Zoom**: kółko myszy i dwuklik (oraz przyciski + − ○), 1×–160×, kotwiczony
+- **Mapa ciepła** (od ×14 w górę): glob zamienia starty na ślady GPS, każdy
+  odcinek w jednej z 5 klas „ile różnych treningów tędy przeszło” (siatka 20 m,
+  sąsiedztwo 3×3, żeby kilka metrów rozrzutu GPS nie rozbijało korytarza na
+  równoległe nitki), z obwódką w kolorze tła. **Liczenie jest w przeglądarce**
+  (`computeHeat` w `globe.js`): Python wysyła tylko listę wybranych
+  `activity_id`, więc filtr sportu nie kosztuje serwera nic. Same ślady
+  `globe.tracks_url` zapisuje raz na build do `globe_component/cache/`
+  (gitignorowane — to te same ślady GPS co `data/`) jako statyczny plik
+  (~400 KB, delta-kodowane inty 1e-5°), który przeglądarka trzyma w cache.
+  Powyżej ×6 glob przestaje się kręcić, a od ×28 znika siatka południków.
+- **Filtry nad globem**: *Kadr* (okolica / świat / miasta — `globe.place`
+  dobiera zoom do kwantyli 4–96% śladów) i *Sport*. Strona *Trasy* nie ma już
+  osobnej mapy gęstości — to jest ta mapa.
+- **Zoom**: kółko myszy i dwuklik (oraz przyciski + − ○), 1×–3000×, kotwiczony
   w punkcie pod kursorem (`projection.invert`). Promień kuli rośnie z zoomem,
   a klaster markerów jest przeliczany tak, żeby markery nie nachodziły na
   siebie: siatka to tyle stopni, ile przy obecnym promieniu ma 26 px. Dlatego
@@ -286,7 +298,7 @@ Mapy wymagają internetu — kafelki idą z CARTO/OpenStreetMap. Zoom liczy się
 z bounding boxu po wzorze Web Mercatora dla kafli 512 px (MapLibre); stała
 „na oko" zostawia trasę jako kropkę na środku mapy.
 
-Obie mapy rysują **linie, nie punkty** — i to jest wymóg, nie styl:
+`route_map` rysuje **linie, nie punkty** — i to jest wymóg, nie styl:
 
 - `route_map` koloruje sam ślad: każdy odcinek dostaje odcień wartości
   z jego początku (7 traców, bo plotly koloruje linię per trace). Markerów
@@ -294,12 +306,11 @@ Obie mapy rysują **linie, nie punkty** — i to jest wymóg, nie styl:
   koraliki; pod spodem leży szeroka, blada linia spinająca kształt, a hover
   siedzi na **niewidocznej** warstwie markerów (`opacity=0`), żeby wartości
   dało się odczytać punkt po punkcie bez stawiania kropek z powrotem.
-- `route_density` nakłada przezroczyste ślady zamiast rastra gęstości.
-  `Densitymap` ma promień rozmycia w **pikselach**, czyli jest policzony dla
-  jednego poziomu zoomu — po przybliżeniu rozpada się na chmurę plam. Linie
-  z `alpha ≈ 0,16` zachowują geometrię: korytarz przejechany 50 razy to 50
-  linii jedna na drugiej i jest ciemny przy każdym zoomie, a jednorazowy
-  objazd zostaje nitką.
+- Mapa wszystkich śladów naraz żyje na globie w Atlasie (patrz wyżej). Wcześniej
+  była tu mapa plotly z półprzezroczystymi liniami — po przybliżeniu rozpadała
+  się na blade nitki zlewające się z ulicami podkładu, stąd liczenie przebiegów.
+- Ślady na mapach plotly biorą paletę **jasną** w obu motywach (`LIGHT`), bo
+  podkład CARTO jest zawsze jasny; ciemna rampa kończy się prawie bielą.
 
 ## Układ aplikacji
 
@@ -331,7 +342,6 @@ Mapy dostają `uirevision`:
 
 - ślad trasy — `f"route-{activity_id}"`, więc **zmiana kolorowanej metryki
   zachowuje zoom i przesunięcie**, a zmiana aktywności świadomie je resetuje;
-- mapa gęstości — stały token, więc widok przeżywa przeładowanie strony.
 
 Glob nie ma `uirevision`, bo nie jest figurą plotly — jego kąt żyje w JS
 (patrz wyżej).

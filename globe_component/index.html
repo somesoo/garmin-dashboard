@@ -29,6 +29,15 @@
     color: var(--ink, #111); opacity: .78;
   }
   #zoom button:hover {opacity: 1;}
+  #legend {
+    position: absolute; left: 14px; top: 14px; z-index: 3; display: none;
+    padding: .45rem .6rem; border-radius: .45rem; border: 1px solid var(--edge, #ccc);
+    background: var(--card, #fff); color: var(--ink, #111); opacity: .92;
+    font: 11px/1.6 "Source Sans Pro", -apple-system, Segoe UI, sans-serif;
+  }
+  #legend b {font-weight: 620; display: block; opacity: .75;}
+  #legend span {display: flex; align-items: center; gap: 7px;}
+  #legend i {display: inline-block; width: 18px; border-radius: 2px;}
   #scale {
     position: absolute; left: 14px; bottom: 14px; z-index: 3; opacity: .55;
     font: 11px/1 "Source Sans Pro", -apple-system, Segoe UI, sans-serif;
@@ -46,11 +55,12 @@
     <button id="reset" title="Cały glob">○</button>
   </div>
   <div id="scale"></div>
+  <div id="legend"></div>
 </div>
 <script src="./vendor/d3-array.min.js"></script>
 <script src="./vendor/d3-geo.min.js"></script>
 <script type="module">
-import { createGlobe } from "./globe.js";
+import { createGlobe, HEAT_CLASSES, HEAT_ZOOM } from "./globe.js";
 
 /* The Streamlit component protocol, by hand: this component is a static page,
    so there is no bundler and no component library -- three postMessage calls
@@ -66,6 +76,17 @@ const stage = document.getElementById("stage");
 const canvas = document.getElementById("globe");
 const tip = document.getElementById("tip");
 const scale = document.getElementById("scale");
+const legend = document.getElementById("legend");
+let heatColors = null;
+let tracksUrl = null;
+
+// Pass-count key, shown only once the tracks are on screen.
+function renderLegend() {
+  if (!heatColors) return;
+  legend.innerHTML = "<b>ile razy przebiegnięte</b>" + HEAT_CLASSES.map((cls, index) =>
+    `<span><i style="height:${Math.max(2, cls.width)}px;background:${heatColors[index]}"></i>${cls.label}</span>`
+  ).join("");
+}
 
 let clicks = 0;
 let height = 620;
@@ -106,7 +127,8 @@ const globe = createGlobe(canvas, {
     tip.style.opacity = 1;
   },
   onZoom(zoom) {
-    scale.textContent = zoom <= 1.01 ? "cały glob" : `×${zoom.toFixed(1)}`;
+    scale.textContent = zoom <= 1.01 ? "cały glob" : `×${zoom < 10 ? zoom.toFixed(1) : Math.round(zoom)}`;
+    legend.style.display = tracksUrl && zoom >= HEAT_ZOOM ? "block" : "none";
   },
 });
 
@@ -142,8 +164,23 @@ window.addEventListener("message", (event) => {
     root.setProperty("--card", args.theme.card || "#fff");
     root.setProperty("--edge", args.theme.edge || "#ccc");
     root.setProperty("--ink", args.theme.ink || "#111");
+    heatColors = args.theme.heat || heatColors;
+    renderLegend();
   }
   if (args.activities) globe.setActivities(args.activities);
+  globe.setSelection(Array.isArray(args.selected) ? args.selected : null);
+  // The tracks file is named after the warehouse build, so a new URL means
+  // new data and an unchanged one is served from the browser cache anyway.
+  if (args.tracks && args.tracks !== tracksUrl) {
+    tracksUrl = args.tracks;
+    fetch(args.tracks)
+      .then((r) => r.json())
+      .then((tracks) => {
+        globe.setTracks(tracks);
+        legend.style.display = globe.zoom() >= HEAT_ZOOM ? "block" : "none";
+      })
+      .catch(() => {});
+  }
   if (typeof args.speed === "number") globe.setSpeed(args.speed);
   globe.setSpin(!!args.spin);
 

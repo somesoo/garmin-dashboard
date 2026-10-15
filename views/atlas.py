@@ -48,7 +48,12 @@ def render() -> None:
 
 
 def _hero(activities: pd.DataFrame) -> None:
-    """The globe, its two controls, and what a click on it does."""
+    """The globe, its filters, and what a click on it does.
+
+    Zoomed out it is the map of places; zoomed in to a city it becomes the heat
+    map of every track, each stretch coloured by how many times it was run.
+    The place picker flies there, the sport picker filters both layers.
+    """
     if "start_lat" not in activities.columns:
         shell.missing("activities.start_lat", "Odśwież tabele: `etl/load.py`.")
         return
@@ -60,43 +65,64 @@ def _hero(activities: pd.DataFrame) -> None:
     # One row per activity, built once per warehouse build. Grouping them into
     # markers is the browser's job, because it depends on the zoom.
     starts = globe.starts(with_gps, shell.build_id())
+    routes = shell.table("routes")
+    tracks = globe.tracks_url(routes, shell.build_id())
 
-    columns = st.columns(4)
-    columns[0].metric("Miejsca", f"{with_gps['location'].nunique()}")
-    columns[1].metric("Z GPS", f"{len(with_gps)}")
-    columns[2].metric("Dystans", f"{with_gps['distance_km'].sum():,.0f} km".replace(",", " "))
-    columns[3].metric("Czas", f"{with_gps['duration_min'].sum() / 60:,.0f} h".replace(",", " "))
-
-    frame_control, spin_control = st.columns([3, 1], vertical_alignment="bottom")
-    with frame_control:
-        focus = st.segmented_control(
+    places = with_gps["location"].dropna().value_counts().index.tolist()[:15]
+    where_options = list(FRAMES) + places
+    where_control, sport_control, spin_control = st.columns([2, 3, 1], vertical_alignment="bottom")
+    with where_control:
+        where = st.selectbox(
             "Kadr",
-            list(FRAMES),
-            default="home",
-            format_func=FRAMES.get,
-            key="globe_frame",
-            label_visibility="collapsed",
-        ) or "home"
+            where_options,
+            index=0,
+            format_func=lambda v: FRAMES.get(v, v),
+            key="globe_where",
+        )
+    with sport_control:
+        sports = sorted(with_gps["sport"].dropna().unique())
+        picked = st.multiselect("Sport", sports, default=sports, key="globe_sports",
+                                placeholder="wszystkie sporty")
     with spin_control:
         turning = st.toggle("Obrót", value=True, key="globe_spin")
 
-    target = globe.home(starts) if focus == "home" else globe.world(starts)
+    chosen = with_gps[with_gps["sport"].isin(picked)] if picked else with_gps
+    selected = None if len(chosen) == len(with_gps) else [int(i) for i in chosen["activity_id"]]
+
+    columns = st.columns(4)
+    columns[0].metric("Miejsca", f"{chosen['location'].nunique()}")
+    columns[1].metric("Z GPS", f"{len(chosen)}")
+    columns[2].metric("Dystans", f"{chosen['distance_km'].sum():,.0f} km".replace(",", " "))
+    columns[3].metric("Czas", f"{chosen['duration_min'].sum() / 60:,.0f} h".replace(",", " "))
+
+    if where == "home":
+        target = globe.home(starts)
+    elif where == "world":
+        target = globe.world(starts)
+    else:
+        ids = set(chosen.loc[chosen["location"] == where, "activity_id"].astype("int64"))
+        if not ids:
+            ids = set(with_gps.loc[with_gps["location"] == where, "activity_id"].astype("int64"))
+        here = routes[pd.to_numeric(routes["activity_id"], errors="coerce").isin(ids)]
+        target = globe.place(here) or globe.home(starts)
     with st.container(key="globe_stage"):
         clicked = globe.show(
             starts,
             spin=bool(turning),
             target=target,
-            frame=focus,
+            frame=where,
+            tracks=tracks,
+            selected=selected,
             key="atlas_globe",
         )
 
     st.caption(
-        "Każdy punkt to start treningu; kółko myszy przybliża, a przy "
-        "przybliżaniu skupiska rozpadają się na pojedyncze treningi. "
-        "**Kliknięcie pojedynczego treningu otwiera jego ślad na stronie "
-        "*Trasy***; kliknięcie skupiska pyta, który z nich otworzyć. Glob kręci "
-        "się w przeglądarce — przeciągnięcie obraca go ręcznie, „Obrót” "
-        "zatrzymuje, „okolica” i „świat” przelatują do wybranego kadru."
+        "Z daleka każdy punkt to start treningu. Wybierz miasto w polu **Kadr** "
+        "albo przybliż kółkiem myszy — na poziomie ulic glob zamienia się w mapę "
+        "ciepła: kolor i grubość mówią, ile różnych treningów przeszło danym "
+        "odcinkiem. **Kliknięcie startu otwiera ślad na stronie *Trasy***; "
+        "kliknięcie skupiska pyta, który trening otworzyć. Filtr sportu działa na "
+        "punkty i na mapę ciepła naraz."
     )
 
     pick = _fresh_pick(clicked)

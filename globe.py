@@ -16,6 +16,9 @@ globe matches every other figure in both themes.
 
 from __future__ import annotations
 
+import json
+import math
+import re
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +29,13 @@ import streamlit.components.v1 as components
 import theme as tz
 
 ROOT = Path(__file__).resolve().parent
-_component = components.declare_component("garmin_globe", path=str(ROOT / "globe_component"))
+COMPONENT = ROOT / "globe_component"
+# GPS tracks for the heat layer, written once per warehouse build next to the
+# component so the browser fetches them as a static, cacheable file instead of
+# receiving half a megabyte over the websocket on every rerun. Gitignored: these
+# are the same GPS traces as data/, just in the component's reach.
+CACHE = COMPONENT / "cache"
+_component = components.declare_component("garmin_globe", path=str(COMPONENT))
 
 def _theme() -> dict[str, Any]:
     t = tz.tokens()
@@ -44,7 +53,53 @@ def _theme() -> dict[str, Any]:
         "edge": t["axis"],
         "glow": t["series"][0],
         "ramp": t["sequential"],
+        # Pass-count classes, light to strong on whichever surface: the dark
+        # ramp runs dark -> light, so a daily corridor glows on dark land and
+        # reads as deep navy on light land.
+        # Steps 1, 3-6: the faintest class one step lighter than its neighbour
+        # so a one-off detour separates from a regular route.
+        "heat": [t["sequential"][i] for i in (1, 3, 4, 5, 6)],
+        "casing": "rgba(14,17,23,0.85)" if dark else "rgba(255,255,255,0.92)",
     }
+
+
+@st.cache_data(show_spinner=False)
+def tracks_url(_routes: pd.DataFrame, build: str) -> str | None:
+    """Write every GPS track to the component's cache once per build; return its URL.
+
+    Format: ``{activity_id: [lat0, lon0, dlat1, dlon1, ...]}`` in 1e-5 degree
+    integers (~1 m), delta-encoded, consecutive duplicates dropped -- about a
+    third of the size of plain coordinates.
+    """
+    if _routes is None or _routes.empty or "lat" not in _routes.columns:
+        return None
+    frame = _routes.dropna(subset=["lat", "lon"])
+    order = ["activity_id"] + (["seq"] if "seq" in frame.columns else [])
+    frame = frame.sort_values(order)
+    tracks: dict[str, list[int]] = {}
+    for activity, one in frame.groupby("activity_id", sort=False):
+        lat = (one["lat"].to_numpy(float) * 1e5).round().astype("int64")
+        lon = (one["lon"].to_numpy(float) * 1e5).round().astype("int64")
+        flat: list[int] = []
+        prev_lat = prev_lon = 0
+        for index, (a, b) in enumerate(zip(lat, lon)):
+            if index and a == prev_lat and b == prev_lon:
+                continue
+            flat.extend((int(a - prev_lat), int(b - prev_lon)))
+            prev_lat, prev_lon = a, b
+        if len(flat) >= 4:
+            tracks[str(int(activity))] = flat
+    if not tracks:
+        return None
+    CACHE.mkdir(exist_ok=True)
+    name = "tracks-" + re.sub(r"[^0-9A-Za-z]", "", build) + ".json"
+    for old in CACHE.glob("tracks-*.json"):
+        if old.name != name:
+            old.unlink(missing_ok=True)
+    target = CACHE / name
+    if not target.exists():
+        target.write_text(json.dumps(tracks, separators=(",", ":")), encoding="utf-8")
+    return f"./cache/{name}"
 
 
 @st.cache_data(show_spinner=False)
@@ -88,6 +143,8 @@ def show(
     spin: bool,
     target: tuple[float, float, float],
     frame: str,
+    tracks: str | None = None,
+    selected: list[int] | None = None,
     height: int = 620,
     speed: float = 9.0,
     key: str = "globe",
@@ -98,9 +155,15 @@ def show(
     when the viewer picks another frame, so an ordinary rerun never yanks the
     sphere out of the angle it is at. The returned payload is either a single
     activity (a link) or a group of them (a question).
+
+    ``tracks`` is the URL from :func:`tracks_url`; ``selected`` the activity ids
+    the filters keep (``None`` = all). The browser recounts the heat layer for a
+    new selection, so a filter change sends a list of ids, not the tracks.
     """
     return _component(
         activities=starts,
+        tracks=tracks,
+        selected=selected,
         theme=_theme(),
         spin=bool(spin),
         speed=speed,
@@ -140,3 +203,24 @@ def world(starts: list[dict[str, Any]]) -> tuple[float, float, float]:
     lats = [s["lat"] for s in starts]
     centre_lat = (min(lats) + max(lats)) / 2
     return ((min(lons) + max(lons)) / 2, max(-55.0, min(55.0, centre_lat * 0.72)), 1.0)
+
+
+def place(points: pd.DataFrame, *, fill: float = 0.75) -> tuple[float, float, float] | None:
+    """Camera over one place: centre and a zoom that frames the bulk of its tracks.
+
+    The sphere's radius is ~half the canvas at zoom 1, so a span of ``s``
+    radians fills ``fill`` of it at zoom ~ 2*fill/s. Quantiles, not extremes:
+    one long ride out of town would otherwise decide the frame.
+    """
+    if points is None or points.empty:
+        return None
+    lat = pd.to_numeric(points["lat"], errors="coerce").dropna()
+    lon = pd.to_numeric(points["lon"], errors="coerce").dropna()
+    if lat.empty:
+        return None
+    lat_lo, lat_hi = lat.quantile(0.04), lat.quantile(0.96)
+    lon_lo, lon_hi = lon.quantile(0.04), lon.quantile(0.96)
+    centre_lat = float((lat_lo + lat_hi) / 2)
+    span = max(float(lat_hi - lat_lo), float(lon_hi - lon_lo) * math.cos(math.radians(centre_lat)), 0.01)
+    zoom = 2 * fill / math.radians(span)
+    return (float((lon_lo + lon_hi) / 2), centre_lat, max(2.0, min(3000.0, zoom)))
