@@ -43,3 +43,8 @@ def goto(url_path: str, **state: Any) -> None:
 def open_activity(activity_id: int) -> None:
     """Open one activity on the route explorer."""
     goto("trasy", routes_activity_request=int(activity_id))
+
+
+def open_run(activity_id: int) -> None:
+    """Open one run on the running session page."""
+    goto("bieg", run_activity_request=int(activity_id))

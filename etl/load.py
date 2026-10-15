@@ -337,6 +337,10 @@ def build_activities() -> pd.DataFrame:
                 "lap_count": a.get("lapCount"),
                 "temperature_max": a.get("maxTemperature"),
                 "moderate_minutes": a.get("moderateIntensityMinutes"),
+                # Set when the run came from a structured watch workout; the
+                # segments themselves are in the activity_segments table.
+                "workout_id": a.get("workoutId"),
+                "event_type": dig(a, "eventType", "typeKey"),
             }
         )
 
@@ -549,11 +553,52 @@ DETAIL_METRICS = {
     "directSpeed": "speed_ms",
     "directGradeAdjustedSpeed": "gap_speed_ms",
     "sumDistance": "distance_km",
+    # Timer time (auto-pause excluded): what the watch's own km splits use.
+    "sumDuration": "duration_s",
     "directTimestamp": "timestamp_ms",
     "directRunCadence": "cadence",
     "directPower": "power",
     "directAirTemperature": "temperature",
 }
+
+
+def build_segments() -> pd.DataFrame:
+    """Per-activity split summaries: workout phases and run/walk detection.
+
+    ``splitSummaries`` aggregates the watch's own segmentation -- for a
+    structured workout that is warm-up / active / recovery / cool-down
+    (``INTERVAL_*``), for every run the run/walk/stand detection
+    (``RWD_*``). Several reps of the same phase arrive as one row with
+    ``splits`` > 1, so this is the rep count and total, not each rep.
+    """
+    folder = config.RAW / "activities"
+    columns = ["activity_id", "split_type", "splits", "distance_m", "duration_s",
+               "avg_speed_ms", "max_speed_ms", "ascent_m"]
+    if not folder.is_dir():
+        return pd.DataFrame(columns=columns)
+    seen: dict[Any, list[dict[str, Any]]] = {}
+    for path in sorted(folder.glob("*.json")):
+        for activity in read(path) or []:
+            if isinstance(activity, dict) and activity.get("activityId"):
+                seen[activity["activityId"]] = activity.get("splitSummaries") or []
+    rows = []
+    for activity_id, splits in seen.items():
+        for split in splits:
+            if not isinstance(split, dict) or not split.get("splitType"):
+                continue
+            rows.append(
+                {
+                    "activity_id": activity_id,
+                    "split_type": split.get("splitType"),
+                    "splits": split.get("noOfSplits"),
+                    "distance_m": split.get("distance"),
+                    "duration_s": split.get("duration"),
+                    "avg_speed_ms": split.get("averageSpeed"),
+                    "max_speed_ms": split.get("maxSpeed"),
+                    "ascent_m": split.get("totalAscent"),
+                }
+            )
+    return pd.DataFrame(rows, columns=columns)
 
 
 def build_routes() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -676,6 +721,7 @@ def main() -> int:
     activities = build_activities()
     write_table(daily, "daily")
     write_table(activities, "activities")
+    write_table(build_segments(), "activity_segments")
 
     # Intraday tables: hypnograms, overnight series, full-day 3-minute samples.
     stages = build_sleep_stages()

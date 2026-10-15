@@ -26,6 +26,7 @@ BASE_TABLES = (
     "intraday",
     "routes",
     "route_summary",
+    "activity_segments",
 )
 DERIVED_TABLES = (
     "pmc",
@@ -42,6 +43,10 @@ DERIVED_TABLES = (
     "night_profile",
     "intensity_distribution",
     "quadrants",
+    "run_sessions",
+    "run_splits",
+    "run_efforts",
+    "run_forecast",
 )
 TABLE_NAMES = BASE_TABLES + DERIVED_TABLES
 

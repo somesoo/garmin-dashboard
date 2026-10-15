@@ -22,10 +22,15 @@ garmin-dashboard/
   globe.py           opakowanie komponentu globu (dane + motyw + klik)
   globe_component/   statyczny komponent: index.html, globe.js, world.json,
                      vendor/ (d3-geo, d3-array), test.html (podgląd renderera)
-  views/             po jednym module na stronę (atlas, routes, form, ...)
+  views/             po jednym module na stronę (atlas, routes, form, ...);
+                     run_*.py to grupa „Bieganie”
+  running/           logika modułu biegowego (bez Streamlita): klasyfikacja,
+                     prognoza, plan, magazyn celów, brief dla asystenta
+  tests/             unittest: `.venv/bin/python -m unittest discover -s tests -t .`
   insights/*.md      wnioski: proza + bloki SQL liczone na żywo
   data/raw/          źródło prawdy (nie usuwać — odbudowa tabel bez API)
   data/tables/       daily.parquet, activities.parquet
+  data/coach/        zawody i plany wpisane przez biegacza (JSON, poza gitem)
 ```
 
 Python: `.venv` w katalogu repo — `.venv/bin/python` na macOS (główna maszyna,
@@ -355,3 +360,56 @@ Glob nie ma `uirevision`, bo nie jest figurą plotly — jego kąt żyje w JS
 
 Jeśli dodajesz mapę, ustaw `uirevision` na coś, co zmienia się dokładnie wtedy,
 gdy reset widoku jest pożądany. Bez tego każdy rerun wyrzuca użytkownika z powrotem.
+
+## Moduł biegowy (`running/`, strony `views/run_*`)
+
+Grupa „Bieganie” w nawigacji: przegląd, prognoza wyników, plan treningowy,
+zawody i cele, szczegóły treningu, obciążenie biegowe. Cała logika siedzi
+w pakiecie `running/` (czyste pandas, testowane); strony tylko rysują.
+
+Tabele (materializuje je `analytics.main` przez `running.pipeline.build`):
+
+| tabela | ziarno | zawartość |
+|---|---|---|
+| `activity_segments` | aktywność + faza | `splitSummaries` z ETL: `INTERVAL_WARMUP/ACTIVE/RECOVERY/COOLDOWN` (workout z zegarka), `RWD_*` |
+| `run_sessions` | bieg | kolumny `activities` + `kind` (recovery/easy/long/tempo/threshold/intervals/race), `kind_reason`, `kind_confidence`, `hr_max_used` |
+| `run_splits` | bieg + km | splity ze strumienia próbek (czas stopera `duration_s`), tętno, przewyższenie, kadencja (kroki obu nóg) |
+| `run_efforts` | bieg + dystans | najlepsze odcinki (1 km…maraton, blok workoutu), źródło, `vdot`, `hr_frac`, `near_max` |
+| `run_forecast` | tydzień + dystans | migawka prognozy liczona tylko z danych sprzed dnia: `realistic_s`, `low_s`/`high_s` (80%), `potential_s`, `garmin_s`, `vdot`, `prep` |
+
+Model prognozy (szczegóły w docstringu `running/forecast.py`):
+
+- Waluta to **VDOT Danielsa** (krzywe sprawdzone testem z tabelami książki).
+- Kotwica: najlepszy wysiłek z 120 dni; **bliski maksymalnego** = start albo
+  ≥ 91% HRmax przez ≥ 6 min na tym odcinku strumienia. Odcinek treningowy
+  poniżej tego progu to *dolna granica* — przedział jest wtedy asymetryczny.
+  Starsze wysiłki maksymalne (do roku) tracą 0,3%/tydz. po 4 tygodniach.
+- Tętno ↔ tempo (Swain, %HRR ≈ %VO₂R) jest **systematycznie zaniżone** u tego
+  użytkownika (~33 vs ~40) — dlatego wchodzi jako *trend* od ostatniego
+  wysiłku (waga rośnie z wiekiem kotwicy), a poziom tylko poszerza przedział.
+- Garmin nie wchodzi do punktu, tylko do niepewności.
+- Korekta wytrzymałościowa: `(D/d_kotwicy)^(0.08·(1−prep))`, `prep` z długiego
+  biegu, objętości i regularności względem `REQUIREMENTS`. 5 km nigdy nie
+  ekstrapoluje się na maraton bez tego podatku.
+- Strona Prognoza ma **sprawdzenie wstecz**; na danych z 2026-10 mediana
+  błędu ≈ 10% — szerokość przedziału jest uczciwa, nie ostrożnościowa.
+
+Pułapki:
+
+- **Żaden bieg nie jest oznaczony jako start** (`eventType` zawsze
+  `uncategorized`). Start wpisany na stronie Zawody i powiązany z aktywnością
+  dostaje `kind = race` po przeliczeniu (`running.pipeline.rebuild`).
+- **HRmax to trzecie najwyższe maksimum biegów** (192), bo 201/196 to skoki
+  czujnika. Etykiety typu treningu zależą od niego.
+- **Splity są ze strumienia ~400 próbek**, nie z okrążeń (lapów nie pobieramy):
+  dokładność kilku sekund. `directRunCadence` liczy jedną nogę — mnożone ×2.
+- Tempo/próg wymaga też **tempa** bliskiego M/T dla VDOT z tego dnia; wysokie
+  tętno przy spokojnym tempie (upał) zostaje biegiem spokojnym z adnotacją.
+- `data/coach/` to stan wpisany ręcznie — nie da się go odbudować z `raw/`.
+  Przy przenoszeniu na serwer kopiuj razem z resztą `data/`.
+
+Współpraca z asystentem: nie ma tu API modelu i żadnego nie dodajemy.
+`python -m running.coach [--json]` drukuje brief (prognoza z wejściami, biegi,
+obciążenie, regeneracja, plan i realizacja, `data_gaps`), `--validate <id>`
+sprawdza plik planu po edycji. Komenda `/trener` (`.claude/commands/trener.md`)
+opisuje kontrakt dla Claude Code.

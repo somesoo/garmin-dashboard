@@ -21,6 +21,8 @@ Models implemented
 * Sleep Regularity Index and circadian midpoint stability.
 * Per-night cardiac recovery shape: heart-rate nadir timing, overnight HRV
   slope, Body Battery recharge rate.
+* Running: session classification, km splits, best efforts and the race
+  forecast history -- the logic lives in the ``running`` package.
 """
 
 from __future__ import annotations
@@ -905,6 +907,20 @@ def main() -> int:
         "intensity_distribution": intensity_distribution(activities),
         "quadrants": recovery_quadrants(merged),
     }
+    # Running module: classified sessions, km splits, best efforts and the
+    # weekly race-forecast history (see running/pipeline.py). Its own guard,
+    # so a modelling error there never costs the tables above.
+    try:
+        from running import pipeline, store
+
+        tables.update(
+            pipeline.build(
+                activities, daily, db.table("routes"), db.table("activity_segments"),
+                manual=store.manual_kinds(),
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 - reported, the rest is written
+        print(f"  bieganie pominiete: {type(exc).__name__}: {exc}", flush=True)
 
     written = {}
     for name, table in tables.items():
