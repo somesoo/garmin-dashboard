@@ -14,3 +14,4 @@
 # Binaria i dane - bez konwersji.
 *.parquet   binary
 *.json      -text
+*.command   text eol=lf

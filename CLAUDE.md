@@ -10,7 +10,7 @@ garmin-dashboard/
   config.py          ścieżki, rejestr metryk, throttle, okno re-fetchu
   etl/fetch.py       API → data/raw/<metryka>/<YYYY-MM-DD>.json
   etl/load.py        raw → data/tables/*.parquet (jawne mapowanie pól)
-  etl/run.py         przyrostowa aktualizacja (wejście dla Dashboard.cmd)
+  etl/run.py         przyrostowa aktualizacja (wejście dla Dashboard.command/.cmd)
   etl/login.py       odświeżenie tokenów hasłem (raz na rok / po zmianie hasła)
   analytics.py       modele fizjologiczne i statystyka -> tabele pochodne
   db.py              DuckDB in-memory z widokami na parquet
@@ -28,17 +28,17 @@ garmin-dashboard/
   data/tables/       daily.parquet, activities.parquet
 ```
 
-Python: `.venv` w katalogu repo — `.venv/Scripts/python.exe` na Windowsie,
-`.venv/bin/python` na Linuxie (3.12+). `garminconnect` to zwykła zależność
+Python: `.venv` w katalogu repo — `.venv/bin/python` na macOS (główna maszyna,
+Python 3.13 z Homebrew) i Linuxie, `.venv/Scripts/python.exe` na Windowsie (3.12+). `garminconnect` to zwykła zależność
 z `requirements.txt`, nie editable install z sąsiedniego repo.
 
 ## Zapytania
 
 ```bash
-.venv/Scripts/python.exe -c "import db; print(db.query('SELECT * FROM daily ORDER BY day DESC LIMIT 5').to_string())"
+.venv/bin/python -c "import db; print(db.query('SELECT * FROM daily ORDER BY day DESC LIMIT 5').to_string())"
 ```
 
-Pełna lista kolumn: `.venv/Scripts/python.exe db.py`.
+Pełna lista kolumn: `.venv/bin/python db.py`.
 
 ## Tabela `daily` (jeden wiersz = jeden dzień kalendarzowy)
 
@@ -245,7 +245,7 @@ Podgląd renderera bez Streamlita (tak sprawdzasz artefakty — zrzut ekranu
 z headless Chrome na konkretnym ujęciu):
 
 ```bash
-.venv/Scripts/python.exe -m http.server 8777 --directory globe_component
+.venv/bin/python -m http.server 8777 --directory globe_component
 # http://127.0.0.1:8777/test.html?lat=85            (bieguny — tu wychodzą kliny)
 # http://127.0.0.1:8777/test.html?lat=-85
 # http://127.0.0.1:8777/test.html?lat=52&lon=21&zoom=12&theme=dark

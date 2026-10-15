@@ -214,7 +214,7 @@ def has_data() -> bool:
 def no_data_screen() -> None:
     st.title("Garmin Dashboard")
     st.warning(
-        "Brak danych. Uruchom `Dashboard.cmd` (Windows) albo "
+        "Brak danych. Uruchom `Dashboard.command` (macOS), `Dashboard.cmd` (Windows) albo "
         "`.venv/bin/python etl/run.py` (Linux)."
     )
     st.stop()

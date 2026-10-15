@@ -5,19 +5,52 @@ na `http://localhost:8501`. Nic nie wychodzi na zewnątrz.
 
 ## Uruchomienie
 
-Dwuklik na **`Dashboard.cmd`** — aktualizuje dane od ostatniego pobrania,
-przebudowuje tabele, podnosi serwer (jeśli nie działa) i otwiera przeglądarkę.
-Skrót do tego pliku możesz wrzucić gdziekolwiek (`Prawy → Utwórz skrót`).
+**macOS:** dwuklik na **`Dashboard.command`** (otwiera się w Terminalu) albo
+`./Dashboard.command` z terminala. **Windows:** dwuklik na **`Dashboard.cmd`**.
+Oba aktualizują dane od ostatniego pobrania, przebudowują tabele, podnoszą
+serwer (jeśli nie działa) i otwierają przeglądarkę. Na Macu serwer działa
+w tle także po zamknięciu okna Terminala (log: `data/streamlit.log`);
+zatrzymanie: `pkill -f "streamlit run"`.
 
-Ręcznie:
+Ręcznie (macOS/Linux; na Windowsie `.venv\Scripts\python.exe`):
+
+```bash
+.venv/bin/python etl/run.py              # aktualizacja (14 dni wstecz)
+.venv/bin/python etl/run.py --backfill   # cała historia
+.venv/bin/python etl/load.py             # tylko przebudowa tabel
+.venv/bin/python analytics.py            # tylko modele i statystyka
+.venv/bin/python -m streamlit run app.py # tylko serwer
+```
+
+### Pierwsza instalacja na Macu
+
+```bash
+brew install python@3.13
+python3.13 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+### Przeniesienie danych z Windowsa
+
+`data/` i tokeny nie są w gicie. Na Windowsie (PowerShell, w katalogu repo):
 
 ```powershell
-.venv\Scripts\python.exe etl\run.py              # aktualizacja (14 dni wstecz)
-.venv\Scripts\python.exe etl\run.py --backfill    # cała historia
-.venv\Scripts\python.exe etl\load.py              # tylko przebudowa tabel
-.venv\Scripts\python.exe analytics.py           # tylko modele i statystyka
-.venv\Scripts\python.exe -m streamlit run app.py  # tylko serwer
+tar czf garmin-data.tar.gz data
+tar czf garmin-tokens.tar.gz -C $env:USERPROFILE .garminconnect
 ```
+
+Oba pliki przenieś na Maca (pendrive, AirDrop, `scp`) i w katalogu repo:
+
+```bash
+tar xzf ~/Downloads/garmin-data.tar.gz
+tar xzf ~/Downloads/garmin-tokens.tar.gz -C ~
+chmod 700 ~/.garminconnect && chmod 600 ~/.garminconnect/*
+rm ~/Downloads/garmin-tokens.tar.gz   # archiwum ma wartość hasła
+cat data/state.json                    # kontrola: ostatni pobrany dzień
+.venv/bin/python etl/load.py           # odbudowa tabel lokalnie, bez API
+```
+
+Bez tokenów wystarczy raz `.venv/bin/python etl/login.py`.
 
 ## Jak to działa
 
@@ -77,13 +110,22 @@ Format opisuje `insights/_template.md`, schemat danych — `CLAUDE.md`.
 Logowanie idzie z `~/.garminconnect/garmin_tokens.json`. Gdy token wygaśnie
 (ETL kończy się kodem 2):
 
-```powershell
-.venv\Scripts\python.exe etl\login.py
+```bash
+.venv/bin/python etl/login.py              # macOS/Linux
+.venv\Scripts\python.exe etl\login.py      # Windows
 ```
 
 Plik z tokenami ma wartość hasła — trzymaj go poza repo i backupami.
 
 ## Automatyczna aktualizacja (opcjonalnie)
+
+macOS — wpis w `crontab -e` (Mac musi wtedy nie spać):
+
+```
+0 7 * * * cd /Users/<ty>/repos/garmin-dashboard && .venv/bin/python etl/run.py >> data/etl.log 2>&1
+```
+
+Windows:
 
 ```powershell
 schtasks /create /tn GarminETL /sc daily /st 07:00 /tr "\"$PWD\.venv\Scripts\python.exe\" \"$PWD\etl\run.py\""

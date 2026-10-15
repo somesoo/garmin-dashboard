@@ -1,6 +1,6 @@
 """One-shot update: fetch what is missing since the last run, rebuild tables.
 
-This is what the Dashboard.cmd shortcut calls before opening the browser.
+This is what the Dashboard.command / Dashboard.cmd shortcuts call before opening the browser.
 """
 
 from __future__ import annotations
