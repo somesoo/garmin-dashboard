@@ -166,9 +166,17 @@ def sub(title: str, note: str | None = None) -> None:
         st.caption(note)
 
 
-def metrics(row: pd.Series | None, previous: pd.Series | None, specs: list[tuple[str, str, str]]) -> None:
+def metrics(row: pd.Series | None, previous: pd.Series | None, specs: list[tuple]) -> None:
+    """A strip of tiles: ``(field, label, unit[, delta_color])``.
+
+    ``delta_color`` is Streamlit's: "normal" when up is good, "inverse" when up
+    is bad (resting HR, stress), "off" when the direction alone means nothing
+    (fatigue, load ratios). Left to the default every rise turns green.
+    """
     columns = st.columns(len(specs))
-    for column, (field, label, unit) in zip(columns, specs):
+    for column, spec in zip(columns, specs):
+        field, label, unit = spec[:3]
+        delta_color = spec[3] if len(spec) > 3 else "normal"
         value = row.get(field) if row is not None else None
         if value is None or pd.isna(value):
             column.metric(label, "—")
@@ -179,7 +187,7 @@ def metrics(row: pd.Series | None, previous: pd.Series | None, specs: list[tuple
             diff = float(value) - float(before)
             delta = f"{diff:+.1f}".rstrip("0").rstrip(".") + (f" {unit}" if unit else "")
         shown = f"{float(value):.1f}".rstrip("0").rstrip(".")
-        column.metric(label, f"{shown}{(' ' + unit) if unit else ''}", delta)
+        column.metric(label, f"{shown}{(' ' + unit) if unit else ''}", delta, delta_color=delta_color)
 
 
 def missing(name: str, hint: str = "") -> None:

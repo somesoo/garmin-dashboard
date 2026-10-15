@@ -124,7 +124,7 @@ czytają te same liczby.
 | `acf` | metryka + lag | autokorelacja z 95% CI (statsmodels) |
 | `changepoints` | metryka | wykryte przesunięcia bazy (segmentacja binarna, kara ~2·ln n) |
 | `weekday_effects` | metryka + dzień | średnia, SD, `delta_vs_overall`, `kruskal_p` |
-| `circadian` | noc | `bed_hour_cont` (ciągła przez północ), `wake_hour`, `midpoint_hour`, `midpoint_sd_30d`, `is_weekend` |
+| `circadian` | noc | `bed_hour_cont` (ciągła przez północ), `wake_hour`, `midpoint_hour`, `midpoint_sd_30d` (odporny rozrzut 30 d: IQR/1,349), `is_weekend` |
 | `sleep_regularity` | noc | `sri_pair`, `sri_30d` — Sleep Regularity Index z minutowego hipnogramu |
 | `night_profile` | noc | `hr_min`, `hr_drop` (1. godzina minus minimum), `nadir_at_pct` (kiedy w nocy wypadło minimum tętna), `hrv_first_third`/`hrv_last_third`/`hrv_slope_per_h`, `bb_gain_per_h` + dołączone `sleep_score`, `readiness` |
 | `intensity_distribution` | tydzień ISO | minuty i % w strefach HR, `easy/middle/hard_pct`, `model` (etykieta opisowa) |

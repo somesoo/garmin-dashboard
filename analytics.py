@@ -308,6 +308,14 @@ def efficiency(activities: pd.DataFrame) -> pd.DataFrame:
     if runs.empty:
         return pd.DataFrame()
     runs["day"] = pd.to_datetime(runs["day"])
+    # A "run" of 0.6 km in 91 minutes is a watch left recording, not a run, and
+    # at ~0.02 m/beat it flattens the axis for every real session. Keep efforts
+    # of at least 1 km at faster than a walk (12 min/km).
+    distance = _numeric(runs, "distance_km").reindex(runs.index)
+    pace_speed = _numeric(runs, "speed_kmh").reindex(runs.index)
+    runs = runs[(distance >= 1.0) & (pace_speed >= 5.0)]
+    if runs.empty:
+        return pd.DataFrame()
     # Grade-adjusted speed is the better input but only newer activities carry
     # it, so plain speed fills the gaps.
     speed = _numeric(runs, "gap_speed")
@@ -601,14 +609,31 @@ def weekday_effects(frame: pd.DataFrame) -> pd.DataFrame:
 # sleep and circadian structure
 
 
+def _local_timestamp(values: pd.Series) -> pd.Series:
+    """Garmin's ``*TimestampLocal`` fields: epoch milliseconds on the local clock.
+
+    Numbers have to be read with ``unit="ms"`` -- left to the default they are
+    taken as nanoseconds and every night lands at 1970-01-01 00:29.
+    """
+    numeric = pd.to_numeric(values, errors="coerce")
+    if numeric.notna().any():
+        return pd.to_datetime(numeric, unit="ms", errors="coerce")
+    return pd.to_datetime(values, errors="coerce", format="mixed")
+
+
+def _rolling_spread(values: pd.Series, window: int = 30) -> pd.Series:
+    rolling = values.rolling(window, min_periods=10)
+    return ((rolling.quantile(0.75) - rolling.quantile(0.25)) / 1.349).round(2)
+
+
 def circadian(daily: pd.DataFrame, stages: pd.DataFrame) -> pd.DataFrame:
     """Bedtime, wake time, midpoint and their stability per night."""
     if daily.empty or "sleep_start" not in daily.columns:
         return pd.DataFrame()
     frame = daily.copy()
     frame["day"] = pd.to_datetime(frame["day"])
-    start = pd.to_datetime(frame["sleep_start"], errors="coerce", format="mixed")
-    end = pd.to_datetime(frame["sleep_end"], errors="coerce", format="mixed")
+    start = _local_timestamp(frame["sleep_start"])
+    end = _local_timestamp(frame["sleep_end"])
     rows = pd.DataFrame(
         {
             "day": frame["day"],
@@ -628,8 +653,10 @@ def circadian(daily: pd.DataFrame, stages: pd.DataFrame) -> pd.DataFrame:
     )
     rows["weekday"] = rows["day"].dt.day_name()
     rows["is_weekend"] = rows["day"].dt.dayofweek >= 4  # Fri/Sat nights
-    rows["midpoint_sd_30d"] = rows["midpoint_hour"].rolling(30, min_periods=10).std().round(2)
-    rows["bed_sd_30d"] = rows["bed_hour_cont"].rolling(30, min_periods=10).std().round(2)
+    # Robust spread (IQR / 1.349 equals the SD for normal data): one jet-lagged
+    # afternoon sleep would otherwise read as a 2.4 h scatter for a whole month.
+    rows["midpoint_sd_30d"] = _rolling_spread(rows["midpoint_hour"])
+    rows["bed_sd_30d"] = _rolling_spread(rows["bed_hour_cont"])
     for column in ("bed_hour", "wake_hour", "bed_hour_cont", "midpoint_hour"):
         rows[column] = rows[column].round(2)
     return rows.reset_index(drop=True)

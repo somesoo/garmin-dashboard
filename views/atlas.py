@@ -155,7 +155,7 @@ def _now(frame: pd.DataFrame, row: pd.Series | None) -> None:
         [
             ("readiness", "Readiness", ""),
             ("hrv_last_night", "HRV noc", "ms"),
-            ("rhr", "RHR", "bpm"),
+            ("rhr", "RHR", "bpm", "inverse"),
             ("sleep_h", "Sen", "h"),
         ],
     )

@@ -33,10 +33,10 @@ def render() -> None:
         week_ago,
         [
             ("ctl", "CTL — sprawność", ""),
-            ("atl", "ATL — zmęczenie", ""),
+            ("atl", "ATL — zmęczenie", "", "off"),
             ("tsb", "TSB — forma", ""),
-            ("ramp_7d", "Przyrost CTL / 7 d", ""),
-            ("acwr_ewma", "ACWR", ""),
+            ("ramp_7d", "Przyrost CTL / 7 d", "", "off"),
+            ("acwr_ewma", "ACWR", "", "off"),
         ],
     )
     zone = current.get("form_zone")
