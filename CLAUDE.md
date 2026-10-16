@@ -276,9 +276,13 @@ Jak to jest poskładane:
   i przyciski + − ○; 1×–40000×. **Punkt pod kursorem zostaje pod kursorem**:
   `setZoom` po zmianie skali dociąga obrót, aż ten sam punkt wróci pod wskaźnik.
   (Wcześniej każde zdarzenie przenosiło środek na punkt pod kursorem — touchpad
-  wysyła ich dziesiątki na sekundę, więc obraz skakał.) Klaster markerów jest
-  przeliczany tak, żeby markery nie nachodziły na siebie: siatka to tyle
-  stopni, ile przy obecnym promieniu ma 26 px.
+  wysyła ich dziesiątki na sekundę, więc obraz skakał.) Klastry markerów mają
+  **poziomy**: siatka (26 px w stopniach) zmienia się tylko przy podwojeniu
+  zoomu, a każdy poziom dzieli komórki poprzedniego na pół — grupa rozpada się
+  na swoje części, zamiast tasować się przy każdym zdarzeniu. W trakcie zoomu
+  markery bledną (`markerAlpha`) i wracają ~0,2 s po ostatnim zdarzeniu, więc
+  przejście między poziomami dzieje się pod przygaszeniem. Na płaskiej mapie
+  start to adnotacja: kropka dla jednego treningu, małe kółko z liczbą dla grupy.
 - **Od ×4 (`FLAT_ZOOM`) glob staje się płaską mapą**: Mercator w ramce
   z zaokrąglonymi rogami, skala w środku dopasowana do kuli (`s = R·cos φ`),
   więc przejście nie skacze. Pod spodem kafelki **OpenStreetMap**

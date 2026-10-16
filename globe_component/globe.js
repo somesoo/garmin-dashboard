@@ -157,6 +157,10 @@ export function createGlobe(canvas, options = {}) {
     hover: -1,
     dirty: true,
     maxCount: 1,
+    binKey: null,
+    // Markers dim while the zoom moves and come back once it settles.
+    markerAlpha: 1,
+    zoomedAt: -1e9,
     frame: null,
     last: 0,
     size: { w: 600, h: 600, dpr: 1 },
@@ -290,11 +294,21 @@ export function createGlobe(canvas, options = {}) {
   /* -------------------------------------------------------- clustering */
 
   // Markers are grouped so they never overlap: the grid is whatever 26 px is
-  // worth in degrees at the current zoom. Zoom in and a city falls apart into
-  // its parks, then into single activities -- and a single activity is a link
-  // straight to that activity.
-  function rebin() {
-    const grid = Math.max(0.0002, (26 * 180) / (Math.PI * radius()));
+  // worth in degrees. Zoom in and a city falls apart into its parks, then into
+  // single activities -- and a single activity is a link straight to that
+  // activity.
+  //
+  // The grid moves in whole levels, one per doubling of zoom, and each level
+  // halves the cells of the one before. Re-binning on every wheel event (a
+  // continuous grid) reshuffled the groups dozens of times a second and the
+  // markers jumped; with nested levels a group only ever splits into its own
+  // parts, and the split happens while the markers are dimmed for the zoom.
+  function rebin(force = false) {
+    const level = Math.max(0, Math.floor(Math.log2(state.zoom)));
+    const key = `${level}:${baseRadius()}`;
+    if (!force && key === state.binKey) return;
+    state.binKey = key;
+    const grid = Math.max(0.0002, (26 * 180) / (Math.PI * baseRadius() * 2 ** level));
     const buckets = new Map();
     for (const activity of state.activities) {
       const key =
@@ -333,7 +347,7 @@ export function createGlobe(canvas, options = {}) {
     state.activities = keep
       ? state.allActivities.filter((a) => keep.has(a.id))
       : state.allActivities.slice();
-    rebin();
+    rebin(true);
     computeHeat();
   }
 
@@ -464,6 +478,11 @@ export function createGlobe(canvas, options = {}) {
   }
 
   function markerRadius(cluster) {
+    if (flat()) {
+      // On the map a start is an annotation, not a bubble: a small dot, and a
+      // group only as big as its number needs.
+      return cluster.count === 1 ? 3.5 : 7 + Math.min(4, Math.log2(cluster.count));
+    }
     if (state.heat && heatAlpha() >= 1) {
       // At street scale a start is a small handle on its track, not a blob.
       return cluster.count === 1 ? 4 : 5 + Math.min(4, Math.log2(cluster.count));
@@ -583,12 +602,18 @@ export function createGlobe(canvas, options = {}) {
       visible.push({ i, x: p[0], y: p[1], depth: d, cluster });
     }
     visible.sort((a, b) => a.depth - b.depth);
+    const alpha = state.markerAlpha;
+    if (alpha <= 0.01) return;
+    if (flat()) {
+      drawAnnotations(visible, alpha);
+      return;
+    }
     for (const item of visible) {
       const r = markerRadius(item.cluster);
       const fade = Math.min(1, item.depth * 4);
       if (!street) {
         const glow = ctx.createRadialGradient(item.x, item.y, r * 0.6, item.x, item.y, r * 3);
-        glow.addColorStop(0, rgba(state.theme.glow, 0.28 * fade));
+        glow.addColorStop(0, rgba(state.theme.glow, 0.28 * fade * alpha));
         glow.addColorStop(1, rgba(state.theme.glow, 0));
         ctx.beginPath();
         ctx.arc(item.x, item.y, r * 3, 0, 2 * Math.PI);
@@ -601,7 +626,7 @@ export function createGlobe(canvas, options = {}) {
       ctx.fillStyle = street
         ? state.theme.ink
         : rampColor(state.theme.ramp, 0.25 + 0.75 * Math.sqrt(item.cluster.count / state.maxCount));
-      ctx.globalAlpha = fade;
+      ctx.globalAlpha = fade * alpha;
       ctx.fill();
       ctx.lineWidth = street ? 2 : item.i === state.hover ? 2 : 1;
       ctx.strokeStyle = rgba(state.theme.surface, 0.85);
@@ -610,14 +635,51 @@ export function createGlobe(canvas, options = {}) {
     }
   }
 
+  // Starts on the flat map: a dot with a halo in the surface colour for one
+  // activity, a small disc with its count for a group. No glow -- the tiles
+  // and the heat tracks are the picture, the starts only annotate it.
+  function drawAnnotations(visible, alpha) {
+    const t = state.theme;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = '600 10px "Source Sans Pro", -apple-system, "Segoe UI", sans-serif';
+    for (const item of visible) {
+      const hover = item.i === state.hover;
+      const r = markerRadius(item.cluster) * (hover ? 1.25 : 1);
+      ctx.beginPath();
+      ctx.arc(item.x, item.y, r, 0, 2 * Math.PI);
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = rgba(t.surface, 0.9);
+      if (item.cluster.count === 1) {
+        ctx.fillStyle = rgba(t.ink, hover ? 0.95 : 0.7);
+        ctx.fill();
+        ctx.stroke();
+        continue;
+      }
+      ctx.fillStyle = rgba(t.glow, hover ? 0.95 : 0.78);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(item.cluster.count > 99 ? "99+" : String(item.cluster.count), item.x, item.y + 0.5);
+    }
+    ctx.restore();
+  }
+
   /* ------------------------------------------------------------- motion */
+
+  const ZOOM_SETTLE_MS = 220;
+  const markerTarget = (now) => (now - state.zoomedAt < ZOOM_SETTLE_MS ? 0.08 : 1);
 
   function needsFrame() {
     return (
       state.fly !== null ||
       state.zoomTo !== null ||
       (state.spin && !state.dragging && state.zoom < SPIN_ZOOM) ||
-      state.dirty
+      state.dirty ||
+      Math.abs(markerTarget(performance.now()) - state.markerAlpha) > 0.01 ||
+      performance.now() - state.zoomedAt < ZOOM_SETTLE_MS
     );
   }
 
@@ -625,7 +687,19 @@ export function createGlobe(canvas, options = {}) {
     const dt = Math.min(0.06, (now - state.last) / 1000) || 0;
     state.last = now;
 
+    const target = markerTarget(now);
+    if (Math.abs(target - state.markerAlpha) > 0.01) {
+      // Out fast (they should be gone by the second wheel event), back gently.
+      const rate = target < state.markerAlpha ? 18 : 6;
+      state.markerAlpha += (target - state.markerAlpha) * Math.min(1, dt * rate);
+      state.dirty = true;
+    } else if (state.markerAlpha !== target) {
+      state.markerAlpha = target;
+      state.dirty = true;
+    }
+
     if (state.zoomTo) {
+      state.zoomedAt = now;
       const k = Math.min(1, dt * 4);
       state.zoom *= Math.pow(state.zoomTo / state.zoom, k);
       if (Math.abs(state.zoomTo / state.zoom - 1) < 0.01) {
@@ -673,6 +747,8 @@ export function createGlobe(canvas, options = {}) {
   /* -------------------------------------------------------- interaction */
 
   function hit(x, y) {
+    // Dimmed for a zoom: nothing to point at until they are back.
+    if (state.markerAlpha < 0.5) return -1;
     aim();
     let best = -1;
     let bestDepth = -1;
@@ -710,6 +786,7 @@ export function createGlobe(canvas, options = {}) {
     if (clamped === state.zoom) return;
     const pinned = cursor ? under(cursor.x, cursor.y) : null;
     state.zoom = clamped;
+    state.zoomedAt = performance.now();
     if (pinned) {
       for (let pass = 0; pass < 3; pass++) {
         const now = under(cursor.x, cursor.y);
