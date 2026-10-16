@@ -63,9 +63,9 @@ def _hero(activities: pd.DataFrame) -> None:
         shell.missing("activities.start_lat", "Odśwież tabele: `etl/load.py`.")
         return
 
-    # Hidden by default while its design is being reconsidered; the switch keeps
-    # it one click away instead of deleting the work.
-    if not st.toggle("Pokaż glob", value=False, key="globe_visible"):
+    # Shown by default; the switch stays for a lighter page (the globe is the
+    # heaviest element on it).
+    if not st.toggle("Pokaż glob", value=True, key="globe_visible"):
         return
 
     # One row per activity, built once per warehouse build. Grouping them into

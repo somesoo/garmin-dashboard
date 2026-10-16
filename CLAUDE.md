@@ -278,8 +278,8 @@ Jak to jest poskładane:
   (gitignorowane — to te same ślady GPS co `data/`) jako statyczny plik
   (~400 KB, delta-kodowane inty 1e-5°), który przeglądarka trzyma w cache.
   Od ×4 (płaska mapa) glob przestaje się kręcić; siatka południków jest tylko na kuli.
-- **Glob jest domyślnie schowany** (przełącznik „Pokaż glob” w Atlasie) — jego
-  wygląd jest do przemyślenia; kod i mapa ciepła zostają.
+- **Glob jest domyślnie widoczny**; przełącznik „Pokaż glob” w Atlasie zostaje,
+  żeby dało się go schować.
 - **Filtry nad globem**: *Kadr* (okolica / świat / miasta — `globe.place`
   dobiera zoom do kwantyli 4–96% śladów) i *Sport*. Strona *Trasy* nie ma już
   osobnej mapy gęstości — to jest ta mapa.
