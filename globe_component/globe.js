@@ -19,6 +19,13 @@
  * activities per zoom level, the heat layer of GPS tracks, the animation, and
  * the interaction.
  *
+ * Two faces, one renderer: below FLAT_ZOOM an orthographic globe, above it a
+ * flat Web Mercator map in a rounded frame with OpenStreetMap raster tiles
+ * underneath. The switch happens once the sphere already
+ * fills the frame, with the scale matched at the centre, so zooming in reads as
+ * the globe flattening rather than a cut. Tiles are the only thing fetched from
+ * the internet; offline the flat map falls back to the vendored land outline.
+ *
  * The heat layer: past HEAT_ZOOM the globe is at city scale and the start
  * markers give way to the tracks themselves, each stretch coloured and
  * thickened by how many distinct activities ran through it. Counting happens
@@ -27,12 +34,30 @@
  */
 
 export const MIN_ZOOM = 1;
-// Street level: at 3000x a kilometre is a few hundred pixels.
-export const MAX_ZOOM = 3000;
+// Street level: at 40000x a kilometre is a couple of thousand pixels and the
+// tiles are at their most detailed level.
+export const MAX_ZOOM = 40000;
+// Where the globe turns into a flat map: the sphere fills the frame by then,
+// so no limb disappears at the switch.
+export const FLAT_ZOOM = 4;
 // Where the tracks take over from the start markers, and where spinning stops
 // (a turning globe at city scale is a map sliding out from under the cursor).
 export const HEAT_ZOOM = 14;
-const SPIN_ZOOM = 6;
+const SPIN_ZOOM = FLAT_ZOOM;
+const FRAME_RADIUS = 26;
+
+// The OpenStreetMap standard tiles: open, no key (CARTO's raster basemaps now
+// answer every request with an "API key required" image). The attribution in
+// index.html is a condition of use. One style serves both themes; the canvas
+// filter mutes it on light and inverts it on dark, so the heat tracks stay the
+// loudest thing on the map.
+const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_FILTER = {
+  light: "saturate(0.35) brightness(1.04) contrast(0.92)",
+  dark: "invert(1) hue-rotate(180deg) saturate(0.3) brightness(0.82) contrast(0.9)",
+};
+const TILE_MAX_Z = 19;
+const TILE_CACHE = 600;
 
 // Pass-count classes: lower bound and base line width in px.
 // Width carries as much of the class as colour does: neighbouring steps of one
@@ -90,13 +115,18 @@ export function createGlobe(canvas, options = {}) {
   if (!d3 || !d3.geoOrthographic) throw new Error("vendor/d3-geo nie zaladowane");
 
   const ctx = canvas.getContext("2d");
-  const projection = d3.geoOrthographic().clipAngle(90).precision(0.4);
-  const path = d3.geoPath(projection, ctx);
+  const ortho = d3.geoOrthographic().clipAngle(90).precision(0.4);
+  const mercator = d3.geoMercator().precision(0.4);
   // Tracks are dense already; adaptive resampling on tens of thousands of
   // points per frame would buy nothing visible and cost the frame rate.
-  const trackProjection = d3.geoOrthographic().clipAngle(90).precision(0);
-  const trackPath = d3.geoPath(trackProjection, ctx);
+  const orthoTrack = d3.geoOrthographic().clipAngle(90).precision(0);
+  const mercatorTrack = d3.geoMercator().precision(0);
+  let projection = ortho;
+  let trackProjection = orthoTrack;
+  const path = d3.geoPath(ortho, ctx);
+  const trackPath = d3.geoPath(orthoTrack, ctx);
   const sphere = { type: "Sphere" };
+  const tiles = new Map();
 
   const state = {
     world: null,
@@ -115,6 +145,7 @@ export function createGlobe(canvas, options = {}) {
       ramp: ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"],
       heat: ["#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"],
       casing: "rgba(255,255,255,0.92)",
+      tiles: "light",
     },
     rot: { lon: 20, lat: 35 },
     zoom: 1,
@@ -137,19 +168,123 @@ export function createGlobe(canvas, options = {}) {
   const baseRadius = () => Math.min(state.size.w, state.size.h) / 2 - 6;
   const radius = () => baseRadius() * state.zoom;
 
+  const flat = () => state.zoom >= FLAT_ZOOM;
+
   function aim() {
-    for (const p of [projection, trackProjection]) {
-      p.translate([state.size.w / 2, state.size.h / 2])
-        .scale(radius())
-        .rotate([-state.rot.lon, -state.rot.lat]);
+    const centre = [state.size.w / 2, state.size.h / 2];
+    if (flat()) {
+      // Mercator draws a radian of longitude as s px and stretches latitude by
+      // 1/cos: s = R*cos(lat) gives the centre the same scale the globe had.
+      const s = radius() * Math.cos(state.rot.lat * RAD);
+      for (const p of [mercator, mercatorTrack]) {
+        p.rotate([-state.rot.lon, 0]).center([0, state.rot.lat]).scale(s).translate(centre)
+          // Without a clip the land outline at street scale has vertices
+          // millions of pixels away, which canvas fills unreliably.
+          .clipExtent([[-20, -20], [state.size.w + 20, state.size.h + 20]]);
+      }
+      projection = mercator;
+      trackProjection = mercatorTrack;
+    } else {
+      for (const p of [ortho, orthoTrack]) {
+        p.translate(centre).scale(radius()).rotate([-state.rot.lon, -state.rot.lat]);
+      }
+      projection = ortho;
+      trackProjection = orthoTrack;
     }
+    path.projection(projection);
+    trackPath.projection(trackProjection);
   }
 
   // Front of the sphere: d3 clips paths for us, but a marker is drawn by hand
-  // and has to be told whether it is behind the globe.
+  // and has to be told whether it is behind the globe. On the flat map
+  // everything is in front; off-canvas markers are skipped by position.
   function depth(lon, lat) {
+    if (flat()) return 1;
     const c = d3.geoDistance([lon, lat], [state.rot.lon, state.rot.lat]);
     return Math.cos(c);
+  }
+
+  /* -------------------------------------------------------------- tiles */
+
+  function tileStyle() {
+    return TILE_FILTER[state.theme.tiles] ? state.theme.tiles : null;
+  }
+
+  // The filter is applied when drawing, so both themes share one cache.
+  function tileKey(z, x, y) {
+    return `${z}/${x}/${y}`;
+  }
+
+  function requestTile(z, x, y) {
+    const key = tileKey(z, x, y);
+    let entry = tiles.get(key);
+    if (entry) return entry;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    entry = { img, ok: false };
+    img.onload = () => {
+      entry.ok = true;
+      kick();
+    };
+    img.src = TILE_URL.replace("{z}", z).replace("{x}", x).replace("{y}", y);
+    tiles.set(key, entry);
+    // Oldest first out; what is on screen was requested last.
+    while (tiles.size > TILE_CACHE) tiles.delete(tiles.keys().next().value);
+    return entry;
+  }
+
+  /* Raster tiles under the flat map. Positions come straight from Web
+     Mercator tile maths (the same spherical Mercator d3 draws), and a tile
+     still in flight is stood in for by the nearest loaded ancestor, so a zoom
+     step blurs for a moment instead of flashing the ocean. */
+  function drawTiles() {
+    const style = tileStyle();
+    if (!style) return;
+    const { w, h } = state.size;
+    const world = 2 * Math.PI * mercator.scale();
+    // One level finer on a retina screen: OSM tiles are 256 px only.
+    const sharp = state.size.dpr > 1 ? 1 : 0;
+    const z = Math.max(0, Math.min(TILE_MAX_Z, Math.round(Math.log2(world / 256)) + sharp));
+    const n = 2 ** z;
+    const size = world / n;
+    const lat = state.rot.lat * RAD;
+    const cx = ((state.rot.lon + 180) / 360) * n;
+    const cy = ((1 - Math.log(Math.tan(lat) + 1 / Math.cos(lat)) / Math.PI) / 2) * n;
+    const x0 = Math.floor(cx - w / 2 / size);
+    const x1 = Math.floor(cx + w / 2 / size);
+    const y0 = Math.max(0, Math.floor(cy - h / 2 / size));
+    const y1 = Math.min(n - 1, Math.floor(cy + h / 2 / size));
+    ctx.save();
+    ctx.filter = TILE_FILTER[style];
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        const wx = ((tx % n) + n) % n;
+        const sx = w / 2 + (tx - cx) * size;
+        const sy = h / 2 + (ty - cy) * size;
+        const entry = requestTile(z, wx, ty);
+        if (entry.ok) {
+          ctx.drawImage(entry.img, sx, sy, size + 0.5, size + 0.5);
+          continue;
+        }
+        for (let dz = 1; dz <= Math.min(6, z); dz++) {
+          const parent = tiles.get(tileKey(z - dz, wx >> dz, ty >> dz));
+          if (!parent || !parent.ok) continue;
+          const part = parent.img.naturalWidth / 2 ** dz;
+          const ox = wx - ((wx >> dz) << dz);
+          const oy = ty - ((ty >> dz) << dz);
+          ctx.drawImage(parent.img, ox * part, oy * part, part, part, sx, sy, size + 0.5, size + 0.5);
+          break;
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  function frame() {
+    const { w, h } = state.size;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(0.5, 0.5, w - 1, h - 1, FRAME_RADIUS);
+    else ctx.rect(0.5, 0.5, w - 1, h - 1);
   }
 
   /* -------------------------------------------------------- clustering */
@@ -348,6 +483,12 @@ export function createGlobe(canvas, options = {}) {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
 
+    if (flat()) {
+      drawFlat();
+      ctx.restore();
+      return;
+    }
+
     // The sphere as a lit ball, not a flat disc.
     const shade = ctx.createRadialGradient(
       cx - R * 0.35, cy - R * 0.4, R * 0.1, cx, cy, R
@@ -392,7 +533,44 @@ export function createGlobe(canvas, options = {}) {
     }
 
     drawHeat();
+    drawMarkers();
+    ctx.restore();
 
+    // The rim reads as an edge, not as a cut-off.
+    ctx.beginPath();
+    path(sphere);
+    ctx.strokeStyle = rgba(state.theme.glow, 0.25);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFlat() {
+    frame();
+    ctx.fillStyle = state.theme.ocean;
+    ctx.fill();
+    ctx.save();
+    frame();
+    ctx.clip();
+    // Vendored outline first: it is what stays when the tiles cannot load.
+    if (state.world) {
+      ctx.beginPath();
+      path(state.world.land);
+      ctx.fillStyle = state.theme.land;
+      ctx.fill();
+    }
+    drawTiles();
+    drawHeat();
+    drawMarkers();
+    ctx.restore();
+    frame();
+    ctx.strokeStyle = rgba(state.theme.glow, 0.25);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function drawMarkers() {
+    const { w, h } = state.size;
     // Places, far side first so the near ones sit on top.
     const street = state.heat && heatAlpha() >= 1;
     const visible = [];
@@ -401,7 +579,7 @@ export function createGlobe(canvas, options = {}) {
       const d = depth(cluster.lon, cluster.lat);
       if (d <= 0.02) continue;
       const p = projection([cluster.lon, cluster.lat]);
-      if (!p) continue;
+      if (!p || p[0] < -40 || p[0] > w + 40 || p[1] < -40 || p[1] > h + 40) continue;
       visible.push({ i, x: p[0], y: p[1], depth: d, cluster });
     }
     visible.sort((a, b) => a.depth - b.depth);
@@ -430,15 +608,6 @@ export function createGlobe(canvas, options = {}) {
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
-    ctx.restore();
-
-    // The rim reads as an edge, not as a cut-off.
-    ctx.beginPath();
-    path(sphere);
-    ctx.strokeStyle = rgba(state.theme.glow, 0.25);
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.restore();
   }
 
   /* ------------------------------------------------------------- motion */
@@ -531,15 +700,25 @@ export function createGlobe(canvas, options = {}) {
     return { lon: point[0], lat: point[1] };
   }
 
-  function setZoom(next, anchor) {
+  /* Zoom keeping the place under the cursor under the cursor. (Recentring on
+     that place instead made every wheel event a jump -- a trackpad sends
+     dozens a second.) The rotation is nudged until the point lands back under
+     the pointer; two or three passes are exact to a fraction of a pixel, also
+     across the globe-to-flat switch. */
+  function setZoom(next, cursor) {
     const clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, next));
     if (clamped === state.zoom) return;
-    if (anchor) {
-      state.rot.lon = anchor.lon;
-      state.rot.lat = Math.max(-85, Math.min(85, anchor.lat));
+    const pinned = cursor ? under(cursor.x, cursor.y) : null;
+    state.zoom = clamped;
+    if (pinned) {
+      for (let pass = 0; pass < 3; pass++) {
+        const now = under(cursor.x, cursor.y);
+        if (!now) break;
+        state.rot.lon = wrapLon(state.rot.lon + deltaLon(now.lon, pinned.lon));
+        state.rot.lat = Math.max(-85, Math.min(85, state.rot.lat + pinned.lat - now.lat));
+      }
       state.fly = null;
     }
-    state.zoom = clamped;
     state.zoomTo = null;
     rebin();
     onZoom(state.zoom);
@@ -547,23 +726,52 @@ export function createGlobe(canvas, options = {}) {
   }
 
   let pointer = null;
+  // Touch screens: two fingers on the canvas are a pinch.
+  const touches = new Map();
+  let pinch = null;
+  const spread = () => {
+    const [a, b] = [...touches.values()];
+    return { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  };
   canvas.addEventListener("pointerdown", (event) => {
     canvas.setPointerCapture(event.pointerId);
+    if (event.pointerType === "touch") {
+      touches.set(event.pointerId, { x: event.offsetX, y: event.offsetY });
+      if (touches.size === 2) {
+        pinch = { ...spread(), zoom: state.zoom };
+        pointer = null;
+        return;
+      }
+    }
     pointer = { x: event.offsetX, y: event.offsetY, moved: 0 };
     state.dragging = true;
   });
   canvas.addEventListener("pointermove", (event) => {
+    if (touches.has(event.pointerId)) touches.set(event.pointerId, { x: event.offsetX, y: event.offsetY });
+    if (pinch && touches.size === 2) {
+      const now = spread();
+      setZoom(pinch.zoom * (now.d / Math.max(1, pinch.d)), { x: now.x, y: now.y });
+      return;
+    }
     if (pointer) {
       const dx = event.offsetX - pointer.x;
       const dy = event.offsetY - pointer.y;
       pointer.moved += Math.abs(dx) + Math.abs(dy);
       pointer.x = event.offsetX;
       pointer.y = event.offsetY;
-      // Degrees per pixel follow the radius, so dragging feels the same at
-      // every zoom instead of flinging the globe across the ocean.
-      const k = (180 / (radius() * Math.PI)) * 2;
-      state.rot.lon = wrapLon(state.rot.lon - dx * k);
-      state.rot.lat = Math.max(-85, Math.min(85, state.rot.lat + dy * k));
+      if (flat()) {
+        // The map follows the hand exactly: a pixel is 1/R radians of
+        // latitude and 1/(R cos lat) of longitude at the centre.
+        const k = 180 / (radius() * Math.PI);
+        state.rot.lon = wrapLon(state.rot.lon - (dx * k) / Math.cos(state.rot.lat * RAD));
+        state.rot.lat = Math.max(-85, Math.min(85, state.rot.lat + dy * k));
+      } else {
+        // Degrees per pixel follow the radius, so dragging feels the same at
+        // every zoom instead of flinging the globe across the ocean.
+        const k = (180 / (radius() * Math.PI)) * 2;
+        state.rot.lon = wrapLon(state.rot.lon - dx * k);
+        state.rot.lat = Math.max(-85, Math.min(85, state.rot.lat + dy * k));
+      }
       state.fly = null;
       kick();
       return;
@@ -577,7 +785,12 @@ export function createGlobe(canvas, options = {}) {
     onHover(index >= 0 ? state.clusters[index] : null, event.offsetX, event.offsetY);
   });
   const release = (event) => {
-    if (!pointer) return;
+    touches.delete(event.pointerId);
+    if (touches.size < 2) pinch = null;
+    if (!pointer) {
+      state.dragging = false;
+      return;
+    }
     const tapped = pointer.moved < 5;
     pointer = null;
     state.dragging = false;
@@ -600,12 +813,37 @@ export function createGlobe(canvas, options = {}) {
     "wheel",
     (event) => {
       event.preventDefault();
-      setZoom(state.zoom * Math.exp(-event.deltaY * 0.0016), under(event.offsetX, event.offsetY));
+      let dy = event.deltaY;
+      if (event.deltaMode === 1) dy *= 16;
+      else if (event.deltaMode === 2) dy *= state.size.h;
+      // A trackpad pinch arrives as ctrl+wheel with small deltas; a mouse
+      // notch as ~100 at once, capped so one notch is one step, not a leap.
+      const k = event.ctrlKey ? 0.012 : 0.002;
+      dy = Math.max(-120, Math.min(120, dy));
+      setZoom(state.zoom * Math.exp(-dy * k), { x: event.offsetX, y: event.offsetY });
     },
     { passive: false }
   );
+  // Safari reports a trackpad pinch as gesture events, not as wheel.
+  let gesture = null;
+  const local = (event) => {
+    const box = canvas.getBoundingClientRect();
+    return { x: event.clientX - box.left, y: event.clientY - box.top };
+  };
+  canvas.addEventListener("gesturestart", (event) => {
+    event.preventDefault();
+    gesture = { zoom: state.zoom, at: local(event) };
+  });
+  canvas.addEventListener("gesturechange", (event) => {
+    event.preventDefault();
+    if (gesture) setZoom(gesture.zoom * event.scale, gesture.at);
+  });
+  canvas.addEventListener("gestureend", (event) => {
+    event.preventDefault();
+    gesture = null;
+  });
   canvas.addEventListener("dblclick", (event) => {
-    setZoom(state.zoom * 2.2, under(event.offsetX, event.offsetY));
+    setZoom(state.zoom * 2.2, { x: event.offsetX, y: event.offsetY });
   });
 
   /* ---------------------------------------------------------------- api */
@@ -680,6 +918,8 @@ export function createGlobe(canvas, options = {}) {
     zoom() {
       return state.zoom;
     },
+    flat,
+    under,
     zoomBy(factor) {
       setZoom(state.zoom * factor, null);
     },

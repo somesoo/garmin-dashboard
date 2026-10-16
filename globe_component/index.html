@@ -38,6 +38,12 @@
   #legend b {font-weight: 620; display: block; opacity: .75;}
   #legend span {display: flex; align-items: center; gap: 7px;}
   #legend i {display: inline-block; width: 18px; border-radius: 2px;}
+  #attr {
+    position: absolute; right: 54px; bottom: 10px; z-index: 3; display: none;
+    font: 10px/1.3 "Source Sans Pro", -apple-system, Segoe UI, sans-serif;
+    color: var(--ink, #111); opacity: .6;
+  }
+  #attr a {color: inherit;}
   #scale {
     position: absolute; left: 14px; bottom: 14px; z-index: 3; opacity: .55;
     font: 11px/1 "Source Sans Pro", -apple-system, Segoe UI, sans-serif;
@@ -55,12 +61,13 @@
     <button id="reset" title="Cały glob">○</button>
   </div>
   <div id="scale"></div>
+  <div id="attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
   <div id="legend"></div>
 </div>
 <script src="./vendor/d3-array.min.js"></script>
 <script src="./vendor/d3-geo.min.js"></script>
 <script type="module">
-import { createGlobe, HEAT_CLASSES, HEAT_ZOOM } from "./globe.js";
+import { createGlobe, FLAT_ZOOM, HEAT_CLASSES, HEAT_ZOOM } from "./globe.js";
 
 /* The Streamlit component protocol, by hand: this component is a static page,
    so there is no bundler and no component library -- three postMessage calls
@@ -77,6 +84,7 @@ const canvas = document.getElementById("globe");
 const tip = document.getElementById("tip");
 const scale = document.getElementById("scale");
 const legend = document.getElementById("legend");
+const attr = document.getElementById("attr");
 let heatColors = null;
 let tracksUrl = null;
 
@@ -129,12 +137,14 @@ const globe = createGlobe(canvas, {
   onZoom(zoom) {
     scale.textContent = zoom <= 1.01 ? "cały glob" : `×${zoom < 10 ? zoom.toFixed(1) : Math.round(zoom)}`;
     legend.style.display = tracksUrl && zoom >= HEAT_ZOOM ? "block" : "none";
+    attr.style.display = zoom >= FLAT_ZOOM ? "block" : "none";
   },
 });
 
 document.getElementById("in").onclick = () => globe.zoomBy(1.8);
 document.getElementById("out").onclick = () => globe.zoomBy(1 / 1.8);
 document.getElementById("reset").onclick = () => globe.setZoom(1, null);
+document.getElementById("reset").title = "Cały glob";
 
 function fit() {
   const width = Math.max(240, stage.clientWidth || window.innerWidth);

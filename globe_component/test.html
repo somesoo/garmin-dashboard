@@ -26,13 +26,13 @@ if (dark) document.body.classList.add("dark");
 const LIGHT = {
   ocean: "#cfe0f1", oceanLight: "#e8f1fa", land: "#e6e3d8", coast: "#b3b0a4",
   border: "#c6c3b7", graticule: "rgba(120,140,160,0.22)", surface: "#fcfcfb",
-  ink: "#0b0b0b", glow: "#2a78d6",
+  ink: "#0b0b0b", glow: "#2a78d6", tiles: params.get("tiles") === "off" ? null : "light",
   ramp: ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"],
 };
 const DARK = {
   ocean: "#0a111b", oceanLight: "#16263a", land: "#272c34", coast: "#4b525e",
   border: "#3c424c", graticule: "rgba(120,140,160,0.18)", surface: "#0e1117",
-  ink: "#ffffff", glow: "#3987e5",
+  ink: "#ffffff", glow: "#3987e5", tiles: params.get("tiles") === "off" ? null : "dark",
   ramp: ["#0d366b", "#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb"],
 };
 
@@ -70,7 +70,7 @@ globe.setActivities(DEMO);
 
 fetch("./world.json")
   .then((r) => r.json())
-  .then((world) => {
+  .then(async (world) => {
     // ?from=&to= narrows the land to a slice of polygons, which is how you
     // bisect your way to one that renders wrong.
     const from = Number(params.get("from") ?? 0);
@@ -79,6 +79,12 @@ fetch("./world.json")
       land: { type: "MultiPolygon", coordinates: world.land.coordinates.slice(from, to) },
       borders: world.borders,
     });
+    // ?tracks=cache/<file>.json: the real heat layer from the dashboard's
+    // cache (gitignored, present once the Atlas has been opened).
+    if (params.get("tracks")) {
+      const tracks = await fetch(params.get("tracks")).then((r) => r.json());
+      globe.setTracks(tracks);
+    }
     globe.jumpTo(
       Number(params.get("lon") ?? 20),
       Number(params.get("lat") ?? 35),
@@ -86,6 +92,21 @@ fetch("./world.json")
     );
     globe.drawOnce();
     document.title = "gotowe";
+    // ?pinch=1: replay a trackpad pinch (40 ctrl+wheel events off-centre) to
+    // check that the place under the cursor stays put.
+    if (params.get("pinch")) {
+      const canvas = document.getElementById("globe");
+      const at = { x: 760, y: 380 };
+      const before = globe.under(at.x, at.y);
+      for (let i = 0; i < 40; i++) {
+        canvas.dispatchEvent(new WheelEvent("wheel", {
+          deltaY: -6, ctrlKey: true, clientX: at.x, clientY: at.y, cancelable: true,
+        }));
+      }
+      const after = globe.under(at.x, at.y);
+      document.title = `pinch zoom=${globe.zoom().toFixed(2)} drift=${
+        (Math.hypot(after.lon - before.lon, after.lat - before.lat) * 111320).toFixed(1)}m`;
+    }
   });
 </script>
 </body>

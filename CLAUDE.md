@@ -265,18 +265,29 @@ Jak to jest poskładane:
   `globe.tracks_url` zapisuje raz na build do `globe_component/cache/`
   (gitignorowane — to te same ślady GPS co `data/`) jako statyczny plik
   (~400 KB, delta-kodowane inty 1e-5°), który przeglądarka trzyma w cache.
-  Powyżej ×6 glob przestaje się kręcić, a od ×28 znika siatka południków.
+  Od ×4 (płaska mapa) glob przestaje się kręcić; siatka południków jest tylko na kuli.
 - **Glob jest domyślnie schowany** (przełącznik „Pokaż glob” w Atlasie) — jego
   wygląd jest do przemyślenia; kod i mapa ciepła zostają.
 - **Filtry nad globem**: *Kadr* (okolica / świat / miasta — `globe.place`
   dobiera zoom do kwantyli 4–96% śladów) i *Sport*. Strona *Trasy* nie ma już
   osobnej mapy gęstości — to jest ta mapa.
-- **Zoom**: kółko myszy i dwuklik (oraz przyciski + − ○), 1×–3000×, kotwiczony
-  w punkcie pod kursorem (`projection.invert`). Promień kuli rośnie z zoomem,
-  a klaster markerów jest przeliczany tak, żeby markery nie nachodziły na
-  siebie: siatka to tyle stopni, ile przy obecnym promieniu ma 26 px. Dlatego
-  przy przybliżaniu miasto rozpada się na parki, a w końcu na pojedyncze
-  treningi.
+- **Zoom**: kółko myszy, pinch na touchpadzie (Chrome/Firefox: ctrl+wheel,
+  Safari: `gesture*`), pinch dwoma palcami na ekranie dotykowym, dwuklik
+  i przyciski + − ○; 1×–40000×. **Punkt pod kursorem zostaje pod kursorem**:
+  `setZoom` po zmianie skali dociąga obrót, aż ten sam punkt wróci pod wskaźnik.
+  (Wcześniej każde zdarzenie przenosiło środek na punkt pod kursorem — touchpad
+  wysyła ich dziesiątki na sekundę, więc obraz skakał.) Klaster markerów jest
+  przeliczany tak, żeby markery nie nachodziły na siebie: siatka to tyle
+  stopni, ile przy obecnym promieniu ma 26 px.
+- **Od ×4 (`FLAT_ZOOM`) glob staje się płaską mapą**: Mercator w ramce
+  z zaokrąglonymi rogami, skala w środku dopasowana do kuli (`s = R·cos φ`),
+  więc przejście nie skacze. Pod spodem kafelki **OpenStreetMap**
+  (`tile.openstreetmap.org`, bez klucza, z atrybucją w `index.html`) — przygaszone
+  filtrem canvas w jasnym motywie, odwrócone w ciemnym. Rastrowe kafelki CARTO
+  (`light_all`/`dark_all`) odpowiadają dziś obrazkiem „API KEY REQUIRED”, stąd
+  OSM. Bez internetu płaska mapa pokazuje zwendorowany kontur lądu.
+  Brakujący kafelek zastępuje najbliższy wczytany przodek (rozmyty na chwilę,
+  zamiast błysku oceanu). Przeciąganie na płaskiej mapie idzie dokładnie za ręką.
 - **Klik**: pojedynczy trening to link — Atlas od razu przechodzi na *Trasy*
   z tym `activity_id`. Skupisko to pytanie — dialog z listą treningów.
   Licznik `clicks` w wartości komponentu odróżnia nowe kliknięcie od tej samej
@@ -295,6 +306,8 @@ z headless Chrome na konkretnym ujęciu):
 # http://127.0.0.1:8777/test.html?lat=85            (bieguny — tu wychodzą kliny)
 # http://127.0.0.1:8777/test.html?lat=-85
 # http://127.0.0.1:8777/test.html?lat=52&lon=21&zoom=12&theme=dark
+# ?zoom=250&tracks=cache/tracks-<build>.json  (płaska mapa + mapa ciepła; tiles=off bez kafelków)
+# ?pinch=1                                    (tytuł strony = dryf punktu pod kursorem)
 # ?from=&to= zawęża ląd do wycinka wielokątów (bisekcja po wadliwym)
 ```
 

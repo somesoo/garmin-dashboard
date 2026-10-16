@@ -60,6 +60,8 @@ def _theme() -> dict[str, Any]:
         # so a one-off detour separates from a regular route.
         "heat": [t["sequential"][i] for i in (1, 3, 4, 5, 6)],
         "casing": "rgba(14,17,23,0.85)" if dark else "rgba(255,255,255,0.92)",
+        # Basemap under the flat map: OpenStreetMap tiles, muted (light) or inverted (dark).
+        "tiles": "dark" if dark else "light",
     }
 
 
