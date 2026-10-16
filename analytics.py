@@ -487,12 +487,18 @@ def autocorrelation(frame: pd.DataFrame, nlags: int = 28) -> pd.DataFrame:
         from statsmodels.tsa.stattools import acf
     except ImportError:
         return pd.DataFrame()
+    # statsmodels 0.15 warns that acf() will start returning an object; ask
+    # for the tuple explicitly where the switch exists (0.14 has no such
+    # argument and returns the tuple anyway).
+    import inspect
+
+    legacy = {"result_object": False} if "result_object" in inspect.signature(acf).parameters else {}
     rows = []
     for column in ["hrv_last_night", "rhr", "sleep_h", "readiness", "load_day", "stress_avg"]:
         series = _numeric(frame, column).interpolate(limit=3).dropna()
         if len(series) < nlags * 3:
             continue
-        values, confint = acf(series, nlags=nlags, alpha=0.05, fft=True)
+        values, confint = acf(series, nlags=nlags, alpha=0.05, fft=True, **legacy)
         for lag in range(len(values)):
             rows.append(
                 {
