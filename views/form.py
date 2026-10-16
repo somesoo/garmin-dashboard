@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+import glossary
 import shell
 import theme as tz
 
@@ -46,8 +47,9 @@ def render() -> None:
 
     shell.lead(
         "Performance Management Chart",
-        "Dzienny load jest osobnym panelem, nie drugą osią: wspólna skala dla "
-        "dwóch różnych jednostek zmyśla korelacje, których w danych nie ma.",
+        "Ile masz sprawności, ile zmęczenia i czy jesteś świeży — podstawa planowania odpoczynku przed startem.",
+        terms=["ctl", "atl", "tsb", "training_load"],
+        how="Dzienny load jest osobnym panelem pod spodem, na wspólnej osi czasu.",
     )
     figure = tz.stacked_panels(
         view,
@@ -70,10 +72,11 @@ def render() -> None:
 
     shell.lead(
         "ACWR: dwa wzory, jedna rzeczywistość",
-        "Kroczący (Gabbett) to suma 7 dni przez średnią z 28; wykładniczy (Williams) "
-        "używa wag CTL/ATL. Po przerwie pierwszy skacze, drugi płynie — tygodnie, "
-        "w których się rozjeżdżają, to te, gdzie wniosek „przetrenowanie” zależy "
-        "wyłącznie od wyboru wzoru. Pas 0.8–1.3 to tzw. sweet spot.",
+        "Czy ostatni tydzień nie był skokiem ponad to, do czego jesteś przyzwyczajony.",
+        terms=["acwr"],
+        how="Kroczący (Gabbett) to suma 7 dni przez średnią z 28; wykładniczy (Williams) używa wag CTL/ATL. "
+            "Po przerwie pierwszy skacze, drugi płynie — tygodnie, w których się rozjeżdżają, to te, gdzie "
+            "wniosek „przetrenowanie” zależy wyłącznie od wyboru wzoru. Pas 0,8–1,3 to bezpieczny zakres.",
     )
     figure = tz.timeseries(
         view, "day", {"kroczący": "acwr_rolling", "wykładniczy": "acwr_ewma"}, y_title="iloraz"
@@ -87,6 +90,7 @@ def render() -> None:
         "Tempo narastania sprawności",
         "Zmiana CTL w ciągu 7 dni. Powyżej ~5 punktów na tydzień progresja zwykle "
         "wyprzedza adaptację.",
+        terms=["ramp", "ctl"],
     )
     figure = tz.bars(view, "day", "ramp_7d", diverging=True, y_title="Δ CTL / 7 d", height=280)
     if figure is not None:
@@ -100,10 +104,10 @@ def render() -> None:
 def _foster(weekly) -> None:
     shell.lead(
         "Monotonia i strain (Foster)",
-        "Monotonia = średnia dzienna podzielona przez odchylenie w tygodniu. Tydzień "
-        "siedmiu identycznych sesji punktuje wysoko nawet przy umiarkowanej objętości, "
-        "a wysoki strain przy wysokiej monotonii to klasyczny podpis przeciążenia. "
-        "Każdy punkt to tydzień; ostatnie cztery są wyróżnione.",
+        "Czy przeplatasz dni mocne i lekkie: wysoki strain przy wysokiej monotonii to klasyczny podpis "
+        "przeciążenia.",
+        terms=["monotony", "strain"],
+        how="Każdy punkt to tydzień; ostatnie cztery są wyróżnione.",
     )
     if weekly.empty:
         shell.missing("load_weekly")
@@ -149,14 +153,15 @@ def _foster(weekly) -> None:
 
 def _banister(models: dict) -> None:
     fit = (models or {}).get("banister", {})
-    shell.lead("Dopasowanie modelu Banistera")
+    shell.lead("Dopasowanie modelu Banistera", "Jak szybko u ciebie rośnie sprawność i mija zmęczenie.",
+               terms=["banister", "r2"])
     if not fit.get("fitted"):
         st.caption(f"Nie dopasowano: {fit.get('reason', 'brak danych')}")
         return
     columns = st.columns(5)
     columns[0].metric("τ sprawności", f"{fit['tau_fitness_days']} d")
     columns[1].metric("τ zmęczenia", f"{fit['tau_fatigue_days']} d")
-    columns[2].metric("R²", f"{fit['r2']}")
+    columns[2].metric("R²", f"{fit['r2']}", help=glossary.short("r2"))
     columns[3].metric("Pomiarów", fit["n"])
     columns[4].metric("Szczyt po", f"{fit['taper_days_to_peak']} d")
     good = (fit.get("r2") or 0) > 0.3

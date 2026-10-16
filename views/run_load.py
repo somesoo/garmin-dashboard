@@ -36,8 +36,9 @@ def render() -> None:
 def _volume(weeks: pd.DataFrame) -> None:
     shell.lead(
         "Kilometry i najdłuższy bieg",
-        "Dwa panele na wspólnej osi czasu: objętość tygodnia i najdłuższy bieg w tygodniu. Długie wybieganie "
-        "rośnie razem z objętością — skok samego długiego biegu przy płaskiej objętości to typowe ryzyko.",
+        "Długie wybieganie powinno rosnąć razem z objętością — skok samego długiego biegu przy płaskiej "
+        "objętości to typowe ryzyko.",
+        how="Dwa panele na wspólnej osi czasu: objętość tygodnia i najdłuższy bieg w tygodniu.",
     )
     view = weeks.assign(km_4w=weeks["km"].rolling(4, min_periods=2).mean().round(1))
     figure = tz.stacked_panels(
@@ -69,8 +70,8 @@ def _volume(weeks: pd.DataFrame) -> None:
 def _intensity(weeks: pd.DataFrame) -> None:
     shell.lead(
         "Mocne sesje i balans",
-        "Liczba sesji jakościowych (tempo, próg, interwały, start) w tygodniu i udział spokojnych kilometrów. "
-        "Większość planów dla amatorów trzyma 1–2 mocne sesje i ~75–80% spokojnych km.",
+        "Czy proporcja mocnego i spokojnego biegania jest zdrowa.",
+        terms=["quality_sessions", "run_kind"],
     )
     figure = tz.stacked_panels(
         weeks, "week",
@@ -91,9 +92,10 @@ def _ratio(frame: pd.DataFrame) -> None:
     ratio = shell.clip(sessions.km_ratio(frame))
     shell.lead(
         "Tempo przyrostu (km 7 d / średnia z 28 d)",
-        "Iloraz bieżącego tygodnia do średniej z czterech. Pas 0,8–1,3 to zakres, w którym obciążenie rośnie "
-        "stopniowo; powyżej 1,5 przyrost jest gwałtowny. Liczony tylko na bieganiu — obciążenie wszystkich "
-        "sportów (CTL/ATL, ACWR z load Garmina) jest na stronie Forma.",
+        "Czy kilometrów nie przybywa szybciej, niż ścięgna zdążą się przyzwyczaić. Obciążenie wszystkich "
+        "sportów jest na stronie Forma.",
+        terms=["run_ratio"],
+        how="Szary pas 0,8–1,3 to zakres stopniowego przyrostu.",
     )
     figure = tz.timeseries(ratio, "day", {"iloraz": "ratio"}, y_title="iloraz", end_labels=True, decimals=2)
     if figure is not None:
@@ -147,6 +149,7 @@ def _recovery() -> None:
         "Regeneracja w tle",
         "Gotowość Garmina i HRV względem własnej średniej, żeby obciążenie czytać razem z odpowiedzią "
         "organizmu. Pełna analiza: strona Regeneracja.",
+        terms=["readiness", "hrv", "deviation"],
     )
     figure = tz.stacked_panels(
         daily, "day",

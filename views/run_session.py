@@ -210,7 +210,7 @@ def _zones(run: pd.Series) -> None:
     zones = {label: run.get(column) for column, label in ZONE_LABELS.items()}
     if all(pd.isna(v) for v in zones.values()):
         return
-    shell.lead("Strefy tętna", "Minuty w strefach Garmina (granice z ustawień zegarka).")
+    shell.lead("Strefy tętna", "Minuty w strefach Garmina (granice z ustawień zegarka).", terms=["hr_zones"])
     frame = pd.DataFrame({"strefa": list(zones), "min": [(v or 0) / 60 for v in zones.values()]})
     # Zones are ordered categories: vertical bars in zone order, not a ranking.
     tz.show(tz.bars(frame, "strefa", "min", height=220, y_title="min"), key="run_zones",

@@ -26,6 +26,7 @@ from views import (  # noqa: E402
     notebook,
     physio,
     recovery,
+    reference,
     routes,
     run_forecast,
     run_load,
@@ -77,6 +78,7 @@ PAGES = {
         st.Page(stats.render, title="Statystyka", icon=":material/science:", url_path="statystyka"),
         st.Page(notebook.insights, title="Insights", icon=":material/lightbulb:", url_path="insights"),
         st.Page(notebook.sql, title="SQL", icon=":material/terminal:", url_path="sql"),
+        st.Page(reference.render, title="Słownik", icon=":material/menu_book:", url_path="slownik"),
     ],
 }
 

@@ -76,7 +76,8 @@ def render() -> None:
 
     shell.lead(
         "Tempo w czasie",
-        "Wyżej = szybciej. Rozmiar punktu to dystans, kolor — tętno średnie.",
+        "Czy biegasz szybciej niż kiedyś — i przy jakim tętnie.",
+        how="Wyżej = szybciej. Rozmiar punktu to dystans, kolor — tętno średnie.",
     )
     tz.show(
         tz.scatter(
@@ -89,8 +90,9 @@ def render() -> None:
 
     shell.lead(
         "Tętno vs tempo",
-        "Chmura punktów pokazuje koszt prędkości: im bardziej spłaszczona i przesunięta "
-        "w lewo, tym taniej kupujesz tempo.",
+        "Ile tętna kosztuje cię prędkość: im mniej, tym lepsza wydolność.",
+        terms=["ef"],
+        how="Im bardziej chmura spłaszczona i przesunięta w lewo, tym taniej kupujesz tempo.",
     )
     tz.show(
         tz.scatter(

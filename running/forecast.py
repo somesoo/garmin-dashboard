@@ -95,6 +95,7 @@ class DistanceForecast:
     confidence: str
     prep: dict[str, Any]
     methods: dict[str, float | None]
+    sigma_parts: dict[str, float] = field(default_factory=dict)
     target_s: float | None = None
     target_low_s: float | None = None
     target_high_s: float | None = None
@@ -381,13 +382,15 @@ def forecast(
         }
         spread = _disagreement(methods, perf)
         extrapolation = abs(math.log(metres / anchor_m))
-        sigma_model = (
-            0.02
-            + 0.015 * extrapolation
-            + min(0.04, 0.01 * max(0.0, stale_weeks - 4) / 4)
-            + (0.04 * (1 - prep["score"]) if key in ("hm", "m") else 0.0)
-        )
+        sigma_parts = {
+            "baza": 0.02,
+            "dystans": 0.015 * extrapolation,
+            "wiek": min(0.04, 0.01 * max(0.0, stale_weeks - 4) / 4),
+            "przygotowanie": 0.04 * (1 - prep["score"]) if key in ("hm", "m") else 0.0,
+        }
+        sigma_model = sum(sigma_parts.values())
         sigma = math.sqrt(sigma_model**2 + spread**2)
+        sigma_parts["metody"] = spread
         sigma_fast = sigma + (0.02 if lower_bound else 0.0)
         low, high = realistic * math.exp(-Z80 * sigma_fast), realistic * math.exp(Z80 * sigma)
         confidence = _confidence(sigma, perf, hr)
@@ -403,6 +406,7 @@ def forecast(
             confidence=confidence,
             prep=prep,
             methods=methods,
+            sigma_parts=sigma_parts,
         )
         weeks = (weeks_to_race or {}).get(key)
         if weeks is not None and weeks > 0:
@@ -476,13 +480,52 @@ def _disagreement(methods: dict[str, float | None], perf: dict[str, Any] | None)
     return float(math.sqrt(np.average((logs - mean) ** 2, weights=weights)))
 
 
+CONFIDENCE_SIGMA = {"wysoka": 0.04, "średnia": 0.075}
+
+
 def _confidence(sigma: float, perf: dict[str, Any] | None, hr: dict[str, Any] | None) -> str:
     fresh_max = bool(perf and perf["near_max"] and perf["age_days"] <= 42)
-    if sigma <= 0.04 and fresh_max:
+    if sigma <= CONFIDENCE_SIGMA["wysoka"] and fresh_max:
         return "wysoka"
-    if sigma <= 0.075 and perf is not None:
+    if sigma <= CONFIDENCE_SIGMA["średnia"] and perf is not None:
         return "średnia"
     return "niska"
+
+
+def confidence_reasons(item: DistanceForecast, perf: dict[str, Any] | None) -> list[str]:
+    """Why the confidence is not one level higher, largest cause first.
+
+    Plain sentences for the forecast page: the label alone ("średnia") says
+    nothing about what would raise it.
+    """
+    if item.confidence == "wysoka":
+        return []
+    reasons: list[tuple[float, str]] = []
+    if perf is None:
+        reasons.append((1.0, "brak udokumentowanego mocnego biegu z 120 dni — prognoza stoi na samym tętnie"))
+    else:
+        if not perf["near_max"]:
+            reasons.append((0.9, "najlepszy odcinek nie był wysiłkiem maksymalnym (tętno < 91% HRmax), "
+                                 "więc to tylko dolna granica"))
+        elif perf["age_days"] > 42:
+            reasons.append((0.8, f"ostatni maksymalny wysiłek ma {perf['age_days'] // 7} tyg. — "
+                                 "wysoka pewność wymaga świeżego (≤ 6 tyg.)"))
+    parts = item.sigma_parts
+    anchor_km = f"{(perf or {}).get('distance_m', 5000) / 1000:.1f}".rstrip("0").rstrip(".")
+    names = {"wyniki": "wysiłki", "tętno": "tętno", "Garmin": "Garmin"}
+    times = ", ".join(f"{names[name]} {units.fmt_time(value)}" for name, value in item.methods.items() if value)
+    labels = {
+        "dystans": f"przeliczenie z {anchor_km} km na {units.RACE_LABELS.get(item.key, item.key)}",
+        "metody": f"metody dają różne czasy ({times})",
+        "wiek": "wysiłek, na którym stoi prognoza, się starzeje",
+        "przygotowanie": "niskie przygotowanie do dystansu (długie biegi, kilometry)",
+    }
+    for name, label in labels.items():
+        share = parts.get(name, 0.0)
+        if share >= 0.01:
+            reasons.append((share, f"{label} (ok. ±{Z80 * share:.0%})"))
+    reasons.sort(key=lambda pair: pair[0], reverse=True)
+    return [text for _, text in reasons]
 
 
 GOAL_STATUS = {

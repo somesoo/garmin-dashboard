@@ -18,6 +18,8 @@ import streamlit as st
 
 import config
 import db
+import glossary
+import routing
 
 PAGE_STYLE = """
 <style>
@@ -169,17 +171,43 @@ def footer() -> None:
         st.rerun()
 
 
-def lead(title: str, note: str | None = None) -> None:
-    """Section heading plus the sentence that says how to read what follows."""
+def lead(title: str, note: str | None = None, *, terms: tuple | list = (), how: str | None = None) -> None:
+    """Section heading plus the sentence that says why the section is there.
+
+    ``terms`` are glossary keys and ``how`` says how to read the chart; both go
+    into a "Co to jest?" popover, so the canvas carries one sentence and the
+    explanation is one click away instead of a legend in prose.
+    """
     st.markdown(f"## {title}")
     if note:
         st.caption(note)
+    explain(terms, how)
 
 
-def sub(title: str, note: str | None = None) -> None:
+def sub(title: str, note: str | None = None, *, terms: tuple | list = (), how: str | None = None) -> None:
     st.markdown(f"### {title}")
     if note:
         st.caption(note)
+    explain(terms, how)
+
+
+def explain(terms: tuple | list = (), how: str | None = None) -> None:
+    """The help popover: what each number is, why it matters, how to read it."""
+    if not terms and not how:
+        return
+
+    with st.popover("Co to jest?", icon=":material/help_outline:", type="tertiary"):
+        for index, key in enumerate(terms):
+            if index:
+                st.divider()
+            st.markdown(glossary.markdown(key))
+        if how:
+            if terms:
+                st.divider()
+            st.markdown(f"**Jak czytać wykres** — {how}")
+        target = routing.page("slownik")
+        if target is not None:
+            st.page_link(target, label="Wszystkie pojęcia — Słownik", icon=":material/menu_book:")
 
 
 def metrics(row: pd.Series | None, previous: pd.Series | None, specs: list[tuple]) -> None:
@@ -193,9 +221,10 @@ def metrics(row: pd.Series | None, previous: pd.Series | None, specs: list[tuple
     for column, spec in zip(columns, specs):
         field, label, unit = spec[:3]
         delta_color = spec[3] if len(spec) > 3 else "normal"
+        help_text = glossary.short(glossary.FIELDS[field]) if field in glossary.FIELDS else None
         value = row.get(field) if row is not None else None
         if value is None or pd.isna(value):
-            column.metric(label, "—")
+            column.metric(label, "—", help=help_text)
             continue
         delta = None
         before = previous.get(field) if previous is not None else None
@@ -203,7 +232,8 @@ def metrics(row: pd.Series | None, previous: pd.Series | None, specs: list[tuple
             diff = float(value) - float(before)
             delta = f"{diff:+.1f}".rstrip("0").rstrip(".") + (f" {unit}" if unit else "")
         shown = f"{float(value):.1f}".rstrip("0").rstrip(".")
-        column.metric(label, f"{shown}{(' ' + unit) if unit else ''}", delta, delta_color=delta_color)
+        column.metric(label, f"{shown}{(' ' + unit) if unit else ''}", delta, delta_color=delta_color,
+                      help=help_text)
 
 
 def week_before(frame: pd.DataFrame) -> pd.Series | None:

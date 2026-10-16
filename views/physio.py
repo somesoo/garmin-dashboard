@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import glossary
 import shell
 import theme as tz
 
@@ -29,10 +30,10 @@ def _critical_speed() -> None:
     activities = shell.table("activities")
     shell.lead(
         "Prędkość krytyczna",
-        "Model dwuparametrowy `d = CS·t + D′` dopasowany na najlepszych odcinkach "
-        "1 km / 1 mila / 5 km w oknie 90 dni. CS to tempo utrzymywane tlenowo, D′ to "
-        "skończony zapas dystansu powyżej niej — ta sama matematyka, którą "
-        "w kolarstwie zna się jako FTP i W′.",
+        "Tempo, które utrzymasz długo, i zapas na szybsze odcinki — z twoich najlepszych odcinków z 90 dni.",
+        terms=["cs", "d_prime"],
+        how="Model `d = CS·t + D′` dopasowany do najlepszych odcinków 1 km / 1 mila / 5 km. Ta sama "
+            "matematyka, którą w kolarstwie zna się jako FTP i W′.",
     )
     if table.empty:
         shell.missing("critical_speed", "Potrzebne biegi z co najmniej dwoma różnymi odcinkami.")
@@ -41,10 +42,11 @@ def _critical_speed() -> None:
     fitted = table.dropna(subset=["cs_ms"])
     last, first = fitted.tail(1).iloc[0], fitted.head(1).iloc[0]
     columns = st.columns(5)
-    columns[0].metric("CS", f"{last['cs_ms']:.2f} m/s", f"{last['cs_ms'] - first['cs_ms']:+.2f}")
+    columns[0].metric("CS", f"{last['cs_ms']:.2f} m/s", f"{last['cs_ms'] - first['cs_ms']:+.2f}",
+                      help=glossary.short("cs"))
     columns[1].metric("CS jako tempo", shell.pace(last["cs_pace_min_km"]))
-    columns[2].metric("D′", f"{last['d_prime_m']:.0f} m")
-    columns[3].metric("R² dopasowania", f"{last['r2']}")
+    columns[2].metric("D′", f"{last['d_prime_m']:.0f} m", help=glossary.short("d_prime"))
+    columns[3].metric("R² dopasowania", f"{last['r2']}", help=glossary.short("r2"))
     columns[4].metric("Prognoza 5 km", shell.clock(last.get("pred_5k_s")))
 
     tz.show(
@@ -65,8 +67,8 @@ def _critical_speed() -> None:
 
     shell.sub(
         "Hiperbola wydolności",
-        "Im dłużej trwa wysiłek, tym bliżej CS można go utrzymać. Punkty to twoje "
-        "rekordy odcinków, linia to model dopasowany do nich.",
+        "Im dłużej trwa wysiłek, tym bliżej CS można go utrzymać.",
+        how="Punkty to twoje rekordy odcinków, linia to model dopasowany do nich.",
     )
     cs_value, d_prime = float(last["cs_ms"]), float(last["d_prime_m"])
     times = np.linspace(60, 3600, 240)
@@ -127,9 +129,8 @@ def _riegel() -> None:
     riegel = shell.table("riegel")
     shell.lead(
         "Wykładnik Riegela",
-        "`t = a·d^b`: `b` to osobista sygnatura wytrzymałości. Około 1.06 to poziom "
-        "dobrze rozbieganego zawodnika, powyżej ~1.12 prędkość szybko siada "
-        "z dystansem.",
+        "Jak bardzo zwalniasz na dłuższych dystansach — osobista sygnatura wytrzymałości.",
+        terms=["riegel"],
     )
     if riegel.empty:
         shell.missing("riegel")
@@ -144,9 +145,9 @@ def _economy() -> None:
     efficiency = shell.table("efficiency")
     shell.lead(
         "Ekonomia biegu",
-        "Metry na uderzenie serca: prędkość skorygowana o nachylenie dzielona przez "
-        "tętno. Pojedyncza sesja nic nie znaczy (upał, teren, sen) — mediana z 10 "
-        "sesji jest zaskakująco stabilna.",
+        "Czy ten sam wysiłek daje coraz więcej prędkości. Pojedyncza sesja nic nie znaczy (upał, teren, sen) "
+        "— mediana z 10 sesji jest zaskakująco stabilna.",
+        terms=["ef"],
     )
     if efficiency.empty:
         shell.missing("efficiency")
@@ -187,10 +188,11 @@ def _zones() -> None:
     zones = shell.table("intensity_distribution")
     shell.lead(
         "Rozkład intensywności",
-        "Udział czasu tygodniowo w trzech pasmach: łatwo (strefy 1–2), środek "
-        "(strefa 3) i mocno (strefy 4–5). Model spolaryzowany to dużo niebieskiego, "
-        "trochę pomarańczowego i mało szarego pośrodku. Etykieta modelu to reguła "
-        "opisowa (≥70% łatwo, ≥10% mocno, <15% w środku), nie opublikowany indeks.",
+        "Czy spokojne dni są naprawdę spokojne, a mocne naprawdę mocne.",
+        terms=["intensity", "hr_zones"],
+        how="Udział czasu tygodniowo: łatwo (strefy 1–2), środek (3), mocno (4–5). Model spolaryzowany to dużo "
+            "niebieskiego, trochę pomarańczowego i mało szarego pośrodku. Etykieta modelu to reguła opisowa "
+            "(≥70% łatwo, ≥10% mocno, <15% w środku), nie opublikowany indeks.",
     )
     if zones.empty:
         shell.missing("intensity_distribution")
@@ -236,8 +238,8 @@ def _predictions() -> None:
         return
     shell.lead(
         "Prognozy Garmina",
-        "Przewidywane czasy na podstawie ostatnich treningów. Zmiana: względem "
-        "początku wybranego zakresu — w dół znaczy szybciej.",
+        "Przewidywane czasy Garmina na podstawie ostatnich treningów — dla porównania z naszą prognozą.",
+        how="Zmiana: względem początku wybranego zakresu — w dół znaczy szybciej.",
     )
     tiles = st.columns(len(present))
     for tile, column in zip(tiles, present):

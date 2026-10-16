@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+import glossary
 import shell
 import theme as tz
 
@@ -17,9 +18,9 @@ def render() -> None:
         "kroczącą, bo dzień do dnia nic tu nie znaczy."
     )
 
-    tz.key([("dot", "dzień"), ("line", "średnia krocząca")])
 
-    shell.lead("VO2max", "Średnia 28-dniowa — VO2max zmienia się w skali tygodni, nie dni.")
+    shell.lead("VO2max", "Średnia 28-dniowa — VO2max zmienia się w skali tygodni, nie dni.",
+               terms=["vo2max"], how=glossary.TREND_HOW)
     tz.show(tz.trend(view, "day", {"VO2max": ("vo2max", "vo2max_roll28")},
                      decimals=1, smooth_label="średnia 28 d"), key="trend_vo2")
 

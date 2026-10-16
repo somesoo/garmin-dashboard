@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+import glossary
 import shell
 import theme as tz
 
@@ -34,18 +35,21 @@ def _headline() -> None:
     if not sri.empty:
         last = sri.dropna(subset=["sri_30d"]).tail(1)
         if not last.empty:
-            columns[0].metric("SRI (30 nocy)", f"{last['sri_30d'].iloc[0]:.0f} / 100")
+            columns[0].metric("SRI (30 nocy)", f"{last['sri_30d'].iloc[0]:.0f} / 100",
+                              help=glossary.short("sri"))
     if not circ.empty:
         mid = pd.to_numeric(circ["midpoint_hour"], errors="coerce").dropna()
         if not mid.empty:
             hour = float(mid.tail(30).mean()) % 24
-            columns[1].metric("Środek snu", f"{int(hour):02d}:{int((hour % 1) * 60):02d}")
+            columns[1].metric("Środek snu", f"{int(hour):02d}:{int((hour % 1) * 60):02d}",
+                              help=glossary.short("midpoint"))
         sd = pd.to_numeric(circ.get("midpoint_sd_30d"), errors="coerce").dropna()
         if not sd.empty:
-            columns[2].metric("Rozrzut środka snu", f"±{sd.iloc[-1]:.1f} h")
+            columns[2].metric("Rozrzut środka snu", f"±{sd.iloc[-1]:.1f} h", help=glossary.short("midpoint"))
         weekend = circ.groupby("is_weekend")["midpoint_hour"].mean()
         if len(weekend) == 2:
-            columns[3].metric("Social jetlag", f"{float(weekend.loc[True] - weekend.loc[False]):+.2f} h")
+            columns[3].metric("Social jetlag", f"{float(weekend.loc[True] - weekend.loc[False]):+.2f} h",
+                              help=glossary.short("social_jetlag"))
 
 
 def _regularity() -> None:
@@ -54,12 +58,10 @@ def _regularity() -> None:
         return
     shell.lead(
         "Regularność snu (SRI)",
-        "Prawdopodobieństwo, że o tej samej minucie doby jesteś w tym samym stanie "
-        "(sen / czuwanie) dwie noce z rzędu. 100 = idealnie powtarzalne noce, 0 = rzut "
-        "monetą. Liczony na minutowym hipnogramie, więc mierzy wyłącznie regularność, "
-        "nie długość snu.",
+        "Czy kładziesz się i wstajesz o stałych porach — regularność poprawia sen niezależnie od jego długości.",
+        terms=["sri", "midpoint", "social_jetlag"],
+        how=glossary.TREND_HOW,
     )
-    tz.key([("dot", "noc do nocy"), ("line", "średnia 30 nocy")])
     tz.show(
         tz.trend(shell.clip(sri), "day", {"SRI": ("sri_pair", "sri_30d")},
                  smooth_label="średnia 30 nocy", height=240),
@@ -79,9 +81,9 @@ def _window() -> None:
     frame["wake"] = frame["bed"] + (wake - bed).dt.total_seconds() / 3600
     shell.lead(
         "Okno snu",
-        "Każdy słupek to jedna noc: od zaśnięcia do wybudzenia, wieczór u góry. "
-        "Równe słupki w jednej linii to regularny rytm; słupek przesunięty o kilka "
-        "godzin to podróż albo zarwana noc. Ostatnia noc jest wyróżniona.",
+        "Kiedy śpisz: równe słupki w jednej linii to regularny rytm, przesunięty o kilka godzin — podróż "
+        "albo zarwana noc.",
+        how="Każdy słupek to jedna noc: od zaśnięcia do wybudzenia, wieczór u góry. Ostatnia noc jest wyróżniona.",
     )
     tz.show(
         tz.range_bars(frame, "day", "bed", "wake", clock=True, height=300),
@@ -94,7 +96,7 @@ def _window() -> None:
 def _hypnogram() -> None:
     stages = shell.table("sleep_stages")
     nights = shell.table("night_series")
-    shell.lead("Hipnogram", "Pojedyncza noc, segment po segmencie.")
+    shell.lead("Hipnogram", "Pojedyncza noc, segment po segmencie.", terms=["sleep_stages"])
     if stages.empty:
         shell.missing("sleep_stages")
         return
@@ -175,6 +177,7 @@ def _hypnogram() -> None:
         "Struktura snu w czasie",
         "Udział faz jako procent nocy, wygładzony średnią z 7 nocy — długość snu "
         "nie zaburza porównania, a pojedyncza noc nie szarpie wykresem.",
+        terms=["sleep_stages"],
     )
     pivot = frame.groupby([frame["day"].dt.date, "stage"])["minutes"].sum().unstack(fill_value=0)
     columns = [s for s in tz.SLEEP_STAGE_ORDER if s in pivot.columns]
@@ -198,6 +201,7 @@ def _profile() -> None:
         "Minimum tętna i **moment** jego wystąpienia. Nadir w pierwszej połowie nocy "
         "znaczy, że organizm wyciszył się szybko; nadir pod koniec — że regeneracja "
         "trwała jeszcze, gdy zadzwonił budzik.",
+        terms=["night_profile", "hrv_slope"],
     )
     if profile.empty:
         shell.missing("night_profile", "Potrzebne noce z zapisem tętna i HRV.")
@@ -207,9 +211,9 @@ def _profile() -> None:
     columns = st.columns(4)
     columns[0].metric("Tętno minimalne", f"{last['hr_min']:.0f}")
     columns[1].metric("Spadek od 1. godziny", f"{last['hr_drop']:.1f}")
-    columns[2].metric("Nadir po", f"{last['nadir_at_pct']:.0f}% nocy")
+    columns[2].metric("Nadir po", f"{last['nadir_at_pct']:.0f}% nocy", help=glossary.short("night_profile"))
     if pd.notna(last.get("hrv_slope_per_h")):
-        columns[3].metric("Nachylenie HRV", f"{last['hrv_slope_per_h']:+.2f} /h")
+        columns[3].metric("Nachylenie HRV", f"{last['hrv_slope_per_h']:+.2f} /h", help=glossary.short("hrv_slope"))
 
     tz.show(
         tz.scatter(
@@ -250,8 +254,10 @@ def _daymap() -> None:
     intraday = shell.table("intraday")
     shell.lead(
         "Mapa doby",
-        "Każdy wiersz to jeden dzień, każda kolumna pół godziny. Pionowe pasy to rytm "
-        "dobowy, poziome — dni odstające.",
+        "Stres i Body Battery w ciągu doby: jak rozkłada się obciążenie dnia.",
+        terms=["stress", "body_battery"],
+        how="Każdy wiersz to jeden dzień, każda kolumna pół godziny. Pionowe pasy to rytm dobowy, "
+            "poziome — dni odstające.",
     )
     if intraday.empty:
         shell.missing(

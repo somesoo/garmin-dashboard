@@ -17,6 +17,7 @@ garmin-dashboard/
   theme.py           system wykresów: paleta, buildery, mapy, glob
   shell.py           wspólny stan stron: dane, zakres czasu, nagłówki
   insights.py        parser notatek z insights/
+  glossary.py        słownik pojęć: co to jest, po co, jak czytać (pomoc na stronach)
   app.py             router (st.navigation) — bez logiki widoków
   routing.py         rejestr stron: przejście z widoku do widoku bez reloadu
   globe.py           opakowanie komponentu globu (dane + motyw + klik)
@@ -336,8 +337,14 @@ Zasady układu, które trzymają spójność:
 - **Jedna kolumna.** Wykresy dostają pełną szerokość kanwy; `st.columns`
   wyłącznie na paski liczb (`shell.metrics`) i parę kontrolek obok siebie.
   Dwa wykresy obok siebie ścinają oś czasu i zmuszają do skakania wzrokiem.
-- **Każda sekcja = `shell.lead(tytuł, zdanie)`** — zdanie mówi, jak czytać to,
-  co pod nim. Tytuł nigdy nie idzie do figury (patrz `theme.py`).
+- **Każda sekcja = `shell.lead(tytuł, zdanie, terms=[...], how=...)`** — zdanie
+  mówi, *po co* jest sekcja. Opis znaczników wykresu („kropki to dni, pas to
+  norma”) nie idzie do podpisu, tylko do `how=`; razem z hasłami `terms` (klucze
+  z `glossary.TERMS`) trafia do przycisku „Co to jest?”. Nowy wskaźnik = nowe
+  hasło w `glossary.py` (co / po co / jak czytać); kafelki `shell.metrics`
+  biorą podpowiedź same przez `glossary.FIELDS`, a `tests/test_glossary.py`
+  pilnuje, że każdy użyty klucz istnieje. Wszystko widać też na stronie
+  *Słownik*. Tytuł nigdy nie idzie do figury (patrz `theme.py`).
 - **Chrome w szynie bocznej**: nawigacja, jeden globalny zakres czasu
   (`shell.range_picker`) i status hurtowni (`shell.footer`). Kanwa nie
   rezerwuje miejsca na kontrolki.

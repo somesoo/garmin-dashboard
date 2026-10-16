@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+import glossary
 import shell
 import theme as tz
 
@@ -69,11 +70,10 @@ def render() -> None:
 
     shell.lead(
         "HRV, tętno spoczynkowe i readiness",
-        "Kropki to pojedyncze dni, linia to średnia 7-dniowa — to ona niesie sygnał. "
-        "Szary pas to Twoja norma: dla HRV zakres wyznaczony przez Garmina, dla "
-        "tętna 10.–90. percentyl z ostatnich 60 dni.",
+        "Czy organizm nadąża za treningiem: trzy sygnały regeneracji na tle twojej normy.",
+        terms=["hrv", "rhr", "readiness"],
+        how=glossary.TREND_HOW + " Norma dla HRV to zakres Garmina, dla tętna 10.–90. percentyl z 60 dni.",
     )
-    tz.key([("dot", "dzień"), ("line", "średnia 7 d"), ("band", "norma")])
     latest = frame.iloc[-1]
 
     _headline("HRV w nocy", latest.get("hrv_last_night"), "ms",
@@ -97,11 +97,11 @@ def render() -> None:
 
     shell.lead(
         "Kwadranty regeneracji",
-        "HRV i tętno spoczynkowe jako odchylenie od własnej bazy 60-dniowej. "
-        "Szare punkty to historia, niebieska ścieżka — ostatni tydzień, dzień po "
-        "dniu. Prawy-dolny róg (HRV wyżej, RHR niżej) to dzień zregenerowany; "
-        "lewy-górny to jedyny układ, który konsekwentnie oznacza przeciążenie — "
+        "HRV i tętno razem: lewy-górny róg to jedyny układ, który konsekwentnie oznacza przeciążenie — "
         "samo niskie HRV to zwykle szum.",
+        terms=["quadrants", "deviation"],
+        how="Szare punkty to historia, niebieska ścieżka — ostatni tydzień, dzień po dniu. Prawy-dolny róg "
+            "(HRV wyżej, RHR niżej) to dzień zregenerowany.",
     )
     quadrants = shell.clip(shell.table("quadrants"))
     if quadrants.empty:
@@ -124,15 +124,17 @@ def render() -> None:
 
     shell.lead(
         "Body Battery",
-        "Każdy słupek to jeden dzień: od najniższego do najwyższego poziomu. "
-        "Wysoki szczyt to dobra noc, niski dół to wymagający dzień — długi słupek "
-        "oznacza oba naraz. Ostatni dzień jest wyróżniony.",
+        "Czy noce odbudowują to, co zabiera dzień.",
+        terms=["body_battery"],
+        how="Każdy słupek to jeden dzień: od najniższego do najwyższego poziomu. Wysoki szczyt to dobra noc, "
+            "niski dół to wymagający dzień — długi słupek oznacza oba naraz. Ostatni dzień jest wyróżniony.",
     )
     tz.show(tz.range_bars(view, "day", "bb_low", "bb_high"),
             table=view[["day", "bb_low", "bb_high", "bb_charged", "bb_drained"]].tail(40),
             key="bb_range")
 
-    shell.lead("Stres", "Średnia dobowa i średnia podczas snu, każda ze swoją średnią 7-dniową.")
+    shell.lead("Stres", "Stres w dzień i w nocy — nocny powinien być niski, inaczej sen nie regeneruje.",
+               terms=["stress"], how=glossary.TREND_HOW)
     tz.show(
         tz.trend(
             view,

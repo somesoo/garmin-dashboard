@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import glossary
 import routing
 import shell
 import theme as tz
@@ -16,10 +17,8 @@ from views import run_common as rc
 def render() -> None:
     st.title("Prognoza wyników")
     st.caption(
-        "Szacunek, nie gwarancja. Trzy liczby na dystans: **potencjał** (co daje obecna wydolność przy w pełni "
-        "zbudowanej wytrzymałości), **realistyczny** (z korektą na dzisiejsze przygotowanie do dystansu) "
-        "i — gdy jest zawód w kalendarzu — **po planie**. Przedział to 80%: mniej więcej co piąty start "
-        "wypadnie poza nim."
+        "Na jaki czas możesz dziś liczyć na każdym dystansie i jak bardzo tej liczbie ufać. Każda sekcja ma "
+        "„Co to jest?” z objaśnieniem pojęć; nagłówki kolumn tabeli mają podpowiedzi po najechaniu."
     )
     frame = rc.guard()
     if frame is None:
@@ -40,6 +39,7 @@ def render() -> None:
     item = result["distances"][key]
     for warning in item.warnings:
         st.warning(warning)
+    _confidence(result, item)
     _history_chart(history, key)
     _advice(result, frame, key)
     _method(result, item)
@@ -69,10 +69,46 @@ def _table(result: dict, history: pd.DataFrame) -> None:
         )
     shell.lead(
         "Prognoza na dziś",
-        f"VDOT {result['vdot']:.1f}. Zmiana: ujemna = szybciej. Kolumna „po planie” pojawia się dla dystansu, "
-        "na który jest zaplanowany start (strona Zawody).",
+        f"Twoja wydolność to dziś VDOT {result['vdot']:.1f}; tabela przekłada ją na czasy startowe.",
+        terms=["realistic", "interval80", "confidence", "potential", "preparation", "vdot", "after_plan"],
+        how="Zmiana 4/12 tyg.: ujemna = prognoza szybsza niż wtedy. „Po planie” pojawia się tylko dla "
+            "dystansu z wpisanym startem (strona Zawody).",
     )
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", column_config=_COLUMNS)
+
+
+def _help(key: str) -> str:
+    return glossary.short(key)
+
+
+_COLUMNS = {
+    "realistyczny": st.column_config.TextColumn(help=_help("realistic")),
+    "przedział 80%": st.column_config.TextColumn(help=_help("interval80")),
+    "potencjał": st.column_config.TextColumn(help=_help("potential")),
+    "po planie": st.column_config.TextColumn(help=_help("after_plan")),
+    "pewność": st.column_config.TextColumn(help=_help("confidence")),
+    "przygotowanie": st.column_config.TextColumn(help=_help("preparation")),
+    "zmiana 4 tyg.": st.column_config.TextColumn(help="Zmiana prognozy względem 4 tygodni temu; ujemna = szybciej."),
+    "zmiana 12 tyg.": st.column_config.TextColumn(help="Zmiana prognozy względem 12 tygodni temu; ujemna = szybciej."),
+}
+
+
+def _confidence(result: dict, item: forecast.DistanceForecast) -> None:
+    """The confidence label, what it means in seconds, and what holds it back."""
+    label = units.RACE_LABELS[item.key]
+    spread = (item.high_s - item.low_s) / 2
+    st.markdown(
+        f"**Pewność: {item.confidence} {rc.CONFIDENCE_ICON[item.confidence]}** — w 8 startach na 10 wynik na "
+        f"{label} powinien wypaść między **{units.fmt_time(item.low_s)}** a **{units.fmt_time(item.high_s)}** "
+        f"(ok. ±{units.fmt_time(spread)} od {units.fmt_time(item.realistic_s)})."
+    )
+    reasons = forecast.confidence_reasons(item, result.get("perf"))
+    if reasons:
+        st.caption("Co poszerza przedział, od największego: " + "; ".join(reasons) + ".")
+        st.caption("Najszybciej podnosi pewność mocny bieg (start, test) na dystansie bliskim docelowemu, "
+                   "powiązany ze startem na stronie Zawody.")
+    else:
+        st.caption("Świeży wysiłek maksymalny i zgodne metody — prognoza jest tak pewna, jak ten model potrafi.")
 
 
 def _minutes_axis(fig: go.Figure, values: pd.Series) -> None:
@@ -91,9 +127,10 @@ def _minutes_axis(fig: go.Figure, values: pd.Series) -> None:
 def _history_chart(history: pd.DataFrame, key: str) -> None:
     shell.lead(
         "Jak zmieniała się prognoza",
-        "Co tydzień model liczony tylko z danych sprzed tego dnia — bez zaglądania w przyszłość. Pas to "
-        "przedział 80%, linia przerywana to Garmin. Wyżej = szybciej. Pełne punkty: prognoza oparta na "
-        "wysiłku bliskim maksymalnego; puste: tylko na odcinkach treningowych (dolna granica).",
+        "Czy idziesz do przodu: prognoza liczona co tydzień tylko z danych sprzed tego dnia.",
+        terms=["near_max", "interval80"],
+        how="Wyżej = szybciej. Pas to przedział 80%, linia przerywana — Garmin. Pełne punkty: prognoza oparta "
+            "na wysiłku bliskim maksymalnego; puste: tylko na odcinkach treningowych (dolna granica).",
     )
     if history.empty:
         st.caption("Brak historii prognoz — uruchom `analytics.py`.")
@@ -143,8 +180,8 @@ def _advice(result: dict, frame: pd.DataFrame, key: str) -> None:
     tips = forecast.advice(result, frame, key)
     shell.lead(
         f"Co może poprawić wynik — {units.RACE_LABELS[key]}",
-        "Z luk w danych względem wymagań dystansu, uporządkowane od największej. Nic tu nie jest diagnozą — "
-        "to miejsca, gdzie prognoza jest dziś ograniczana.",
+        "Miejsca, w których prognoza jest dziś ograniczana, od największego. To luki w danych, nie diagnoza.",
+        terms=["preparation", "potential"],
     )
     if not tips:
         st.caption("Przygotowanie spełnia przyjęte wymagania dla tego dystansu — dalszy postęp to głównie "
@@ -154,7 +191,8 @@ def _advice(result: dict, frame: pd.DataFrame, key: str) -> None:
 
 
 def _method(result: dict, item: forecast.DistanceForecast) -> None:
-    shell.lead("Z czego to wynika", "Wszystkie wejścia tej prognozy — do sprawdzenia, nie do wiary na słowo.")
+    shell.lead("Z czego to wynika", "Wszystkie wejścia tej prognozy — do sprawdzenia, nie do wiary na słowo.",
+               terms=["methods", "near_max", "vdot"])
     perf = result.get("perf")
     with st.expander("Metody i ich zgodność", expanded=True):
         methods = pd.DataFrame(
@@ -235,8 +273,9 @@ def _backtest(history: pd.DataFrame) -> None:
     table = forecast.backtest(history, efforts)
     shell.lead(
         "Sprawdzenie wstecz",
-        "Każdy wysiłek bliski maksymalnego (≥ 3 km) zestawiony z tym, co model przewidywał tydzień wcześniej "
-        "na ten sam dystans. To jedyny sposób, żeby wiedzieć, ile prognoza jest warta na twoich danych.",
+        "Ile ta prognoza była warta na twoich danych: mocne biegi (≥ 3 km) wobec tego, co model "
+        "przewidywał tydzień wcześniej.",
+        terms=["backtest"],
     )
     if table.empty:
         st.caption("Brak wysiłków bliskich maksymalnego ≥ 3 km z prognozą tydzień wcześniej — nie ma czego sprawdzać.")

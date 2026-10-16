@@ -94,6 +94,15 @@ class Model(Fixture):
             widths[key] = math.log(item.high_s / item.low_s)
         self.assertLess(widths["5k"], widths["m"])
 
+    def test_confidence_reasons_name_what_widens_the_interval(self):
+        result = self.run_forecast()
+        for item in result["distances"].values():
+            reasons = forecast.confidence_reasons(item, result["perf"])
+            self.assertEqual(reasons == [], item.confidence == "wysoka")
+        marathon = result["distances"]["m"]
+        self.assertNotEqual(marathon.confidence, "wysoka")
+        self.assertTrue(any("maraton" in reason for reason in forecast.confidence_reasons(marathon, result["perf"])))
+
     def test_target_after_plan_is_faster_than_today(self):
         result = self.run_forecast(weeks_to_race={"hm": 10}, plan_prep={"hm": 0.9})
         item = result["distances"]["hm"]

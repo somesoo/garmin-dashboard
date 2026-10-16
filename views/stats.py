@@ -38,10 +38,10 @@ def _correlations() -> None:
     corr = shell.table("correlations")
     shell.lead(
         "Korelacje z opóźnieniem",
-        "Spearman (odporny na skośność i wartości skrajne) między czynnikiem z dnia "
-        "*t−lag* a odpowiedzią w dniu *t*. Podpisane są tylko komórki z q < 0.05. "
-        "Skala rozbieżna: niebieski = dodatnia, czerwony = ujemna, szary środek = brak "
-        "związku.",
+        "Co z jednego dnia wiąże się z twoim stanem kilka dni później.",
+        terms=["correlation"],
+        how="Spearman między czynnikiem z dnia *t−lag* a odpowiedzią w dniu *t*. Podpisane są tylko komórki "
+            "z q < 0,05. Niebieski = dodatnia, czerwony = ujemna, szary środek = brak związku.",
     )
     if corr.empty:
         shell.missing("correlations", "Potrzeba min. 25 wspólnych dni na parę.")
@@ -92,6 +92,7 @@ def _acf() -> None:
         "Autokorelacja",
         "Jak długo wczoraj przewiduje dziś. Słupki poza przedziałem ufności to realna "
         "pamięć szeregu; wyraźny pik przy lagu 7 oznacza rytm tygodniowy, nie fizjologię.",
+        terms=["acf"],
     )
     if acf.empty:
         shell.missing("acf")
@@ -133,8 +134,10 @@ def _changepoints() -> None:
     points = shell.table("changepoints")
     shell.lead(
         "Punkty zmiany bazy",
-        "Segmentacja binarna na z-score: podział musi zmniejszyć sumę kwadratów "
-        "bardziej niż kara ~2·ln(n), więc szum nie przechodzi.",
+        "Daty, od których metryka trwale się przesunęła — zmiana, nie szum.",
+        terms=["changepoint"],
+        how="Segmentacja binarna na z-score: podział musi zmniejszyć sumę kwadratów bardziej niż kara "
+            "~2·ln(n), więc szum nie przechodzi.",
     )
     if points.empty:
         shell.missing("changepoints", "Żadne przesunięcie nie przebiło kary.")
@@ -151,7 +154,8 @@ def _weekdays() -> None:
     effects = shell.table("weekday_effects")
     shell.lead(
         "Efekt dnia tygodnia",
-        "Odchylenie od średniej ogólnej, z testem Kruskala-Wallisa dla całego tygodnia.",
+        "Czy twoje dni tygodnia różnią się naprawdę — nawyki, nie fizjologia.",
+        terms=["weekday"],
     )
     if effects.empty:
         shell.missing("weekday_effects")

@@ -39,7 +39,8 @@ def render() -> None:
     _pace_by_kind(frame)
     _records()
 
-    shell.lead("Ostatnie treningi", "Typ treningu jest nadany regułami — szczegóły i powód etykiety po kliknięciu.")
+    shell.lead("Ostatnie treningi", "Typ treningu jest nadany regułami — szczegóły i powód etykiety po kliknięciu.",
+               terms=["run_kind", "training_load"])
     rc.pickable_runs(frame.tail(15), key="overview_runs")
 
 
@@ -85,6 +86,7 @@ def _forecast_strip() -> None:
         "Prognoza wyników",
         "Wynik realistyczny przy obecnym przygotowaniu; pod spodem przedział 80%. Metoda, dane wejściowe "
         "i założenia — na stronie Prognoza.",
+        terms=["realistic", "interval80", "confidence"],
     )
     if result.get("status") != "ok":
         st.caption(result.get("reason", "Brak prognozy."))
@@ -105,8 +107,10 @@ def _weekly(frame: pd.DataFrame) -> None:
     weeks = shell.clip(weeks, "week")
     shell.lead(
         "Kilometry tygodniowo",
-        "Niebieskie: biegi spokojne, regeneracyjne i długie; pomarańczowe: tempo, próg, interwały i starty. "
-        "Tydzień bez słupka to tydzień bez biegania — też jest informacją.",
+        "Ile biegasz i ile z tego to mocne kilometry.",
+        terms=["quality_sessions"],
+        how="Niebieskie: biegi spokojne, regeneracyjne i długie; pomarańczowe: tempo, próg, interwały i starty. "
+            "Tydzień bez słupka to tydzień bez biegania.",
     )
     if weeks.empty:
         st.caption("Brak biegów w wybranym zakresie.")
@@ -130,8 +134,10 @@ def _pace_by_kind(frame: pd.DataFrame) -> None:
     view = shell.clip(frame)
     shell.lead(
         "Tempo według typu treningu",
-        "Czas łączny przez dystans łączny w każdej grupie. Spokojne biegi powinny być wyraźnie wolniejsze "
-        "od tempa i progu — jeśli różnica jest mała, spokojne dni są za szybkie albo mocne za wolne.",
+        "Spokojne biegi powinny być wyraźnie wolniejsze od tempa i progu — jeśli różnica jest mała, "
+        "spokojne dni są za szybkie albo mocne za wolne.",
+        terms=["run_kind"],
+        how="Tempo grupy to czas łączny przez dystans łączny.",
     )
     if view.empty:
         st.caption("Brak biegów w wybranym zakresie.")

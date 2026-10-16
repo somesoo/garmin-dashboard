@@ -14,6 +14,7 @@ import pandas as pd
 import streamlit as st
 
 import globe
+import glossary
 import routing
 import shell
 import theme as tz
@@ -177,7 +178,9 @@ def _now(frame: pd.DataFrame, row: pd.Series | None) -> None:
     shell.lead(
         "Stan na dziś",
         "Cztery liczby, które zmieniają decyzję o dzisiejszym treningu, i ich "
-        "przebieg w wybranym zakresie. Zmiany: względem średniej z poprzednich 7 dni.",
+        "przebieg w wybranym zakresie.",
+        terms=["readiness", "hrv", "rhr"],
+        how="Zmiany na kafelkach: względem średniej z poprzednich 7 dni. " + glossary.TREND_HOW,
     )
     shell.metrics(
         row,
@@ -192,7 +195,6 @@ def _now(frame: pd.DataFrame, row: pd.Series | None) -> None:
 
     view = shell.clip(frame)
     pmc = shell.clip(shell.table("pmc"))
-    tz.key([("dot", "dzień"), ("line", "średnia 7 d"), ("band", "norma HRV")])
     shell.sub("Readiness")
     tz.show(tz.trend(view, "day", {"readiness": ("readiness", "readiness_roll7")}, height=190),
             key="atlas_readiness")
@@ -206,6 +208,7 @@ def _now(frame: pd.DataFrame, row: pd.Series | None) -> None:
             "Obciążenie i forma",
             "Sprawność rośnie wolno, zmęczenie szybko; forma to ich różnica. "
             "Pełny model jest na stronie **Forma**.",
+            terms=["ctl", "atl", "tsb"],
         )
         tz.show(
             tz.stacked_panels(
