@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3987e5"/>
+      <stop offset="1" stop-color="#0d366b"/>
+    </linearGradient>
+  </defs>
+  <!-- macOS icon grid: 824 px body centred in 1024, continuous-corner squircle -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <!-- a run: route line rising across the tile, start dot, finish ring -->
+  <path d="M250 690 C 330 690, 340 560, 430 560 S 520 650, 600 600 S 690 380, 780 340"
+        fill="none" stroke="#ffffff" stroke-width="46" stroke-linecap="round" stroke-linejoin="round" opacity="0.95"/>
+  <circle cx="250" cy="690" r="40" fill="#ffffff"/>
+  <circle cx="780" cy="340" r="52" fill="none" stroke="#ffffff" stroke-width="30"/>
+  <path d="M230 790 H 794" stroke="#ffffff" stroke-opacity="0.28" stroke-width="18" stroke-linecap="round"/>
+</svg>

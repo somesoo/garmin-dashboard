@@ -8,6 +8,9 @@ PY="$HERE/.venv/bin/python"
 PORT=8501
 URL="http://localhost:$PORT"
 LOG="$HERE/data/streamlit.log"
+# The server stops itself this many minutes after the last tab is closed
+# (lifecycle.py); the next double-click starts it again.
+export GARMIN_IDLE_EXIT_MIN="${GARMIN_IDLE_EXIT_MIN:-5}"
 
 if [ ! -x "$PY" ]; then
     echo "Nie znaleziono $PY"
@@ -33,7 +36,7 @@ else
     echo "== Start serwera na $URL (log: $LOG) =="
     mkdir -p "$HERE/data"
     # nohup + disown: the server outlives the Terminal window that started it.
-    nohup "$PY" -m streamlit run "$HERE/app.py" \
+    nohup "$PY" "$HERE/serve.py" \
         --server.port "$PORT" --server.address 127.0.0.1 \
         --server.headless true --browser.gatherUsageStats false \
         >"$LOG" 2>&1 &

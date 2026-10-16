@@ -8,9 +8,15 @@ na `http://localhost:8501`. Nic nie wychodzi na zewnątrz.
 **macOS:** dwuklik na **`Dashboard.command`** (otwiera się w Terminalu) albo
 `./Dashboard.command` z terminala. **Windows:** dwuklik na **`Dashboard.cmd`**.
 Oba aktualizują dane od ostatniego pobrania, przebudowują tabele, podnoszą
-serwer (jeśli nie działa) i otwierają przeglądarkę. Na Macu serwer działa
-w tle także po zamknięciu okna Terminala (log: `data/streamlit.log`);
-zatrzymanie: `pkill -f "streamlit run"`.
+serwer (jeśli nie działa) i otwierają przeglądarkę. Serwer działa w tle także
+po zamknięciu okna Terminala (log: `data/streamlit.log`), ale **sam się
+wyłącza 5 minut po zamknięciu ostatniej karty** z dashboardem — kolejny
+dwuklik uruchamia go od nowa. Inny czas: `GARMIN_IDLE_EXIT_MIN=15 ./Dashboard.command`;
+zatrzymanie od razu: `pkill -f serve.py`.
+
+Ikona w Docku / Launchpadzie (macOS): `deploy/macos/make-app.sh --dock` buduje
+`~/Applications/Garmin Dashboard.app`, który uruchamia `Dashboard.command`.
+Aplikacja zna ścieżkę do repo — po przeniesieniu katalogu zbuduj ją ponownie.
 
 Ręcznie (macOS/Linux; na Windowsie `.venv\Scripts\python.exe`):
 
@@ -19,7 +25,7 @@ Ręcznie (macOS/Linux; na Windowsie `.venv\Scripts\python.exe`):
 .venv/bin/python etl/run.py --backfill   # cała historia
 .venv/bin/python etl/load.py             # tylko przebudowa tabel
 .venv/bin/python analytics.py            # tylko modele i statystyka
-.venv/bin/python -m streamlit run app.py # tylko serwer
+.venv/bin/python -m streamlit run app.py # tylko serwer (bez auto-wyłączania)
 ```
 
 ### Pierwsza instalacja na Macu

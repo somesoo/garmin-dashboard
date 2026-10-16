@@ -10,6 +10,9 @@ set "PY=%HERE%.venv\Scripts\python.exe"
 set "PYW=%HERE%.venv\Scripts\pythonw.exe"
 set "PORT=8501"
 set "URL=http://localhost:%PORT%"
+rem The server stops itself this many minutes after the last tab is closed
+rem (lifecycle.py); the next double-click starts it again.
+if not defined GARMIN_IDLE_EXIT_MIN set "GARMIN_IDLE_EXIT_MIN=5"
 
 if not exist "%PY%" goto :no_venv
 
@@ -25,7 +28,7 @@ goto :open_browser
 
 :start_server
 echo == Start serwera na %URL% ==
-start "Garmin Dashboard" /min "%PYW%" -m streamlit run "%HERE%app.py" --server.port %PORT% --server.headless true --browser.gatherUsageStats false
+start "Garmin Dashboard" /min "%PYW%" "%HERE%serve.py" --server.port %PORT% --server.headless true --browser.gatherUsageStats false
 rem Give the server a moment before the browser asks for the page.
 ping -n 5 127.0.0.1 >nul
 

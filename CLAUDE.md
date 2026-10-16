@@ -12,6 +12,8 @@ garmin-dashboard/
   etl/load.py        raw → data/tables/*.parquet (jawne mapowanie pól)
   etl/run.py         przyrostowa aktualizacja (wejście dla Dashboard.command/.cmd)
   etl/login.py       odświeżenie tokenów hasłem (raz na rok / po zmianie hasła)
+  serve.py           start serwera z launcherów: streamlit run app.py + lifecycle
+  lifecycle.py       lokalnie serwer gaśnie N min po zamknięciu ostatniej karty
   analytics.py       modele fizjologiczne i statystyka -> tabele pochodne
   db.py              DuckDB in-memory z widokami na parquet
   theme.py           system wykresów: paleta, buildery, mapy, glob
@@ -37,6 +39,16 @@ garmin-dashboard/
 Python: `.venv` w katalogu repo — `.venv/bin/python` na macOS (główna maszyna,
 Python 3.13 z Homebrew) i Linuxie, `.venv/Scripts/python.exe` na Windowsie (3.12+). `garminconnect` to zwykła zależność
 z `requirements.txt`, nie editable install z sąsiedniego repo.
+
+## Uruchamianie lokalne
+
+`Dashboard.command` / `Dashboard.cmd`: ETL → `serve.py` w tle → przeglądarka.
+Serwer **nie chodzi w nieskończoność**: `lifecycle.py` liczy aktywne sesje
+Streamlita i po `GARMIN_IDLE_EXIT_MIN` minutach (domyślnie 5) bez żadnej
+otwartej karty wysyła sobie SIGTERM. Licznik startuje z procesem, więc serwer,
+którego nikt nie otworzył, też gaśnie. Bez zmiennej (systemd na serwerze,
+`streamlit run app.py` ręcznie) nic się nie zmienia. Sesje to prywatne API
+Streamlita — jeśli zniknie, watchdog się wyłącza zamiast zamykać serwer.
 
 ## Zapytania
 
