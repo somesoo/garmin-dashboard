@@ -12,6 +12,9 @@ RAW = DATA / "raw"
 TABLES = DATA / "tables"
 STATE_FILE = DATA / "state.json"
 INSIGHTS = ROOT / "insights"
+# Nights recorded on someone else's wrist: {"YYYY-MM-DD": "reason"}. Typed in
+# by hand (etl/exclude.py), so like data/coach/ it cannot be rebuilt from raw/.
+EXCLUDED_NIGHTS = DATA / "excluded_nights.json"
 # Override with GARMIN_TOKENSTORE when the home directory is not where the
 # tokens live - a systemd unit running as a service user, for instance.
 TOKENSTORE = os.getenv("GARMIN_TOKENSTORE", "~/.garminconnect")

@@ -62,6 +62,45 @@ def raw_days(metric: str) -> list[tuple[dt.date, Any]]:
     return out
 
 
+def excluded_nights() -> dict[dt.date, str]:
+    """Nights the owner did not sleep in the watch, keyed by Garmin's sleep day.
+
+    Garmin files a night under the morning it ends, so excluding ``2026-10-17``
+    drops the night of 16th -> 17th. Raw files stay untouched; the mask is
+    applied on every build, so removing an entry restores the night.
+    """
+    payload = read(config.EXCLUDED_NIGHTS)
+    out = {}
+    for key, reason in (payload if isinstance(payload, dict) else {}).items():
+        try:
+            out[dt.date.fromisoformat(key)] = str(reason or "")
+        except ValueError:
+            continue
+    return out
+
+
+# Daily columns that describe the night (or are computed by Garmin from it):
+# sleep itself, overnight HRV and SpO2, resting HR, wake-up Body Battery and
+# the readiness score built on top of them. Daytime activity stays.
+NIGHT_PREFIXES = ("sleep_", "hrv_", "readiness", "f_")
+NIGHT_COLUMNS = (
+    "overnight_hrv", "rhr", "spo2_avg", "sleeping_s", "bb_wake", "bb_charged",
+)
+
+
+def mask_nights(df: pd.DataFrame, nights: dict[dt.date, str]) -> pd.DataFrame:
+    """Blank night-derived columns on excluded days, before rolling baselines."""
+    df["night_excluded"] = df["day"].dt.date.isin(nights)
+    if not nights:
+        return df
+    columns = [
+        c for c in df.columns
+        if c.startswith(NIGHT_PREFIXES) or c in NIGHT_COLUMNS
+    ]
+    df.loc[df["night_excluded"], columns] = None
+    return df
+
+
 def _hours(seconds: Any) -> float | None:
     if isinstance(seconds, (int, float)) and seconds:
         return round(seconds / 3600, 2)
@@ -238,7 +277,7 @@ def build_daily() -> pd.DataFrame:
     if not races.empty:
         df = df.merge(races, on="day", how="left")
 
-    return add_derived(df)
+    return add_derived(mask_nights(df, excluded_nights()))
 
 
 def add_derived(df: pd.DataFrame) -> pd.DataFrame:
@@ -385,8 +424,9 @@ SLEEP_STAGES = {0.0: "deep", 1.0: "light", 2.0: "rem", 3.0: "awake"}
 def build_sleep_stages() -> pd.DataFrame:
     """Hypnogram segments: one row per sleep-stage block, in local time."""
     rows = []
+    skip = excluded_nights()
     for day, payload in raw_days("sleep"):
-        if not isinstance(payload, dict):
+        if not isinstance(payload, dict) or day in skip:
             continue
         dto = payload.get("dailySleepDTO") or {}
         shift = _offset(dto, "sleepStartTimestampGMT", "sleepStartTimestampLocal")
@@ -423,8 +463,9 @@ NIGHT_SERIES = {
 def build_night_series() -> pd.DataFrame:
     """Long-format overnight samples: heart rate, Body Battery, stress, HRV."""
     rows = []
+    skip = excluded_nights()
     for day, payload in raw_days("sleep"):
-        if not isinstance(payload, dict):
+        if not isinstance(payload, dict) or day in skip:
             continue
         dto = payload.get("dailySleepDTO") or {}
         shift = _offset(dto, "sleepStartTimestampGMT", "sleepStartTimestampLocal")
@@ -445,7 +486,7 @@ def build_night_series() -> pd.DataFrame:
                 )
 
     for day, payload in raw_days("hrv"):
-        if not isinstance(payload, dict):
+        if not isinstance(payload, dict) or day in skip:
             continue
         for reading in payload.get("hrvReadings") or []:
             if not isinstance(reading, dict):
@@ -745,6 +786,7 @@ def main() -> int:
         "intraday_rows": int(len(intraday)),
         "route_points": int(len(routes)),
         "routes": int(len(route_summary)),
+        "excluded_nights": sorted(str(d) for d in excluded_nights()),
     }
     config.STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     config.STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")

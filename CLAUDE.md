@@ -115,6 +115,12 @@ osie wykresów przez `scatter(pace_y=True)` / panel `"pace": True` /
 - **`load_ratio` (ACWR)** liczy Garmin, nie my. Bywa NULL, gdy brak 28 dni historii.
 - **Dni bez treningu nie istnieją w `activities`** — przy łączeniu z `daily` używaj
   `LEFT JOIN`, inaczej wycina się dni odpoczynku i wszystkie średnie są zawyżone.
+- **Noce na cudzym nadgarstku** wyklucza `python -m etl.exclude <dzień>` (dzień =
+  ranek, którym noc się kończy). Lista siedzi w `data/excluded_nights.json`
+  (ręczna, jak `data/coach/`); `etl/load.py` przy każdej budowie zeruje w `daily`
+  kolumny nocne (`sleep_*`, `hrv_*`, `readiness`, `f_*`, `rhr`, `bb_wake`…),
+  ustawia `night_excluded` i pomija te noce w `sleep_stages`/`night_series`.
+  Średnie Garmina z kolejnych dni (`hrv_weekly`, `rhr_7d`) nadal je zawierają.
 - Surowe pliki `data/raw/` są źródłem prawdy: zmiany w mapowaniu testuj przez
   `etl/load.py` (odbudowa od zera, bez odpytywania API).
 
