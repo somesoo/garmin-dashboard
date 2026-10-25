@@ -413,7 +413,7 @@ kolidują ścieżkami).
 Zasady układu, które trzymają spójność:
 
 - **Siatka bento (`bento.py`) na każdej stronie — pływające widgety.** Kanwa
-  (przyciemnione tło) to mozaika kart z cieniem na siatce 4 kolumn. Kafel
+  (czarne tło, jednolite grafitowe karty z cieniem) to mozaika na siatce 4 kolumn. Kafel
   zajmuje 1–4 kolumny (`bento.row(2, 2)`, `row(2, 1, 1)` — suma zawsze 4)
   i 1–3 rzędy (`bento.tile(..., rows=2)`). **Kafle nie mają stałej wysokości**
   (stała wysokość = ucięta treść albo przewijanie w środku); rzędy wyrównuje
@@ -459,8 +459,8 @@ Zasady układu, które trzymają spójność:
 - *Dziś* (`views/today.py`) jest stroną startową: decyzja dnia to
   `coach.next_session`, przyciski kafla wołają `plan.soften` / `plan.postpone`
   (pojedyncza sesja, z regułą „mocne dni nie sąsiadują”).
-- Glob w *Atlasie* zostaje poza kaflem (hero na pełną szerokość, z poświatą
-  `globe_stage`), reszta Atlasu to zwykła mozaika.
+- Glob w *Atlasie* zostaje poza kaflem (hero na pełną szerokość w `globe_stage`,
+  na płaskim tle — bez poświaty), reszta Atlasu to zwykła mozaika.
 - **Chrome w szynie bocznej**: nawigacja, jeden globalny zakres czasu
   (`shell.range_picker`) i status hurtowni (`shell.footer`). Kanwa nie
   rezerwuje miejsca na kontrolki.
