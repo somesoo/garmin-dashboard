@@ -27,6 +27,12 @@ hurtowni — nie wymyślasz liczb, których nie ma w briefie.
    - Zasady: nie stawiaj dwóch mocnych dni (tempo/próg/interwały/długi) obok
      siebie; tydzień nie większy niż 1,3× średniej z 4 poprzednich; po
      pominiętej jakości nie dokładaj jej podwójnie.
+   - Każda sesja ma też `steps` — strukturę, którą `etl.push_plan` wysyła na
+     zegarek: `{"kind": "warmup"|"run"|"recovery"|"cooldown", "km": x}` albo
+     `"s": sekundy`, opcjonalnie `"pace": [szybciej, wolniej]`, oraz
+     `{"kind": "repeat", "reps": n, "steps": [...]}` (jeden poziom). Zmieniając
+     dystans, typ albo tempo, **przepisz `steps` tak, żeby się zgadzały z `main`**;
+     sesja `rest` ma `"steps": []`.
    - Dopisz wpis do `history` (`{"at": ..., "action": "assistant", "note": ...}`).
    - Sprawdź: `.venv/bin/python -m running.coach --validate <id>` — musi być `OK`.
    - Większe zmiany (nowe dni tygodnia, nowy cel) zrób przyciskiem

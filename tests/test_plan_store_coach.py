@@ -74,6 +74,35 @@ class Generator(unittest.TestCase):
             for first, second in zip(hard, hard[1:]):
                 self.assertGreaterEqual((second - first).days, 2, (days, first, second))
 
+    def test_steps_cover_the_planned_distance(self):
+        for distance in ("5k", "hm", "m"):
+            plan = self.make(distance=distance, race=dt.date(2026, 8, 30))
+            easy = plan["paces"]["E"]
+            for session in plan["sessions"]:
+                if session["type"] == "rest":
+                    continue
+                self.assertTrue(session.get("steps"), session["title"])
+                covered = planning.steps_km(session["steps"], easy_pace=sum(easy) / 2)
+                if session["type"] == "race":
+                    continue  # warm-up jog is on top of the race distance
+                self.assertAlmostEqual(covered, session["distance_km"], delta=0.25 * session["distance_km"] + 0.3,
+                                       msg=session["title"])
+            self.assertEqual(store.validate_plan(plan), [])
+
+    def test_bad_steps_are_rejected(self):
+        self.assertEqual(store.validate_steps([{"kind": "run", "km": 5, "pace": [5.0, 5.2]}]), [])
+        bad = [
+            [{"kind": "sprint", "km": 1}],
+            [{"kind": "run"}],
+            [{"kind": "run", "km": 1, "s": 60}],
+            [{"kind": "run", "km": 1, "pace": [5.5, 5.0]}],
+            [{"kind": "repeat", "reps": 0, "steps": []}],
+            [{"kind": "repeat", "reps": 2, "steps": [{"kind": "repeat", "reps": 2, "steps": []}]}],
+            "3x1km",
+        ]
+        for steps in bad:
+            self.assertTrue(store.validate_steps(steps), steps)
+
     def test_only_chosen_days_are_used(self):
         plan = self.make(days=(1, 3, 6))
         weekdays = {dt.date.fromisoformat(s["date"]).weekday() for s in plan["sessions"] if s["type"] != "race"}

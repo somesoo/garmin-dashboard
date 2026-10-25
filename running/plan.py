@@ -234,6 +234,37 @@ QUALITY_BY_PHASE = {
 }
 
 
+def _step(kind: str, *, km: float | None = None, s: float | None = None,
+          pace: tuple[float, float] | None = None) -> dict[str, Any]:
+    """One workout step: a distance or a time, optionally a pace band (min/km)."""
+    step: dict[str, Any] = {"kind": kind}
+    if km is not None:
+        step["km"] = round(float(km), 2)
+    if s is not None:
+        step["s"] = int(round(s))
+    if pace:
+        step["pace"] = [round(float(pace[0]), 3), round(float(pace[1]), 3)]
+    return step
+
+
+def _repeat(reps: int, *steps: dict[str, Any]) -> dict[str, Any]:
+    return {"kind": "repeat", "reps": int(reps), "steps": list(steps)}
+
+
+def steps_km(steps: list[dict[str, Any]], easy_pace: float = 6.5) -> float:
+    """Distance a step list covers; timed steps are converted at ``easy_pace``."""
+    total = 0.0
+    for step in steps or []:
+        if step["kind"] == "repeat":
+            total += step["reps"] * steps_km(step["steps"], easy_pace)
+        elif "km" in step:
+            total += step["km"]
+        elif "s" in step:
+            pace = sum(step["pace"]) / 2 if step.get("pace") else easy_pace
+            total += step["s"] / 60 / pace
+    return round(total, 2)
+
+
 def _pace_text(band: tuple[float, float] | None) -> str:
     if not band:
         return "—"
@@ -276,6 +307,7 @@ def _session(
             main=f"{km:.1f} km ciągle w tempie {_pace_text(band)}" + (
                 ", na końcu 6×20 s przebieżek" if kind == "easy" and week["phase"] in ("build", "peak") else ""),
             cooldown="—",
+            steps=[_step("run", km=km, pace=band)],
             purpose=(
                 "Objętość tlenowa: buduje sieć naczyń włosowatych i ekonomię bez kosztu regeneracji. "
                 "Za szybko = zmęczenie bez dodatkowego bodźca."
@@ -285,9 +317,12 @@ def _session(
         )
     elif kind == "long":
         segment = ""
+        steps = [_step("run", km=km, pace=easy)]
         if race_pace and week["phase"] == "peak" and distance in ("hm", "m"):
             part = min(round(km * (0.35 if distance == "m" else 0.3)), 14 if distance == "m" else 8)
             segment = f"; ostatnie {part} km w tempie startowym {units.fmt_pace(race_pace)}"
+            steps = [_step("run", km=km - part, pace=easy),
+                     _step("run", km=part, pace=(race_pace * 0.99, race_pace * 1.01))]
         session.update(
             title=f"Długie wybieganie {km:.0f} km",
             distance_km=km,
@@ -297,6 +332,7 @@ def _session(
             warmup="pierwsze 2 km wolniej",
             main=f"{km:.1f} km w tempie {_pace_text(easy)}{segment}",
             cooldown="ostatni km trucht",
+            steps=steps,
             purpose=(
                 "Wytrzymałość specyficzna: glikogen, mięśnie i ścięgna przyzwyczajone do czasu na nogach. "
                 + ("Odcinek w tempie startowym uczy utrzymać je na zmęczeniu." if segment else
@@ -319,6 +355,9 @@ def _session(
             warmup="2 km spokojnie + 4 przebieżki",
             main=f"{reps}×{rep:g} km w tempie {_pace_text(band)}, przerwa 1 min truchtu",
             cooldown="1,5 km spokojnie",
+            steps=[_step("warmup", km=2.0, pace=easy),
+                   _repeat(reps, _step("run", km=rep, pace=band), _step("recovery", s=60)),
+                   _step("cooldown", km=1.5, pace=easy)],
             purpose=(
                 "Próg mleczanowy: najszybsze tempo, które utrzymasz ok. godziny. Podnosi tempo "
                 "dla 10 km i półmaratonu; 'komfortowo ciężko', nie na maksa."
@@ -338,6 +377,10 @@ def _session(
             warmup="2 km spokojnie + 4–6 przebieżek",
             main=f"{reps}×{rep * 1000:.0f} m w tempie {_pace_text(band)}, przerwa trucht równy czasowi odcinka",
             cooldown="1,5 km spokojnie",
+            steps=[_step("warmup", km=2.0, pace=easy),
+                   _repeat(reps, _step("run", km=rep, pace=band),
+                           _step("recovery", s=rep * (sum(band) / 2 if band else 5.0) * 60)),
+                   _step("cooldown", km=1.5, pace=easy)],
             purpose=(
                 "VO₂max: kilka minut łącznie blisko maksymalnego poboru tlenu. Największy bodziec "
                 "dla 5 i 10 km; tempo równe na wszystkich powtórzeniach ważniejsze niż szybkie pierwsze."
@@ -357,6 +400,8 @@ def _session(
             warmup="2 km spokojnie",
             main=f"{work:.0f} km ciągle w tempie {_pace_text(band)}",
             cooldown="1,5 km spokojnie",
+            steps=[_step("warmup", km=2.0, pace=easy), _step("run", km=round(work, 1), pace=band),
+                   _step("cooldown", km=1.5, pace=easy)],
             purpose=(
                 "Wytrzymałość tempowa: długi, równy wysiłek poniżej progu. W fazie specyfiki — "
                 "w tempie startowym, żeby je zautomatyzować."
@@ -374,6 +419,9 @@ def _session(
             warmup="10–15 min truchtu + 3 przebieżki" if distance in ("5k", "10k") else "5–10 min truchtu",
             main=f"{units.RACE_LABELS[distance]} — pierwszy kilometr nie szybciej niż planowane tempo",
             cooldown="trucht i marsz",
+            steps=[_step("warmup", s=600 if distance in ("5k", "10k") else 420),
+                   _step("run", km=units.RACES[distance],
+                         pace=(race_pace * 0.99, race_pace * 1.01) if race_pace else None)],
             purpose="Dzień, do którego prowadzi plan.",
         )
     session["duration_min"] = (
@@ -734,7 +782,7 @@ def adjust(plan: dict[str, Any], reason: str, today: dt.date | None = None) -> d
         if not today <= date < horizon or session.get("status") != "planned" or session["type"] == "race":
             continue
         if reason == "sick" and date < today + dt.timedelta(days=4):
-            session.update(type="rest", title="Odpoczynek (choroba)", distance_km=0.0, duration_min=0,
+            session.update(type="rest", title="Odpoczynek (choroba)", distance_km=0.0, duration_min=0, steps=[],
                            main="bez biegania", purpose="Przy infekcji bieganie wydłuża chorobę i nie buduje formy.")
         elif reason in ("sick", "fatigue"):
             factor = 0.8
@@ -745,10 +793,16 @@ def adjust(plan: dict[str, Any], reason: str, today: dt.date | None = None) -> d
                 session.update(type="easy", title=f"Spokojny {km:.0f} km (korekta)",
                                pace_lo=easy[0] if easy else None, pace_hi=easy[1] if easy else None,
                                main=f"{km:.1f} km spokojnie", warmup="—", cooldown="—")
+            if session["type"] == "long" and session.get("steps"):
+                session["steps"] = _scale_steps(session["steps"], factor)
+            else:
+                session["steps"] = [_step("run", km=km, pace=easy)]
             session["distance_km"] = km
             session["purpose"] = "Korekta planu: najpierw regeneracja, jakość wraca, gdy wróci świeżość."
         else:  # busy
             session["distance_km"] = round((session.get("distance_km") or 0) * 0.7, 1)
+            if session.get("steps"):
+                session["steps"] = _scale_steps(session["steps"], 0.7)
         session["note"] = (session.get("note") or "") + f" [{ADJUSTMENTS[reason]}]"
         changed.append(session["id"])
     plan["history"] = list(plan.get("history", [])) + [
@@ -775,6 +829,7 @@ def soften(plan: dict[str, Any], session_id: str, today: dt.date | None = None) 
     session.update(type="easy", title=f"Spokojny {km:.0f} km (zamiast: {before})", distance_km=km,
                    pace_lo=easy[0] if easy else None, pace_hi=easy[1] if easy else None,
                    warmup="—", main=f"{km:.1f} km spokojnie", cooldown="—",
+                   steps=[_step("run", km=km, pace=easy)],
                    purpose="Regeneracja nie pozwalała na jakość; spokojny bieg utrzymuje objętość bez długu zmęczenia.")
     session["note"] = (session.get("note") or "") + f" [zmiękczone z „{before}”]"
     _log(plan, "soften", session_id)
@@ -813,6 +868,20 @@ def postpone(plan: dict[str, Any], session_id: str, today: dt.date | None = None
     plan["sessions"] = sorted(plan["sessions"], key=lambda s: s["date"])
     _log(plan, "postpone", session_id)
     return plan
+
+
+def _scale_steps(steps: list[dict[str, Any]], factor: float) -> list[dict[str, Any]]:
+    """Shorter version of the same workout: the work shrinks, warm-up and
+    cool-down stay (a shorter warm-up before quality is a false saving)."""
+    out = []
+    for step in steps:
+        step = dict(step)
+        if step["kind"] == "repeat":
+            step["reps"] = max(1, round(step["reps"] * factor))
+        elif step["kind"] == "run" and "km" in step:
+            step["km"] = round(step["km"] * factor, 1)
+        out.append(step)
+    return out
 
 
 def _find(plan: dict[str, Any], session_id: str) -> dict[str, Any]:

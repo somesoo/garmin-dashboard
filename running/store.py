@@ -146,6 +146,48 @@ def validate_plan(plan: dict[str, Any]) -> list[str]:
         km = session.get("distance_km")
         if km is not None and (not isinstance(km, (int, float)) or km < 0 or km > 60):
             errors.append(f"{where}: dystans {km!r} poza zakresem 0–60 km.")
+        if "steps" in session:
+            errors.extend(f"{where}: {e}" for e in validate_steps(session["steps"]))
+    return errors
+
+
+STEP_KINDS = ("warmup", "run", "recovery", "cooldown")
+
+
+def validate_steps(steps: Any, nested: bool = False) -> list[str]:
+    """Optional structured workout: ``[{"kind", "km" | "s", "pace": [lo, hi]}]``
+    plus ``{"kind": "repeat", "reps", "steps": [...]}`` one level deep."""
+    if not isinstance(steps, list):
+        return ["`steps` musi być listą."]
+    errors = []
+    for number, step in enumerate(steps, 1):
+        where = f"krok {number}"
+        if not isinstance(step, dict):
+            errors.append(f"{where}: to nie jest obiekt.")
+            continue
+        if step.get("kind") == "repeat":
+            if nested:
+                errors.append(f"{where}: powtórzenie w powtórzeniu.")
+            reps = step.get("reps")
+            if not isinstance(reps, int) or not 1 <= reps <= 30:
+                errors.append(f"{where}: `reps` {reps!r} poza 1–30.")
+            errors.extend(f"{where}/{e}" for e in validate_steps(step.get("steps"), nested=True))
+            continue
+        if step.get("kind") not in STEP_KINDS:
+            errors.append(f"{where}: rodzaj {step.get('kind')!r} spoza {STEP_KINDS + ('repeat',)}.")
+        km, seconds = step.get("km"), step.get("s")
+        if (km is None) == (seconds is None):
+            errors.append(f"{where}: podaj dokładnie jedno z `km` albo `s`.")
+        elif km is not None and (not isinstance(km, (int, float)) or not 0 < km <= 60):
+            errors.append(f"{where}: `km` {km!r} poza 0–60.")
+        elif seconds is not None and (not isinstance(seconds, (int, float)) or not 0 < seconds <= 6 * 3600):
+            errors.append(f"{where}: `s` {seconds!r} poza 0–21600.")
+        pace = step.get("pace")
+        if pace is not None and not (
+            isinstance(pace, list) and len(pace) == 2 and all(isinstance(v, (int, float)) for v in pace)
+            and 2.5 <= pace[0] <= pace[1] <= 15
+        ):
+            errors.append(f"{where}: `pace` {pace!r} — oczekiwane [szybciej, wolniej] w min/km, 2,5–15.")
     return errors
 
 

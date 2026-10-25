@@ -290,7 +290,9 @@ def brief(
         "how_to_change_the_plan": (
             "Plan to plik data/coach/plans/<id>.json. Zmieniaj tylko sesje z datą >= dziś; "
             "pola: type ∈ " + ", ".join(store.SESSION_TYPES) + ", distance_km, pace_lo/pace_hi (min/km), "
-            "main, purpose, note. Po edycji: .venv/bin/python -m running.coach --validate <id>."
+            "main, purpose, note, steps (kroki dla zegarka: [{kind: warmup|run|recovery|cooldown, km albo s, "
+            "pace: [lo, hi]}, {kind: repeat, reps, steps: [...]}] — zmieniając sesję, zmień też steps, "
+            "inaczej zegarek dostanie starą wersję). Po edycji: .venv/bin/python -m running.coach --validate <id>."
         ),
     }
     if active:
