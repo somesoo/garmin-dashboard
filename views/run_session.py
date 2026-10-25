@@ -132,6 +132,10 @@ def _structure(run: pd.Series) -> None:
             if figure is not None:
                 tz.pace_axis(figure, pd.Series([r["pace"] for r in reps]))
                 figure.update_xaxes(title_text="odcinek", dtick=1)
+                # Pace is stored as decimal minutes (4.36); the hover must say 4:22, like the splits.
+                figure.update_traces(customdata=[[units.fmt_pace(r["pace"]), r["km"], r["hr"] or "—"] for r in reps],
+                                     hovertemplate="odcinek %{x}: %{customdata[0]} · %{customdata[1]} km"
+                                                   " · tętno %{customdata[2]}<extra></extra>")
             t.chart(figure, table=table)
             return
         segments = shell.table("activity_segments")
