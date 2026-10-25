@@ -310,3 +310,44 @@ class Coach(TempStore):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def laps_frame(activity_id, rows):
+    """rows: (intensity, step_index, metres, seconds)"""
+    return pd.DataFrame([
+        {"activity_id": activity_id, "lap": i + 1, "intensity": kind, "step_index": step, "distance_m": m,
+         "duration_s": s, "avg_hr": 170}
+        for i, (kind, step, m, s) in enumerate(rows)
+    ])
+
+
+class Laps(unittest.TestCase):
+    def test_auto_laps_of_one_rep_are_merged(self):
+        # 2026-10-13 shape: 1.2 km reps cut by auto-lap into 1000 m + 200 m.
+        laps = laps_frame(1, [("warmup", 0, 1000, 470), ("active", 1, 1000, 261), ("active", 1, 200, 53),
+                              ("recovery", 2, 330, 150), ("active", 1, 1000, 268), ("active", 1, 200, 52),
+                              ("cooldown", 3, 1000, 420)])
+        blocks = planning.rep_blocks(laps)
+        self.assertEqual([b["km"] for b in blocks], [1.2, 1.2])
+        self.assertAlmostEqual(blocks[0]["pace"], (261 + 53) / 60 / 1.2, places=3)
+
+    def test_plain_run_has_no_reps(self):
+        laps = laps_frame(1, [("active", None, 1000, 360)] * 5)
+        self.assertEqual(planning.rep_blocks(laps), [])
+
+    def test_match_counts_reps_on_pace(self):
+        session = {"id": "s1", "date": "2026-03-03", "type": "intervals", "status": "planned", "title": "I",
+                   "distance_km": 8.0, "steps": [
+                       {"kind": "warmup", "km": 2.0},
+                       {"kind": "repeat", "reps": 4, "steps": [{"kind": "run", "km": 1.0, "pace": [4.5, 4.6]},
+                                                               {"kind": "recovery", "s": 270}]},
+                       {"kind": "cooldown", "km": 1.5}]}
+        runs = sessions.select_runs(activities([run(7, "2026-03-03", 8.0, 5.5)])).assign(kind="intervals")
+        reps = [("warmup", 0, 2000, 720)]
+        for seconds in (272, 275, 290):  # 4:32, 4:35 on pace; 4:50 too slow; 4th rep not run
+            reps += [("active", 1, 1000, seconds), ("recovery", 2, 600, 270)]
+        laps = laps_frame(7, reps)
+        row = planning.match({"sessions": [session]}, runs, dt.date(2026, 3, 4), laps=laps).iloc[0]
+        self.assertEqual((row["reps_planned"], row["reps_done"], row["reps_on_pace"]), (4, 3, 2))
+        without = planning.match({"sessions": [session]}, runs, dt.date(2026, 3, 4)).iloc[0]
+        self.assertNotIn("reps_done", without.index)

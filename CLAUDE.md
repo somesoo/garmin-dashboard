@@ -439,6 +439,7 @@ Tabele (materializuje je `analytics.main` przez `running.pipeline.build`):
 | tabela | ziarno | zawartość |
 |---|---|---|
 | `activity_segments` | aktywność + faza | `splitSummaries` z ETL: `INTERVAL_WARMUP/ACTIVE/RECOVERY/COOLDOWN` (workout z zegarka), `RWD_*` |
+| `run_laps` | bieg + okrążenie | z ETL: `distance_m`, `duration_s`, `pace_min_km`, `avg_hr`, `cadence` (×2), `intensity` (warmup/active/recovery/rest/cooldown), `step_index` |
 | `run_sessions` | bieg | kolumny `activities` + `kind` (recovery/easy/long/tempo/threshold/intervals/race), `kind_reason`, `kind_confidence`, `hr_max_used` |
 | `run_splits` | bieg + km | splity ze strumienia próbek (czas stopera `duration_s`), tętno, przewyższenie, kadencja (kroki obu nóg) |
 | `run_efforts` | bieg + dystans | najlepsze odcinki (1 km…maraton, blok workoutu), źródło, `vdot`, `hr_frac`, `near_max` |
@@ -468,8 +469,18 @@ Pułapki:
   dostaje `kind = race` po przeliczeniu (`running.pipeline.rebuild`).
 - **HRmax to trzecie najwyższe maksimum biegów** (192), bo 201/196 to skoki
   czujnika. Etykiety typu treningu zależą od niego.
-- **Splity są ze strumienia ~400 próbek**, nie z okrążeń (lapów nie pobieramy):
-  dokładność kilku sekund. `directRunCadence` liczy jedną nogę — mnożone ×2.
+- **Splity kilometrowe są ze strumienia ~400 próbek**: dokładność kilku sekund.
+  `directRunCadence` liczy jedną nogę — mnożone ×2 (tak samo kadencja okrążeń).
+- **Okrążenia** (`get_activity_splits`, raz na bieg → `data/raw/splits/`, tabela
+  `run_laps`) są jedynym dokładnym zapisem odcinków workoutu. Auto-lap tnie
+  powtórzenie 1,2 km na 1000 + 200 m, więc powtórzenie = kolejne okrążenia
+  `active` z tym samym `step_index` (`plan.rep_blocks`). Bieg bez okrążeń
+  warmup/recovery nie był workoutem z zegarka i nie ma powtórzeń.
+  `plan.match(..., laps=)` dokłada do sesji jakości `reps_planned/done/on_pace`
+  (±3% od pasma) i `rep_paces`.
+- **Endurance score, hill score i próg mleczanowy (tempo/tętno) są u tego
+  użytkownika puste** (sprawdzone 2026-10-25; jest tylko przestarzałe FTP
+  biegowe). Nie dodawaj ich do hurtowni, dopóki zegarek ich nie liczy.
 - Tempo/próg wymaga też **tempa** bliskiego M/T dla VDOT z tego dnia; wysokie
   tętno przy spokojnym tempie (upał) zostaje biegiem spokojnym z adnotacją.
 - `data/coach/` to stan wpisany ręcznie — nie da się go odbudować z `raw/`.

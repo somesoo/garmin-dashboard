@@ -27,6 +27,7 @@ BASE_TABLES = (
     "routes",
     "route_summary",
     "activity_segments",
+    "run_laps",
 )
 DERIVED_TABLES = (
     "pmc",

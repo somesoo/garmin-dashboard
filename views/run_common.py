@@ -163,7 +163,7 @@ def download_brief(prefix: str) -> None:
     frame = runs()
     if frame.empty:
         return
-    data = coach.brief(frame, efforts(), shell.daily())
+    data = coach.brief(frame, efforts(), shell.daily(), laps=shell.table("run_laps"))
     columns = st.columns(2)
     columns[0].download_button(
         "Brief (Markdown)", coach.markdown(data), file_name=f"brief-{dt.date.today()}.md",
@@ -210,7 +210,7 @@ def week_strip(active: dict[str, Any] | None, frame: pd.DataFrame, today: dt.dat
     monday = today - dt.timedelta(days=today.weekday())
     cells: dict[dt.date, list[str]] = {}
     if active is not None:
-        matched = planning.match(active, frame, today)
+        matched = planning.match(active, frame, today, laps=shell.table("run_laps"))
         for row in matched.itertuples(index=False) if not matched.empty else []:
             if monday <= row.date < monday + dt.timedelta(days=7):
                 text = f"{STATUS_ICONS.get(row.effective, '·')} {row.title}"

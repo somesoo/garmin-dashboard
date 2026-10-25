@@ -202,7 +202,8 @@ def observations(runs: pd.DataFrame, history: pd.DataFrame, today: dt.date) -> l
     return out
 
 
-def data_gaps(runs: pd.DataFrame, daily: pd.DataFrame, result: dict[str, Any]) -> list[str]:
+def data_gaps(runs: pd.DataFrame, daily: pd.DataFrame, result: dict[str, Any],
+              laps: pd.DataFrame | None = None) -> list[str]:
     """What the analysis cannot see -- said explicitly so nobody fills it in."""
     gaps = []
     if runs is None or runs.empty:
@@ -214,13 +215,22 @@ def data_gaps(runs: pd.DataFrame, daily: pd.DataFrame, result: dict[str, Any]) -
         gaps.append("Żaden bieg nie jest oznaczony jako start — prognoza opiera się na odcinkach treningowych. "
                     "Wynik z zawodów dopisz na stronie Zawody (powiązanie z aktywnością).")
     gaps.append("Odczuwane zmęczenie (RPE), ból i dolegliwości nie są zapisywane — nie ma ich w Garminie.")
-    gaps.append("Okrążenia (laps) nie są pobierane; splity kilometrowe są liczone ze strumienia ~400 próbek "
-                "na trening (dokładność kilku sekund).")
+    if laps is None or laps.empty:
+        gaps.append("Okrążenia (laps) nie są pobrane — uruchom aktualizację; do tego czasu splity kilometrowe "
+                    "są ze strumienia ~400 próbek (dokładność kilku sekund), a odcinki workoutów nieocenione.")
+    else:
+        gaps.append("Splity kilometrowe są ze strumienia ~400 próbek (kilka sekund dokładności). Dokładne są "
+                    "tylko okrążenia — odcinki workoutów z zegarka (`reps_*` w realizacji planu).")
     if daily is None or daily.empty or "hrv_status" not in daily.columns:
         gaps.append("Brak HRV / gotowości — sygnały regeneracji pominięte.")
     if result.get("status") != "ok":
         gaps.append(str(result.get("reason")))
     return gaps
+
+
+def _present(value: Any) -> bool:
+    """Drops the NaN a rep column has for sessions without laps."""
+    return isinstance(value, list) or not pd.isna(value)
 
 
 def _session_brief(session: dict[str, Any]) -> dict[str, Any]:
@@ -238,6 +248,7 @@ def brief(
     *,
     today: dt.date | None = None,
     plan_id: str | None = None,
+    laps: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """Everything an assistant needs, as plain JSON-serialisable data."""
     today = today or dt.date.today()
@@ -286,7 +297,7 @@ def brief(
         "races": races,
         "plan": None,
         "next_session": None,
-        "data_gaps": data_gaps(runs, daily, result),
+        "data_gaps": data_gaps(runs, daily, result, laps),
         "how_to_change_the_plan": (
             "Plan to plik data/coach/plans/<id>.json. Zmieniaj tylko sesje z datą >= dziś; "
             "pola: type ∈ " + ", ".join(store.SESSION_TYPES) + ", distance_km, pace_lo/pace_hi (min/km), "
@@ -296,7 +307,7 @@ def brief(
         ),
     }
     if active:
-        matched = planning.match(active, runs, today)
+        matched = planning.match(active, runs, today, laps=laps)
         out["plan"] = {
             "id": active["id"],
             "name": active.get("name"),
@@ -306,7 +317,8 @@ def brief(
             "compliance": planning.compliance(matched),
             "last_14_days": [
                 {k: (v.isoformat() if isinstance(v, dt.date) else v) for k, v in row.items()
-                 if k in ("date", "type", "title", "planned_km", "actual_km", "actual_kind", "effective")}
+                 if k in ("date", "type", "title", "planned_km", "actual_km", "actual_kind", "effective",
+                          "reps_planned", "reps_done", "reps_on_pace", "rep_paces") and _present(v)}
                 for row in matched[(matched["date"] < today) & (matched["date"] >= today - dt.timedelta(days=14))]
                 .to_dict("records")
             ] if not matched.empty else [],
@@ -420,7 +432,9 @@ def main(argv: list[str] | None = None) -> int:
     if runs.empty:
         print("Brak tabeli run_sessions — uruchom analytics.py.")
         return 1
-    data = brief(runs, efforts, daily, plan_id=args.plan)
+    import db
+
+    data = brief(runs, efforts, daily, plan_id=args.plan, laps=db.table("run_laps"))
     print(json.dumps(data, indent=2, ensure_ascii=False, default=str) if args.json else markdown(data))
     return 0
 

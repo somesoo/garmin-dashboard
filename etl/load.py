@@ -642,6 +642,45 @@ def build_segments() -> pd.DataFrame:
     return pd.DataFrame(rows, columns=columns)
 
 
+def build_laps() -> pd.DataFrame:
+    """One row per recorded lap of a run (data/raw/splits/).
+
+    ``intensity`` is the watch's step type for a structured workout (warmup /
+    active / recovery / rest / cooldown) and ``active`` for a plain run;
+    ``step_index`` ties laps of one workout step together, because auto-lap
+    cuts a 1.2 km rep into 1000 m + 200 m laps. Cadence is doubled like in the
+    detail streams (Garmin reports one leg).
+    """
+    folder = config.RAW / "splits"
+    columns = ["activity_id", "lap", "start_utc", "distance_m", "duration_s", "moving_s", "pace_min_km",
+               "avg_hr", "max_hr", "cadence", "elevation_gain_m", "intensity", "step_index"]
+    if not folder.is_dir():
+        return pd.DataFrame(columns=columns)
+    rows = []
+    for path in sorted(folder.glob("*.json")):
+        payload = read(path)
+        laps = payload.get("lapDTOs") if isinstance(payload, dict) else None
+        for lap in laps or []:
+            distance, duration = lap.get("distance"), lap.get("duration")
+            cadence = lap.get("averageRunCadence")
+            rows.append({
+                "activity_id": int(path.stem),
+                "lap": lap.get("lapIndex"),
+                "start_utc": _parse_ts(lap.get("startTimeGMT")),
+                "distance_m": distance,
+                "duration_s": duration,
+                "moving_s": lap.get("movingDuration"),
+                "pace_min_km": duration / 60 / (distance / 1000) if distance and duration and distance > 0 else None,
+                "avg_hr": lap.get("averageHR"),
+                "max_hr": lap.get("maxHR"),
+                "cadence": cadence * 2 if cadence else None,
+                "elevation_gain_m": lap.get("elevationGain"),
+                "intensity": str(lap.get("intensityType") or "ACTIVE").lower(),
+                "step_index": lap.get("wktStepIndex"),
+            })
+    return pd.DataFrame(rows, columns=columns)
+
+
 def build_routes() -> tuple[pd.DataFrame, pd.DataFrame]:
     """GPS tracks with the sensor streams aligned to each point.
 
@@ -763,6 +802,7 @@ def main() -> int:
     write_table(daily, "daily")
     write_table(activities, "activities")
     write_table(build_segments(), "activity_segments")
+    write_table(build_laps(), "run_laps")
 
     # Intraday tables: hypnograms, overnight series, full-day 3-minute samples.
     stages = build_sleep_stages()

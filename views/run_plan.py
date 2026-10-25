@@ -66,7 +66,7 @@ def render() -> None:
         st.error("Plik planu nie przechodzi walidacji: " + " ".join(errors[:3]))
         return
 
-    matched = planning.match(active, frame)
+    matched = planning.match(active, frame, laps=shell.table("run_laps"))
     _header(active, result, matched)
     _next(active, frame, result)
     _weekly_chart(active, frame)
@@ -292,6 +292,12 @@ def _week(active: dict, matched: pd.DataFrame) -> None:
                 st.caption(f"Wykonanie: {row.actual_km:.1f} km w {units.fmt_pace(row.actual_pace)}, "
                            f"rozpoznany typ „{rc.kind_label(row.actual_kind)}” — automatycznie: "
                            f"{STATUS_LABELS.get(row.auto, row.auto)}.")
+                done = getattr(row, "reps_done", None)
+                if done is not None and not pd.isna(done):
+                    paces = ", ".join(units.fmt_pace(p, False) for p in row.rep_paces)
+                    on_pace = "" if pd.isna(row.reps_on_pace) else f", w tempie {row.reps_on_pace:.0f}"
+                    st.caption(f"Odcinki z okrążeń zegarka: {done:.0f}/{row.reps_planned:.0f}{on_pace} "
+                               f"(±3% od pasma) — {paces}.")
                 if st.button("Otwórz trening", key=f"plan_open_{row.id}"):
                     routing.open_run(int(row.activity_id))
             elif row.auto == "missed":

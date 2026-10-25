@@ -615,14 +615,68 @@ COMPATIBLE = {
 }
 
 
-def match(plan: dict[str, Any], runs: pd.DataFrame, today: dt.date | None = None) -> pd.DataFrame:
+PACE_TOLERANCE = 0.03  # a rep within 3% of the band counts as on pace: GPS noise on 1 km is ~1-2%
+
+
+def rep_blocks(laps: pd.DataFrame) -> list[dict[str, Any]]:
+    """Work reps of one structured run, from its laps.
+
+    A rep is a run of consecutive ``active`` laps of the same workout step:
+    auto-lap splits a 1.2 km rep into 1000 m + 200 m, and both belong to it.
+    A run without any warm-up / recovery laps was not a watch workout, so it
+    has no reps to compare -- the whole run would be one "rep".
+    """
+    if laps is None or laps.empty or not laps["intensity"].isin(("warmup", "recovery", "rest", "cooldown")).any():
+        return []
+    blocks: list[dict[str, Any]] = []
+    previous = None
+    for lap in laps.sort_values("lap").itertuples(index=False):
+        if lap.intensity != "active" or not lap.distance_m:
+            previous = None
+            continue
+        key = lap.step_index
+        if previous is not None and key == previous and blocks:
+            block = blocks[-1]
+        else:
+            block = {"distance_m": 0.0, "duration_s": 0.0, "hr_s": 0.0}
+            blocks.append(block)
+        block["distance_m"] += float(lap.distance_m)
+        block["duration_s"] += float(lap.duration_s or 0)
+        block["hr_s"] += float(lap.avg_hr or 0) * float(lap.duration_s or 0)
+        previous = key
+    out = []
+    for block in blocks:
+        if block["distance_m"] < 100 or block["duration_s"] <= 0:
+            continue
+        out.append({
+            "km": round(block["distance_m"] / 1000, 2),
+            "pace": block["duration_s"] / 60 / (block["distance_m"] / 1000),
+            "hr": round(block["hr_s"] / block["duration_s"]) if block["hr_s"] else None,
+        })
+    return out
+
+
+def planned_reps(steps: list[dict[str, Any]] | None) -> tuple[int, tuple[float, float] | None]:
+    """How many work reps a session asks for, and their pace band."""
+    for step in steps or []:
+        if step["kind"] == "repeat":
+            work = next((s for s in step["steps"] if s["kind"] == "run"), None)
+            return step["reps"], tuple(work["pace"]) if work and work.get("pace") else None
+    work = [s for s in steps or [] if s["kind"] == "run" and s.get("pace")]
+    return (1, tuple(work[-1]["pace"])) if work else (0, None)
+
+
+def match(plan: dict[str, Any], runs: pd.DataFrame, today: dt.date | None = None,
+          laps: pd.DataFrame | None = None) -> pd.DataFrame:
     """Each planned session next to the run that fulfilled it (if any).
 
     A run matches a session on the same date first, then one day either side
     (a session moved by a day is still the same session). A stored status set
-    by hand wins over the automatic one.
+    by hand wins over the automatic one. With ``laps`` (table ``run_laps``),
+    quality sessions are also compared rep by rep.
     """
     today = today or dt.date.today()
+    by_activity = dict(tuple(laps.groupby("activity_id"))) if laps is not None and not laps.empty else {}
     rows = []
     used: set[int] = set()
     sessions = [s for s in plan.get("sessions", []) if s.get("type") != "rest"]
@@ -654,8 +708,28 @@ def match(plan: dict[str, Any], runs: pd.DataFrame, today: dt.date | None = None
                     chosen = near[0]
                     used.add(int(chosen.activity_id))
                     break
-        rows.append(_compare(session, date, chosen, today))
+        row = _compare(session, date, chosen, today)
+        if chosen is not None and session.get("type") in ("tempo", "threshold", "intervals"):
+            row.update(_compare_reps(session, by_activity.get(int(chosen.activity_id))))
+        rows.append(row)
     return pd.DataFrame(rows)
+
+
+def _compare_reps(session: dict[str, Any], laps: pd.DataFrame | None) -> dict[str, Any]:
+    planned, band = planned_reps(session.get("steps"))
+    blocks = rep_blocks(laps)
+    if not planned or not blocks:
+        return {}
+    on_pace = None
+    if band:
+        low, high = band[0] * (1 - PACE_TOLERANCE), band[1] * (1 + PACE_TOLERANCE)
+        on_pace = sum(1 for b in blocks if low <= b["pace"] <= high)
+    return {
+        "reps_planned": planned,
+        "reps_done": len(blocks),
+        "reps_on_pace": on_pace,
+        "rep_paces": [round(b["pace"], 3) for b in blocks],
+    }
 
 
 def _compare(session: dict[str, Any], date: dt.date, run: Any, today: dt.date) -> dict[str, Any]:

@@ -141,6 +141,49 @@ def known_activity_ids() -> list[str]:
     return [key for key, _ in sorted(ids.items(), key=lambda kv: kv[1], reverse=True)]
 
 
+def running_activity_ids() -> list[str]:
+    """Ids of runs (any ``*running`` type) from the raw monthly files, newest first."""
+    folder = config.RAW / "activities"
+    if not folder.is_dir():
+        return []
+    ids: dict[str, str] = {}
+    for path in sorted(folder.glob("*.json"), reverse=True):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        for activity in payload or []:
+            if not isinstance(activity, dict) or not activity.get("activityId"):
+                continue
+            kind = str((activity.get("activityType") or {}).get("typeKey") or "")
+            if "running" in kind:
+                ids[str(activity["activityId"])] = str(activity.get("startTimeLocal") or "")
+    return [key for key, _ in sorted(ids.items(), key=lambda kv: kv[1], reverse=True)]
+
+
+def fetch_laps(api: Garmin, limit: int | None = None) -> int:
+    """Laps of every run, once: data/raw/splits/<activity_id>.json.
+
+    Laps are what the watch recorded per workout step (and per auto-lap), so
+    they are the only exact record of interval reps -- the detail stream is
+    downsampled to ~400 points. Like the details, a lap file never changes.
+    """
+    folder = config.RAW / "splits"
+    folder.mkdir(parents=True, exist_ok=True)
+    pending = [i for i in running_activity_ids() if not (folder / f"{i}.json").exists()]
+    if limit:
+        pending = pending[:limit]
+    if not pending:
+        return 0
+    log(f"  okrazenia biegow: {len(pending)} do pobrania (~{len(pending) * config.THROTTLE / 60:.0f} min)")
+    for index, activity_id in enumerate(pending, start=1):
+        write_json(folder / f"{activity_id}.json", call(api, "get_activity_splits", activity_id))
+        if index % 25 == 0:
+            log(f"    {index}/{len(pending)}")
+        time.sleep(config.THROTTLE)
+    return len(pending)
+
+
 def fetch_details(api: Garmin, limit: int | None = None) -> int:
     """Fetch GPS tracks and sensor streams for activities missing them.
 
@@ -193,6 +236,7 @@ def run(start: dt.date, end: dt.date, load_every: int = 0, details: bool = True)
     fetch_monthly(api, start, end)
     if details:
         fetch_details(api)
+        fetch_laps(api)
 
     done_days = 0
     last_day: dt.date | None = None
