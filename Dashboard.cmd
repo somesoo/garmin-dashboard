@@ -20,6 +20,11 @@ echo == Aktualizacja danych z Garmin Connect ==
 "%PY%" "%HERE%etl\run.py" %*
 if errorlevel 2 goto :token_expired
 
+rem A server left running across a code change keeps old modules loaded;
+rem stop it so the check below starts a fresh one.
+"%PY%" "%HERE%serve.py" --stop-if-stale
+ping -n 2 127.0.0.1 >nul
+
 rem Port check via PowerShell: netstat output columns differ between locales.
 powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort %PORT% -State Listen -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }"
 if errorlevel 1 goto :start_server

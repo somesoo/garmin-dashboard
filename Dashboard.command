@@ -30,6 +30,10 @@ if [ $? -eq 2 ]; then
     exit 2
 fi
 
+# A server left running across a code change keeps old modules loaded;
+# stop it so the check below starts a fresh one (serve.py --stop-if-stale).
+"$PY" "$HERE/serve.py" --stop-if-stale
+
 if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
     echo "== Serwer juz dziala na $URL =="
 else

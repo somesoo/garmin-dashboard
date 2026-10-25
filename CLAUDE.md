@@ -67,7 +67,12 @@ Serwer **nie chodzi w nieskończoność**: `lifecycle.py` liczy aktywne sesje
 Streamlita i po `GARMIN_IDLE_EXIT_MIN` minutach (domyślnie 5) bez żadnej
 otwartej karty wysyła sobie SIGTERM. Licznik startuje z procesem, więc serwer,
 którego nikt nie otworzył, też gaśnie. Bez zmiennej (systemd na serwerze,
-`streamlit run app.py` ręcznie) nic się nie zmienia. Sesje to prywatne API
+`streamlit run app.py` ręcznie) nic się nie zmienia. Serwer zostawiony otwarty przez zmianę
+kodu trzyma stare moduły (Streamlit przeładowuje tylko `app.py`; bez
+`watchdog` nie obserwuje importów) i sypie `module 'shell' has no attribute …`
+— dlatego `serve.py` zapisuje przy starcie `data/server.json` (pid + najnowszy
+mtime kodu), a launchery najpierw wołają `serve.py --stop-if-stale`, które
+zatrzymuje serwer starszy niż kod; zwykłe sprawdzenie portu startuje wtedy nowy. Sesje to prywatne API
 Streamlita — jeśli zniknie, watchdog się wyłącza zamiast zamykać serwer.
 
 ## Zapytania
