@@ -88,16 +88,7 @@ def _forecast_strip() -> None:
         "i założenia — na stronie Prognoza.",
         terms=["realistic", "interval80", "confidence"],
     )
-    if result.get("status") != "ok":
-        st.caption(result.get("reason", "Brak prognozy."))
-        return
-    columns = st.columns(4)
-    for column, (key, item) in zip(columns, result["distances"].items()):
-        column.metric(units.RACE_LABELS[key], units.fmt_time(item.realistic_s))
-        column.caption(
-            f"{units.fmt_time(item.low_s)}–{units.fmt_time(item.high_s)} · {units.fmt_pace(item.pace)}  \n"
-            f"pewność {item.confidence} {rc.CONFIDENCE_ICON[item.confidence]}"
-        )
+    rc.forecast_tiles(result)
     if st.button("Szczegóły prognozy →", key="overview_to_forecast"):
         routing.goto("prognoza")
 

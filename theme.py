@@ -997,6 +997,56 @@ def trend(
     return polish_dates(fig, data[x])
 
 
+def spark(
+    frame: pd.DataFrame,
+    x: str,
+    column: str,
+    *,
+    smooth: str | None = None,
+    band: tuple[str, str] | None = None,
+    unit: str = "",
+    decimals: int = 0,
+    height: int = 74,
+) -> go.Figure | None:
+    """Card-sized ``trend``: no axes, no grid, the last value at the end.
+
+    Only for the cards on the Dziś page, where a shape next to a number says
+    "rising / flat / falling" faster than a second number would. Anything that
+    has to be read off an axis belongs in a full-width ``trend``.
+    """
+    columns = [column] + ([smooth] if smooth else []) + (list(band) if band else [])
+    data, keep = _numeric(frame, columns)
+    if column not in keep or data[column].notna().sum() < 3:
+        return None
+    data = data.sort_values(x)
+    t = tokens()
+    color = series_colors(1)[0]
+    fig = go.Figure()
+    if band and all(c in keep for c in band):
+        edge = data[[x, *band]].dropna()
+        fig.add_scatter(x=edge[x], y=edge[band[0]], mode="lines", line=dict(width=0), hoverinfo="skip")
+        fig.add_scatter(x=edge[x], y=edge[band[1]], mode="lines", line=dict(width=0), fill="tonexty",
+                        fillcolor=_alpha(t["muted"], 0.16), hoverinfo="skip")
+    suffix = f" {unit}" if unit else ""
+    fig.add_scatter(
+        x=data[x], y=data[column], mode="markers" if smooth in keep else "lines+markers",
+        marker=dict(size=4, color=_alpha(color, 0.45)), line=dict(width=1.4, color=_alpha(color, 0.6)),
+        hovertemplate=f"%{{x|%d.%m}}: %{{y:.{decimals}f}}{suffix}<extra></extra>",
+    )
+    line_col = smooth if smooth in keep else column
+    line = data[[x, line_col]].dropna()
+    if smooth in keep:
+        fig.add_scatter(x=line[x], y=line[line_col], mode="lines", hoverinfo="skip",
+                        line=dict(width=2.2, color=color, shape="spline", smoothing=0.6))
+    fig.add_scatter(x=[line[x].iloc[-1]], y=[line[line_col].iloc[-1]], mode="markers", hoverinfo="skip",
+                    marker=dict(size=7, color=color, line=dict(width=2, color=t["surface"])))
+    fig.update_layout(**base_layout(legend=False, height=height, hover="closest"))
+    fig.update_layout(margin=dict(l=2, r=2, t=4, b=2), showlegend=False)
+    fig.update_xaxes(visible=False)
+    fig.update_yaxes(visible=False)
+    return fig
+
+
 def range_bars(
     frame: pd.DataFrame,
     x: str,

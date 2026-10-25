@@ -47,6 +47,12 @@ PAGE_STYLE = """
           rgba(42,120,214,0.00) 61%);}
   .st-key-globe_stage [data-testid="stPlotlyChart"] {margin: 0;}
   hr {margin: 2.2rem 0 0 0; opacity: 0.25;}
+  /* Cards exist on the Dziś page only (st.container(key="card_...")). Inside
+     a card the section rhythm of the document pages is too loose. */
+  [class*="st-key-card_"] {border-radius: 12px; padding: 0.35rem 0.4rem 0.2rem 0.4rem;}
+  [class*="st-key-card_"] h3 {margin-top: 0 !important;}
+  [class*="st-key-card_"] h4 {font-size: 1.05rem !important; font-weight: 620; padding: 0.2rem 0 0 0;}
+  [class*="st-key-card_"] [data-testid="stMetricValue"] {font-size: 1.25rem;}
 </style>
 """
 

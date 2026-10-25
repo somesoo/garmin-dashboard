@@ -180,6 +180,40 @@ class Tracking(unittest.TestCase):
         with self.assertRaises(ValueError):
             planning.adjust(self.plan, "holiday")
 
+    def test_soften_turns_one_hard_session_easy(self):
+        plan = json.loads(json.dumps(self.plan))
+        hard = next(s for s in plan["sessions"] if s["type"] in ("threshold", "intervals", "tempo"))
+        today = dt.date.fromisoformat(hard["date"])
+        planning.soften(plan, hard["id"], today=today)
+        changed = next(s for s in plan["sessions"] if s["id"] == hard["id"])
+        self.assertEqual(changed["type"], "easy")
+        self.assertLessEqual(changed["distance_km"], 6.0)
+        self.assertEqual(store.validate_plan(plan), [])
+        self.assertEqual(plan["history"][-1]["action"], "soften")
+        with self.assertRaises(ValueError):
+            planning.soften(plan, hard["id"], today=today)  # already easy
+
+    def test_postpone_never_puts_hard_days_side_by_side(self):
+        plan = json.loads(json.dumps(self.plan))
+        hard_types = ("tempo", "threshold", "intervals", "long")
+        for session in [s for s in plan["sessions"] if s["type"] != "race"][:12]:
+            today = dt.date.fromisoformat(session["date"])
+            try:
+                planning.postpone(plan, session["id"], today=today)
+            except ValueError:
+                continue
+            hard = sorted(dt.date.fromisoformat(s["date"]) for s in plan["sessions"] if s["type"] in hard_types)
+            for first, second in zip(hard, hard[1:]):
+                self.assertGreaterEqual((second - first).days, 2)
+        self.assertEqual(store.validate_plan(plan), [])
+        easy = next(s for s in plan["sessions"] if s["type"] == "easy")
+        date = dt.date.fromisoformat(easy["date"])
+        neighbours = {s["date"] for s in plan["sessions"] if s["type"] in hard_types}
+        if (date + dt.timedelta(days=2)).isoformat() not in neighbours:
+            planning.postpone(plan, easy["id"], today=date)
+            self.assertEqual(next(s for s in plan["sessions"] if s["id"] == easy["id"])["date"],
+                             (date + dt.timedelta(days=1)).isoformat())
+
 
 class Store(TempStore):
     def test_race_roundtrip_and_validation(self):

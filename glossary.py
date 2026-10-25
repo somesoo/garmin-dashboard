@@ -284,6 +284,15 @@ TERMS: dict[str, Term] = {
             "Pozwala policzyć balans spokojnych i mocnych kilometrów bez ręcznego tagowania.",
             "Powód i pewność etykiety są w szczegółach treningu.",
         ),
+        "today_decision": (
+            "Decyzja na dziś",
+            "Najbliższa sesja z planu (albo propozycja z danych, gdy planu nie ma) zestawiona z sygnałami "
+            "regeneracji z ostatniej nocy i z obciążeniem z 7 dni.",
+            "Plan układa się tygodniami naprzód, a forma zmienia się z dnia na dzień. Decyzja godzi jedno "
+            "z drugim: nigdy nie dokłada więcej, niż plan przewidział, najwyżej odpuszcza.",
+            "„Jak w planie” — biegnij. Jeden sygnał przeciw — zacznij i oceń po rozgrzewce. Dwa lub więcej "
+            "przy mocnej sesji — zamień na spokojny albo przesuń o dzień. Sygnały starsze niż doba są pomijane.",
+        ),
         "quality_sessions": (
             "Mocne sesje",
             "Treningi typu tempo, próg, interwały i starty.",

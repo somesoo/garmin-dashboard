@@ -2,7 +2,8 @@
 
 Router only: every page lives in ``views/`` and every chart is built through
 ``theme.py``. The layout is a document, not a grid -- one column of full-width
-figures, each introduced by the sentence that says how to read it. All chrome
+figures, each introduced by the sentence that says how to read it. The one
+exception is the Dziś landing page: cards of numbers, no axes to read. All chrome
 (navigation, the single global time filter, warehouse status) sits in the rail,
 so the canvas never has to reserve space for controls.
 """
@@ -36,6 +37,7 @@ from views import (  # noqa: E402
     run_session,
     sleep,
     stats,
+    today,
     trends,
 )
 
@@ -52,7 +54,8 @@ if not shell.has_data():
 
 PAGES = {
     "Przegląd": [
-        st.Page(atlas.render, title="Atlas", icon=":material/public:", url_path="atlas", default=True),
+        st.Page(today.render, title="Dziś", icon=":material/today:", url_path="dzis", default=True),
+        st.Page(atlas.render, title="Atlas", icon=":material/public:", url_path="atlas"),
         st.Page(routes.render, title="Trasy", icon=":material/route:", url_path="trasy"),
         st.Page(activities.render, title="Aktywności", icon=":material/list_alt:", url_path="aktywnosci"),
     ],

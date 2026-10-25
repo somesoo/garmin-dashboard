@@ -20,7 +20,7 @@ STATUS_LABELS = {
     "skipped": "pominięty",
     "missed": "brak biegu",
 }
-STATUS_ICONS = {"planned": "·", "done": "✓", "modified": "≈", "skipped": "✗", "missed": "✗"}
+STATUS_ICONS = rc.STATUS_ICONS
 DAY_NAMES = ["poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota", "niedziela"]
 
 

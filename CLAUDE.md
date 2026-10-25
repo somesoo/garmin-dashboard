@@ -391,6 +391,12 @@ Zasady układu, które trzymają spójność:
 - **Jedna kolumna.** Wykresy dostają pełną szerokość kanwy; `st.columns`
   wyłącznie na paski liczb (`shell.metrics`) i parę kontrolek obok siebie.
   Dwa wykresy obok siebie ścinają oś czasu i zmuszają do skakania wzrokiem.
+- **Wyjątek: strona *Dziś*** (`views/today.py`, strona startowa) to siatka kart
+  (`st.container(border=True, key="card_…")`, styl w `PAGE_STYLE`). W karcie
+  są liczby, krótkie listy i najwyżej `theme.spark` — nigdy oś do odczytu.
+  Pełny wykres stoi na swojej stronie, karta ma do niej przycisk. Decyzja dnia
+  to `coach.next_session`; przyciski karty wołają `plan.soften` / `plan.postpone`
+  (pojedyncza sesja, z tą samą regułą „mocne dni nie sąsiadują”).
 - **Każda sekcja = `shell.lead(tytuł, zdanie, terms=[...], how=...)`** — zdanie
   mówi, *po co* jest sekcja. Opis znaczników wykresu („kropki to dni, pas to
   norma”) nie idzie do podpisu, tylko do `how=`; razem z hasłami `terms` (klucze

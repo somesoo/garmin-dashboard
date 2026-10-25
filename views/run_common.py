@@ -174,3 +174,55 @@ def download_brief(prefix: str) -> None:
         file_name=f"brief-{dt.date.today()}.json", mime="application/json",
         key=f"{prefix}_brief_json", width="stretch",
     )
+
+
+STATUS_ICONS = {"planned": "·", "done": "✓", "modified": "≈", "skipped": "✗", "missed": "✗"}
+
+
+def active_plan(today: dt.date | None = None) -> dict[str, Any] | None:
+    """The plan whose race is next; None when every plan is behind us."""
+    today = today or dt.date.today()
+    ahead = [p for p in store.plans() if p.get("request", {}).get("race_date", "") >= today.isoformat()]
+    return min(ahead, key=lambda p: p["request"]["race_date"]) if ahead else None
+
+
+def forecast_tiles(result: dict[str, Any], keys: list[str] | None = None) -> None:
+    """Realistic time per distance with the 80% interval underneath."""
+    if result.get("status") != "ok":
+        st.caption(result.get("reason", "Brak prognozy."))
+        return
+    items = [(k, v) for k, v in result["distances"].items() if keys is None or k in keys]
+    for column, (key, item) in zip(st.columns(len(items)), items):
+        column.metric(units.RACE_LABELS[key], units.fmt_time(item.realistic_s))
+        column.caption(
+            f"{units.fmt_time(item.low_s)}–{units.fmt_time(item.high_s)} · {units.fmt_pace(item.pace)}  \n"
+            f"pewność {item.confidence} {CONFIDENCE_ICON[item.confidence]}"
+        )
+
+
+def week_strip(active: dict[str, Any] | None, frame: pd.DataFrame, today: dt.date | None = None) -> None:
+    """Monday to Sunday of the current week, one column per day.
+
+    With a plan: the planned session and its status. Without one: what was
+    actually run, so the strip is never empty for a runner without a plan.
+    """
+    today = today or dt.date.today()
+    monday = today - dt.timedelta(days=today.weekday())
+    cells: dict[dt.date, list[str]] = {}
+    if active is not None:
+        matched = planning.match(active, frame, today)
+        for row in matched.itertuples(index=False) if not matched.empty else []:
+            if monday <= row.date < monday + dt.timedelta(days=7):
+                text = f"{STATUS_ICONS.get(row.effective, '·')} {row.title}"
+                if row.actual_km:
+                    text += f"  \n{row.actual_km:.1f} km"
+                cells.setdefault(row.date, []).append(text)
+    else:
+        week = frame[(frame["day"] >= pd.Timestamp(monday)) & (frame["day"] < pd.Timestamp(monday + dt.timedelta(days=7)))]
+        for row in week.itertuples(index=False):
+            cells.setdefault(row.day.date(), []).append(f"✓ {kind_label(row.kind)}  \n{row.distance_km:.1f} km")
+    for offset, column in enumerate(st.columns(7)):
+        day = monday + dt.timedelta(days=offset)
+        label = f"**{planning.WEEKDAYS[offset]} {day:%d.%m}**" if day == today else f"{planning.WEEKDAYS[offset]} {day:%d.%m}"
+        column.markdown(label)
+        column.caption("  \n".join(cells.get(day, [])) or "—")

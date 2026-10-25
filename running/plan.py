@@ -757,6 +757,77 @@ def adjust(plan: dict[str, Any], reason: str, today: dt.date | None = None) -> d
     return plan
 
 
+def soften(plan: dict[str, Any], session_id: str, today: dt.date | None = None) -> dict[str, Any]:
+    """One hard session becomes an easy run of at most its distance (6 km cap
+    for quality): the morning's decision when recovery says no."""
+    today = today or dt.date.today()
+    easy = tuple((plan.get("paces") or {}).get("E") or ()) or None
+    session = _find(plan, session_id)
+    if session["type"] not in HARD_TYPES or session["type"] == "race":
+        raise ValueError("Ta sesja nie jest mocna — nie ma czego zmiękczać.")
+    if session["date"] < today.isoformat():
+        raise ValueError("Sesja jest w przeszłości.")
+    km = session.get("distance_km") or 0
+    if session["type"] != "long":
+        km = min(km, 6.0)
+    km = round(km * (0.8 if session["type"] == "long" else 1.0), 1)
+    before = session.get("title")
+    session.update(type="easy", title=f"Spokojny {km:.0f} km (zamiast: {before})", distance_km=km,
+                   pace_lo=easy[0] if easy else None, pace_hi=easy[1] if easy else None,
+                   warmup="—", main=f"{km:.1f} km spokojnie", cooldown="—",
+                   purpose="Regeneracja nie pozwalała na jakość; spokojny bieg utrzymuje objętość bez długu zmęczenia.")
+    session["note"] = (session.get("note") or "") + f" [zmiękczone z „{before}”]"
+    _log(plan, "soften", session_id)
+    return plan
+
+
+def postpone(plan: dict[str, Any], session_id: str, today: dt.date | None = None) -> dict[str, Any]:
+    """Move a session one day later, swapping with whatever sat there.
+
+    Refuses when the move would put two hard days side by side -- the rule
+    the generator keeps, kept here too.
+    """
+    today = today or dt.date.today()
+    session = _find(plan, session_id)
+    date = dt.date.fromisoformat(session["date"])
+    if date < today:
+        raise ValueError("Sesja jest w przeszłości.")
+    target = date + dt.timedelta(days=1)
+    race_day = plan.get("request", {}).get("race_date")
+    if race_day and target.isoformat() >= race_day and session["type"] != "race":
+        raise ValueError("Przesunięcie wypadłoby na dzień startu albo po nim.")
+    other = next((s for s in plan.get("sessions", []) if s["date"] == target.isoformat()), None)
+    if other is not None and other["type"] == "race":
+        raise ValueError("Następnego dnia jest start.")
+    moved = {s["id"]: s["date"] for s in plan.get("sessions", [])}
+    moved[session["id"]] = target.isoformat()
+    if other is not None:
+        moved[other["id"]] = date.isoformat()
+    hard = sorted(dt.date.fromisoformat(moved[s["id"]]) for s in plan.get("sessions", [])
+                  if s["type"] in HARD_TYPES)
+    if any((b - a).days == 1 for a, b in zip(hard, hard[1:])):
+        raise ValueError("Po przesunięciu dwa mocne dni wypadłyby obok siebie — lepiej zamienić na spokojny.")
+    session["date"] = target.isoformat()
+    if other is not None:
+        other["date"] = date.isoformat()
+    plan["sessions"] = sorted(plan["sessions"], key=lambda s: s["date"])
+    _log(plan, "postpone", session_id)
+    return plan
+
+
+def _find(plan: dict[str, Any], session_id: str) -> dict[str, Any]:
+    for session in plan.get("sessions", []):
+        if session["id"] == session_id:
+            return session
+    raise ValueError(f"Brak sesji {session_id}.")
+
+
+def _log(plan: dict[str, Any], action: str, session_id: str) -> None:
+    plan["history"] = list(plan.get("history", [])) + [
+        {"at": dt.datetime.now().isoformat(timespec="seconds"), "action": action, "session": session_id}
+    ]
+
+
 def set_status(plan: dict[str, Any], session_id: str, status: str, note: str | None = None,
                activity_id: int | None = None) -> dict[str, Any]:
     if status not in store.STATUSES:
