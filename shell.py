@@ -21,31 +21,61 @@ import db
 import glossary
 import routing
 
+# Glass on a gradient: the canvas is a soft mesh of colour blobs pinned to the
+# viewport, widgets are frosted glass over it with a coloured glow instead of
+# a grey shadow. Each mode: canvas, sidebar glass, widget glass, edge, inner
+# highlight, resting glow, raised glow.
 _SURFACES = {
-    # canvas, widget, hairline, resting shadow, raised shadow
-    "light": ("#eef1f6", "#ffffff", "rgba(15,23,42,0.06)",
-              "0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -8px rgba(15,23,42,0.10)",
-              "0 2px 4px rgba(15,23,42,0.05), 0 16px 36px -12px rgba(15,23,42,0.20)"),
-    "dark": ("#0b0e14", "#141922", "rgba(255,255,255,0.06)",
-             "0 1px 2px rgba(0,0,0,0.45), 0 8px 24px -10px rgba(0,0,0,0.65)",
-             "0 2px 6px rgba(0,0,0,0.5), 0 18px 40px -12px rgba(0,0,0,0.75)"),
+    "light": (
+        "radial-gradient(1100px 700px at 8% 0%, rgba(167,139,250,0.45), transparent 60%),"
+        "radial-gradient(900px 650px at 100% 18%, rgba(56,189,248,0.38), transparent 60%),"
+        "radial-gradient(1000px 800px at 70% 100%, rgba(52,211,153,0.32), transparent 60%),"
+        "radial-gradient(800px 600px at 20% 85%, rgba(251,191,36,0.22), transparent 60%),"
+        "linear-gradient(160deg, #eef2ff 0%, #f5f3ff 45%, #ecfeff 100%)",
+        "rgba(255,255,255,0.45)",
+        "rgba(255,255,255,0.58)",
+        "rgba(255,255,255,0.75)",
+        "inset 0 1px 0 rgba(255,255,255,0.85)",
+        "0 1px 2px rgba(30,27,75,0.06), 0 12px 32px -14px rgba(99,102,241,0.35)",
+        "0 2px 4px rgba(30,27,75,0.08), 0 22px 44px -16px rgba(99,102,241,0.50)",
+    ),
+    "dark": (
+        "radial-gradient(1100px 700px at 5% 0%, rgba(124,58,237,0.42), transparent 60%),"
+        "radial-gradient(900px 650px at 100% 15%, rgba(37,99,235,0.38), transparent 60%),"
+        "radial-gradient(1000px 800px at 75% 100%, rgba(13,148,136,0.36), transparent 60%),"
+        "radial-gradient(700px 500px at 15% 90%, rgba(219,39,119,0.18), transparent 60%),"
+        "linear-gradient(160deg, #0a0f1f 0%, #0d1024 50%, #071a1f 100%)",
+        "rgba(15,20,36,0.55)",
+        "rgba(22,28,48,0.50)",
+        "rgba(255,255,255,0.10)",
+        "inset 0 1px 0 rgba(255,255,255,0.08)",
+        "0 1px 2px rgba(0,0,0,0.40), 0 14px 36px -14px rgba(56,189,248,0.28)",
+        "0 2px 6px rgba(0,0,0,0.45), 0 24px 48px -16px rgba(139,92,246,0.45)",
+    ),
 }
 
 _STYLE = """
 <style>
-  /* ---- canvas: widgets float on a tinted ground ------------------------- */
-  [data-testid="stAppViewContainer"], [data-testid="stMain"] {background: @CANVAS@;}
+  /* ---- canvas: a colour mesh pinned to the viewport, so it shows through the
+     glass at every scroll position ------------------------------------------ */
+  [data-testid="stApp"] {background: @CANVAS@; background-attachment: fixed;}
+  [data-testid="stAppViewContainer"], [data-testid="stMain"], [data-testid="stBottom"] > div {background: transparent;}
   [data-testid="stHeader"] {background: transparent;}
+  [data-testid="stSidebar"] {background: @SIDEBAR@ !important; border-right: 1px solid @LINE@;
+      backdrop-filter: blur(22px) saturate(150%); -webkit-backdrop-filter: blur(22px) saturate(150%);}
+  [data-testid="stSidebar"] > div {background: transparent;}
   .block-container {padding-top: 1.6rem; padding-bottom: 4rem; max-width: 1560px;}
 
   /* ---- widgets (bento.py): wgt_ = chart tile, kpi_ = number, pnl_ = form */
   [class*="st-key-wgt_"], [class*="st-key-kpi_"], [class*="st-key-pnl_"] {
-      background: @WIDGET@; border: 1px solid @LINE@ !important; border-radius: 16px;
-      box-shadow: @SHADOW@; padding: 1rem 1.25rem 0.9rem 1.25rem;
+      background: @WIDGET@; border: 1px solid @LINE@ !important; border-radius: 10px;
+      backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
+      box-shadow: @HIGHLIGHT@, @SHADOW@; padding: 1rem 1.25rem 0.9rem 1.25rem;
       transition: transform .25s cubic-bezier(.2,.75,.25,1), box-shadow .25s ease;
       animation: wgt-rise .55s cubic-bezier(.2,.75,.25,1) both;
       animation-delay: calc(var(--row-delay, 0ms) + var(--col-delay, 0ms));}
-  [class*="st-key-wgt_"]:hover, [class*="st-key-kpi_"]:hover {transform: translateY(-2px); box-shadow: @RAISED@;}
+  [class*="st-key-wgt_"]:hover, [class*="st-key-kpi_"]:hover {transform: translateY(-3px);
+      box-shadow: @HIGHLIGHT@, @RAISED@;}
   /* Numbers need less air than charts. */
   [class*="st-key-kpi_"] {padding: 0.85rem 1.15rem 0.8rem 1.15rem;}
 
@@ -155,9 +185,13 @@ def _delays() -> str:
 
 def page_style(mode: str = "light") -> str:
     """The app's CSS for the theme the browser renders (``theme.mode()``)."""
-    canvas, widget, line, shadow, raised = _SURFACES.get(mode, _SURFACES["light"])
-    return (_STYLE.replace("@CANVAS@", canvas).replace("@WIDGET@", widget).replace("@LINE@", line)
-            .replace("@SHADOW@", shadow).replace("@RAISED@", raised).replace("@DELAYS@", _delays()))
+    canvas, sidebar, widget, line, highlight, shadow, raised = _SURFACES.get(mode, _SURFACES["light"])
+    tokens = {"@CANVAS@": canvas, "@SIDEBAR@": sidebar, "@WIDGET@": widget, "@LINE@": line,
+              "@HIGHLIGHT@": highlight, "@SHADOW@": shadow, "@RAISED@": raised, "@DELAYS@": _delays()}
+    style = _STYLE
+    for token, value in tokens.items():
+        style = style.replace(token, value)
+    return style
 
 
 # Column formats for activity tables: raw floats ("130.3395") and seconds on
