@@ -766,6 +766,28 @@ def threshold(
     return fig
 
 
+def periods(fig: go.Figure, spans: Sequence[tuple[Any, Any, str]], *, today: Any = None) -> go.Figure:
+    """Shade consecutive periods of a time axis (``(start, end, label)``, in
+    order) and label each at the top; optionally mark today.
+
+    Periods are ordered (base -> build -> peak -> taper), so they take the
+    ordinal ramp at low alpha: the data stays the foreground.
+    """
+    t = tokens()
+    colors = ordinal_colors(max(len({label for *_, label in spans}), 1))
+    shade = {}
+    for start, end, label in spans:
+        color = shade.setdefault(label, colors[len(shade) % len(colors)])
+        fig.add_vrect(x0=start, x1=end, fillcolor=_alpha(color, 0.13), line_width=0, layer="below")
+        fig.add_annotation(x=start, xanchor="left", xshift=4, y=1, yref="paper", yanchor="top",
+                           text=label, showarrow=False, font=dict(family=FONT, size=11, color=t["muted"]))
+    if today is not None:
+        fig.add_vline(x=today, line_width=1.5, line_color=t["ink_secondary"])
+        fig.add_annotation(x=today, xanchor="left", xshift=4, y=0, yref="paper", yanchor="bottom",
+                           text="dziś", showarrow=False, font=dict(family=FONT, size=11, color=t["ink_secondary"]))
+    return fig
+
+
 def zero_lines(fig: go.Figure) -> go.Figure:
     """Quadrant guides for a z-score scatter."""
     t = tokens()

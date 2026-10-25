@@ -226,10 +226,19 @@ def _weekly_chart(active: dict, frame: pd.DataFrame) -> None:
     weeks["actual_km"] = actual
     shell.lead(
         "Plan a wykonanie — tygodnie",
-        "Linia: kilometry zaplanowane; punkty: przebiegnięte. Spadki co kilka tygodni to tygodnie odciążenia.",
+        "Linia: kilometry zaplanowane; punkty: przebiegnięte. Spadki co kilka tygodni to tygodnie odciążenia, "
+        "pasy w tle to fazy bloku.",
     )
     figure = tz.timeseries(weeks, "monday", {"plan": "planned_km", "wykonane": "actual_km"}, markers=True,
                            y_title="km / tydzień", height=280)
+    if figure is not None:
+        spans = []
+        for phase, block in weeks.groupby((weeks["phase"] != weeks["phase"].shift()).cumsum()):
+            spans.append((block["monday"].iloc[0] - pd.Timedelta(days=3.5),
+                          block["monday"].iloc[-1] + pd.Timedelta(days=3.5), block["phase_label"].iloc[0]))
+        today = pd.Timestamp(dt.date.today())
+        inside = weeks["monday"].min() - pd.Timedelta(days=3.5) <= today <= weeks["monday"].max() + pd.Timedelta(days=3.5)
+        tz.periods(figure, spans, today=today if inside else None)
     tz.show(
         figure,
         table=weeks[["week", "monday", "phase_label", "volume_km", "planned_km", "actual_km", "long_km", "quality"]]

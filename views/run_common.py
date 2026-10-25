@@ -214,7 +214,7 @@ def week_strip(active: dict[str, Any] | None, frame: pd.DataFrame, today: dt.dat
         for row in matched.itertuples(index=False) if not matched.empty else []:
             if monday <= row.date < monday + dt.timedelta(days=7):
                 text = f"{STATUS_ICONS.get(row.effective, '·')} {row.title}"
-                if row.actual_km:
+                if pd.notna(row.actual_km) and row.actual_km:
                     text += f"  \n{row.actual_km:.1f} km"
                 cells.setdefault(row.date, []).append(text)
     else:
