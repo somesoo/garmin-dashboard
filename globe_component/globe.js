@@ -139,7 +139,7 @@ export function createGlobe(canvas, options = {}) {
     heat: null,
     clusters: [],
     theme: {
-      ocean: "#cfe0f1", oceanLight: "#e8f1fa", land: "#e6e3d8", coast: "#b3b0a4",
+      ocean: "#cfe0f1", land: "#e6e3d8", coast: "#b3b0a4",
       border: "#c6c3b7", graticule: "rgba(120,140,160,0.22)", surface: "#fcfcfb",
       ink: "#0b0b0b", glow: "#2a78d6",
       ramp: ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"],
@@ -508,15 +508,10 @@ export function createGlobe(canvas, options = {}) {
       return;
     }
 
-    // The sphere as a lit ball, not a flat disc.
-    const shade = ctx.createRadialGradient(
-      cx - R * 0.35, cy - R * 0.4, R * 0.1, cx, cy, R
-    );
-    shade.addColorStop(0, state.theme.oceanLight || state.theme.ocean);
-    shade.addColorStop(1, state.theme.ocean);
+    // Flat ocean: the app uses no gradients anywhere (CLAUDE.md).
     ctx.beginPath();
     path(sphere);
-    ctx.fillStyle = shade;
+    ctx.fillStyle = state.theme.ocean;
     ctx.fill();
 
     ctx.save();
@@ -612,12 +607,10 @@ export function createGlobe(canvas, options = {}) {
       const r = markerRadius(item.cluster);
       const fade = Math.min(1, item.depth * 4);
       if (!street) {
-        const glow = ctx.createRadialGradient(item.x, item.y, r * 0.6, item.x, item.y, r * 3);
-        glow.addColorStop(0, rgba(state.theme.glow, 0.28 * fade * alpha));
-        glow.addColorStop(1, rgba(state.theme.glow, 0));
+        // A flat translucent halo, not a radial glow: no gradients (CLAUDE.md).
         ctx.beginPath();
-        ctx.arc(item.x, item.y, r * 3, 0, 2 * Math.PI);
-        ctx.fillStyle = glow;
+        ctx.arc(item.x, item.y, r * 2, 0, 2 * Math.PI);
+        ctx.fillStyle = rgba(state.theme.glow, 0.16 * fade * alpha);
         ctx.fill();
       }
 

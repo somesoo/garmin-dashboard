@@ -226,6 +226,13 @@ Każda figura w dashboardzie powstaje przez buildery z `theme.py`. Nie dodawaj
 `px.*` ani `go.Figure` bezpośrednio w `app.py` — paleta, marginesy i hover
 rozjadą się w ciągu jednego PR-a.
 
+**Żadnych gradientów. Nigdy.** Ani w tle strony, ani w kaflach (także
+„refleks” czy „połysk”), ani za globem, ani na canvasie globu, ani w
+wykresach. Wszystko to jednolite kolory: czarna strona, grafitowe kafle
+(`#1a1c20`), płaski ocean. Głębię dają krawędź, cień i odstęp — nie przejście
+tonalne. Użytkownik odrzucał to trzy razy; nie proponuj gradientu jako
+„ciekawego tła”.
+
 Trzy reguły wymuszone strukturalnie:
 
 1. **Żadnych tytułów wewnątrz figury.** Tytuł to nagłówek kafla (`bento.tile`) nad

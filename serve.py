@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parent
 RECORD = ROOT / "data" / "server.json"
 # Same as .streamlit/config.toml: Streamlit reads that file from the working
 # directory, and a launcher double-clicked in Finder starts in $HOME.
-THEME = ["--theme.base", "dark", "--theme.backgroundColor", "#17191d",
+THEME = ["--theme.base", "dark", "--theme.backgroundColor", "#1a1c20",
          "--theme.secondaryBackgroundColor", "#23262c", "--theme.textColor", "#fafafa"]
 SKIP = {".venv", "data", "__pycache__", ".git", "cache"}
 

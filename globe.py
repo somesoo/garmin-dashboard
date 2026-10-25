@@ -42,7 +42,6 @@ def _theme() -> dict[str, Any]:
     dark = tz.mode() == "dark"
     return {
         "ocean": "#0a111b" if dark else "#cfe0f1",
-        "oceanLight": "#16263a" if dark else "#e8f1fa",
         "land": "#272c34" if dark else "#e6e3d8",
         "coast": "#4b525e" if dark else "#b3b0a4",
         "border": "#3c424c" if dark else "#c6c3b7",

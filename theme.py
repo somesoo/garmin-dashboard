@@ -60,7 +60,7 @@ LIGHT: dict[str, Any] = {
 }
 
 DARK: dict[str, Any] = {
-    "surface": "#17191d",
+    "surface": "#1a1c20",
     "ink": "#ffffff",
     "ink_secondary": "#c3c2b7",
     "muted": "#898781",

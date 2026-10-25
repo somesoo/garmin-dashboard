@@ -6,6 +6,6 @@
 base = "dark"
 # backgroundColor is what Streamlit paints inside widgets (tables, popovers);
 # the black page itself comes from shell.page_style.
-backgroundColor = "#17191d"
+backgroundColor = "#1a1c20"
 secondaryBackgroundColor = "#23262c"
 textColor = "#fafafa"

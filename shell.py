@@ -29,11 +29,8 @@ _SURFACES = {
               "inset 0 1px 0 rgba(255,255,255,0.9)",
               "0 1px 2px rgba(15,23,42,0.05), 0 8px 24px -12px rgba(15,23,42,0.14)",
               "0 2px 4px rgba(15,23,42,0.06), 0 16px 32px -14px rgba(15,23,42,0.22)"),
-    # Graphite cards with a sheen from the top-left, so they read as lit
-    # objects on the black ground, not as holes in it.
-    "dark": ("#000000", "#0a0a0b",
-             "radial-gradient(140% 90% at 0% 0%, rgba(255,255,255,0.075) 0%, rgba(255,255,255,0) 55%),"
-             " linear-gradient(180deg, #1c1e23 0%, #16181c 100%)",
+    # Solid graphite cards on the black ground. No gradients, ever (CLAUDE.md).
+    "dark": ("#000000", "#0a0a0b", "#1a1c20",
              "rgba(255,255,255,0.11)",
              "inset 0 1px 0 rgba(255,255,255,0.10)",
              "0 1px 2px rgba(0,0,0,0.6), 0 10px 26px -14px rgba(0,0,0,0.9)",
@@ -140,12 +137,8 @@ _STYLE = """
   div[data-testid="stExpander"] {border: none; border-top: 1px solid rgba(128,128,128,0.18);
       border-radius: 0;}
   /* The globe bleeds past the grid -- it is the one element that should feel
-     bigger than the page -- and a sphere floating on a flat page needs
-     something behind it, so the stage carries its own soft halo. */
-  .st-key-globe_stage {margin: 0 -3.5rem;
-      background: radial-gradient(circle at 50% 47%,
-          rgba(42,120,214,0.20) 0%, rgba(42,120,214,0.07) 36%,
-          rgba(42,120,214,0.00) 61%);}
+     bigger than the page. Flat ground behind it: no halo, no gradient. */
+  .st-key-globe_stage {margin: 0 -3.5rem;}
   .st-key-globe_stage [data-testid="stPlotlyChart"] {margin: 0;}
   hr {margin: 2.2rem 0 0 0; opacity: 0.25;}
 </style>
