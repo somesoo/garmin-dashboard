@@ -7,6 +7,7 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
+import bento
 import routing
 import shell
 import theme as tz
@@ -26,12 +27,10 @@ DAY_NAMES = ["poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota
 
 
 def render() -> None:
-    st.title("Plan treningowy")
-    st.caption(
-        "Plan startuje od tego, co faktycznie biegasz (średnia z 4 tygodni), rośnie krokami do szczytu "
-        "właściwego dla dystansu, nie przekracza 1,3× średniej z czterech poprzednich tygodni, co 3.–4. "
-        "tydzień odpuszcza i kończy się taperem. Tempa liczone z aktualnej formy, nie z celu — przebudowa "
-        "planu przelicza je z najnowszych danych."
+    bento.header(
+        "Plan treningowy",
+        "Startuje od tego, co faktycznie biegasz, rośnie do szczytu dystansu (≤ 1,3× średniej z 4 tygodni), co "
+        "3.–4. tydzień odpuszcza i kończy się taperem. Tempa z aktualnej formy, nie z celu.",
     )
     frame = rc.guard()
     if frame is None:
@@ -56,7 +55,7 @@ def render() -> None:
     if st.session_state.get("plan_choice") not in ids:
         st.session_state["plan_choice"] = ids[0]
     chosen = st.selectbox("Plan", ids, format_func=lambda i: next(p.get("name", i) for p in plans if p["id"] == i),
-                          key="plan_choice")
+                          key="plan_choice", label_visibility="collapsed")
     active = store.plan(chosen)
     if active is None:
         st.error("Plik planu nie istnieje albo jest uszkodzony.")
@@ -68,12 +67,23 @@ def render() -> None:
 
     matched = planning.match(active, frame, laps=shell.table("run_laps"))
     _header(active, result, matched)
-    _next(active, frame, result)
-    _weekly_chart(active, frame)
-    _calendar(active, matched)
-    _week(active, matched)
-    _actions(active, frame, result)
-    _assistant(active)
+    left, right = bento.row(2, 2)
+    with left:
+        _weekly_chart(active, frame)
+    with right:
+        _next(active, frame, result)
+        _actions(active, frame, result)
+    with bento.panel("Kalendarz", key="plan_calendar",
+                     caption="✓ wykonany · ≈ zmodyfikowany · ✗ pominięty · · zaplanowany · ↓ tydzień odciążenia"):
+        _calendar(active, matched)
+    with bento.panel("Tydzień", key="plan_week",
+                     caption="Szczegóły sesji i ich status. Status ustawiony ręcznie wygrywa z automatycznym."):
+        _week(active, matched)
+    with bento.panel(
+        "Współpraca z asystentem", key="plan_assistant",
+        caption="Brief: prognoza z wejściami, biegi z etykietami, obciążenie, regeneracja, plan i luki w danych.",
+    ):
+        _assistant(active)
 
 
 # --------------------------------------------------------------------------
@@ -168,13 +178,18 @@ def _header(active: dict, result: dict, matched: pd.DataFrame) -> None:
     days = (race_date - dt.date.today()).days
     weeks = planning.week_table(active)
     build = weeks[weeks["phase"].isin(("base", "build", "peak"))] if not weeks.empty else weeks
-    columns = st.columns(4)
-    columns[0].metric("Do startu", f"{days} dni" if days >= 0 else "po starcie")
-    columns[1].metric("Szczyt objętości", f"{build['planned_km'].max():.0f} km" if len(build) else "—")
-    columns[2].metric("Najdłuższy bieg", f"{weeks['long_km'].max():.0f} km" if len(weeks) else "—")
+    columns = bento.row(1, 1, 1, 1)
     summary = planning.compliance(matched)
-    columns[3].metric("Realizacja", f"{summary['done'] + summary['modified']}/{summary['due']}" if summary.get("due") else "—",
-                      help="Sesje wykonane lub zmodyfikowane / sesje do dziś.")
+    bento.stat(columns[0], "Do startu", f"{days} dni" if days >= 0 else "po starcie", key="p_days",
+               note=f"{race_date:%d.%m.%Y}")
+    bento.stat(columns[1], "Szczyt objętości", f"{build['planned_km'].max():.0f} km" if len(build) else "—",
+               key="p_peak")
+    bento.stat(columns[2], "Najdłuższy bieg", f"{weeks['long_km'].max():.0f} km" if len(weeks) else "—", key="p_long")
+    bento.stat(columns[3], "Realizacja",
+               f"{summary['done'] + summary['modified']}/{summary['due']}" if summary.get("due") else "—",
+               key="p_done", help="Sesje wykonane lub zmodyfikowane / sesje do dziś.",
+               note=f"{summary['actual_km']:.0f}/{summary['planned_km']:.0f} km · jakość "
+                    f"{summary['quality_done']}/{summary['quality_due']}" if summary.get("due") else None)
     created = active.get("forecast", {})
     now = result["distances"].get(request["distance"]) if result.get("status") == "ok" else None
     text = (f"Prognoza przy tworzeniu planu: {units.fmt_time(created.get('realistic_s'))} (VDOT {created.get('vdot')})")
@@ -183,11 +198,6 @@ def _header(active: dict, result: dict, matched: pd.DataFrame) -> None:
     if request.get("goal_s"):
         text += f" · cel: {units.fmt_time(request['goal_s'])}"
     st.caption(text + ".")
-    if summary.get("due"):
-        st.caption(
-            f"Do dziś: {summary['actual_km']:.0f} z {summary['planned_km']:.0f} planowanych km, jakość "
-            f"{summary['quality_done']}/{summary['quality_due']}, pominięte {summary['skipped']}."
-        )
     for warning in active.get("warnings", []):
         st.warning(warning)
 
@@ -195,23 +205,25 @@ def _header(active: dict, result: dict, matched: pd.DataFrame) -> None:
 def _next(active: dict, frame: pd.DataFrame, result: dict) -> None:
     suggestion = coach.next_session(active, frame, shell.daily(), result)
     session = suggestion.get("session")
-    shell.lead("Następny trening", "Sesja z planu zestawiona z dzisiejszą regeneracją i obciążeniem.")
-    if not session:
-        st.caption("W planie nie ma już sesji.")
-        return
-    date = dt.date.fromisoformat(session["date"])
-    st.markdown(
-        f"**{date:%d.%m} ({DAY_NAMES[date.weekday()]}) — {session.get('title')}** · decyzja: **{suggestion['action']}**  \n"
-        f"{session.get('main', '')}"
-        + (f"  \nTempo {units.fmt_pace(session.get('pace_lo'), False)}–{units.fmt_pace(session.get('pace_hi'))}"
-           f", tętno {session.get('hr')}" if session.get("pace_lo") else "")
-    )
-    for reason in suggestion["reasons"]:
-        st.caption(reason)
-    if suggestion["flags"]:
-        st.caption("Sygnały: " + "; ".join(suggestion["flags"]) + ".")
-    if session.get("purpose"):
-        st.caption(f"Po co: {session['purpose']}")
+    date = dt.date.fromisoformat(session["date"]) if session else None
+    with bento.tile(
+        "Następny trening", key="plan_next", terms=["today_decision"],
+        caption=f"{date:%d.%m} ({DAY_NAMES[date.weekday()]}) · decyzja: <b>{suggestion['action']}</b>" if session else None,
+        how=" ".join(suggestion["reasons"] + ([f"Sygnały: {'; '.join(suggestion['flags'])}."] if suggestion["flags"] else [])
+                     + ([f"Po co: {session['purpose']}"] if session and session.get("purpose") else [])) or None,
+    ):
+        if not session:
+            st.caption("W planie nie ma już sesji.")
+            return
+        st.markdown(f"**{session.get('title')}**")
+        st.markdown("<div class='tile-caption'>" + " · ".join(filter(None, [
+            session.get("main", ""),
+            f"tempo {units.fmt_pace(session.get('pace_lo'), False)}–{units.fmt_pace(session.get('pace_hi'))}"
+            if session.get("pace_lo") and "/km" not in session.get("main", "") else None,
+            f"tętno {session.get('hr')}" if session.get("hr") else None,
+        ])) + "</div>", unsafe_allow_html=True)
+        if suggestion["reasons"]:
+            st.markdown(f"<div class='tile-caption'>{suggestion['reasons'][0]}</div>", unsafe_allow_html=True)
 
 
 def _weekly_chart(active: dict, frame: pd.DataFrame) -> None:
@@ -224,11 +236,15 @@ def _weekly_chart(active: dict, frame: pd.DataFrame) -> None:
         mask = (frame["day"] >= monday) & (frame["day"] < monday + pd.Timedelta(days=7))
         actual.append(float(frame.loc[mask, "distance_km"].sum()) if monday <= pd.Timestamp(dt.date.today()) else None)
     weeks["actual_km"] = actual
-    shell.lead(
-        "Plan a wykonanie — tygodnie",
-        "Linia: kilometry zaplanowane; punkty: przebiegnięte. Spadki co kilka tygodni to tygodnie odciążenia, "
-        "pasy w tle to fazy bloku.",
-    )
+    with bento.tile(
+        "Plan a wykonanie — tygodnie", rows=2, key="plan_weeks",
+        caption="Linia: zaplanowane km; punkty: przebiegnięte; pasy: fazy bloku.",
+        how="Spadki co kilka tygodni to tygodnie odciążenia. Pionowa linia to dziś.",
+    ) as tile:
+        _weekly_figure(tile, weeks)
+
+
+def _weekly_figure(tile, weeks: pd.DataFrame) -> None:
     figure = tz.timeseries(weeks, "monday", {"plan": "planned_km", "wykonane": "actual_km"}, markers=True,
                            y_title="km / tydzień", height=280)
     if figure is not None:
@@ -239,17 +255,15 @@ def _weekly_chart(active: dict, frame: pd.DataFrame) -> None:
         today = pd.Timestamp(dt.date.today())
         inside = weeks["monday"].min() - pd.Timedelta(days=3.5) <= today <= weeks["monday"].max() + pd.Timedelta(days=3.5)
         tz.periods(figure, spans, today=today if inside else None)
-    tz.show(
+    tile.chart(
         figure,
         table=weeks[["week", "monday", "phase_label", "volume_km", "planned_km", "actual_km", "long_km", "quality"]]
         .rename(columns={"week": "tydzień", "monday": "od", "phase_label": "faza", "volume_km": "cel km",
                          "planned_km": "plan km", "actual_km": "wykonane km", "long_km": "długi", "quality": "jakość"}),
-        key="plan_weeks",
     )
 
 
 def _calendar(active: dict, matched: pd.DataFrame) -> None:
-    shell.lead("Kalendarz", "✓ wykonany · ≈ zmodyfikowany · ✗ pominięty · · zaplanowany. Puste pole = odpoczynek.")
     if matched.empty:
         return
     weeks = {w["week"]: w for w in active.get("weeks", [])}
@@ -269,7 +283,6 @@ def _calendar(active: dict, matched: pd.DataFrame) -> None:
         rows.append(line)
     st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
                  column_config={"km": st.column_config.NumberColumn("km", format="%.0f")})
-    st.caption("↓ = tydzień odciążenia.")
 
 
 def _week(active: dict, matched: pd.DataFrame) -> None:
@@ -280,7 +293,6 @@ def _week(active: dict, matched: pd.DataFrame) -> None:
     current = next((w["week"] for w in active.get("weeks", [])
                     if dt.date.fromisoformat(w["monday"]) <= today < dt.date.fromisoformat(w["monday"]) + dt.timedelta(days=7)),
                    numbers[0])
-    shell.lead("Tydzień", "Szczegóły sesji i ich status. Status ustawiony ręcznie wygrywa z automatycznym.")
     number = st.select_slider("Tydzień planu", numbers, value=current if current in numbers else numbers[0],
                               key=f"plan_week_{active['id']}")
     week = matched[matched["week"] == number]
@@ -349,11 +361,14 @@ def _week(active: dict, matched: pd.DataFrame) -> None:
 
 
 def _actions(active: dict, frame: pd.DataFrame, result: dict) -> None:
-    shell.lead(
-        "Dostosuj plan",
-        "Przebudowa liczy wszystko od jutra z najnowszych danych (objętość, forma, tempa); przeszłość zostaje. "
-        "Korekta zmienia tylko najbliższe dni.",
-    )
+    with bento.tile(
+        "Dostosuj plan", key="plan_actions",
+        caption="Przebudowa: wszystko od jutra z najnowszych danych. Korekta: tylko najbliższe dni.",
+    ):
+        _actions_body(active, frame, result)
+
+
+def _actions_body(active: dict, frame: pd.DataFrame, result: dict) -> None:
     columns = st.columns([2, 2, 1])
     if columns[0].button("Przebuduj od jutra", width="stretch", key="plan_replan",
                          help="Po pominiętych treningach, po teście, po zmianie formy."):
@@ -415,11 +430,6 @@ def _garmin(active: dict) -> None:
 
 
 def _assistant(active: dict) -> None:
-    shell.lead(
-        "Współpraca z asystentem",
-        "Brief zawiera wszystko, z czego asystent ma rozumować: prognozę z wejściami, ostatnie biegi z etykietami, "
-        "obciążenie, regenerację, ten plan i jego realizację oraz listę tego, czego dane nie widzą.",
-    )
     rc.download_brief("plan")
     st.markdown(
         "W Claude Code w tym repozytorium: **`/trener`** — przeczyta brief i ten plan, zaproponuje zmiany, "

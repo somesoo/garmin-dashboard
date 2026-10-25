@@ -14,6 +14,7 @@ import pandas as pd
 import streamlit as st
 
 import globe
+import bento
 import glossary
 import routing
 import shell
@@ -34,18 +35,23 @@ def render() -> None:
     row = shell.latest_day()
     info = shell.state()
 
-    st.title("Atlas")
-    st.caption(
+    bento.header(
+        "Atlas",
         f"{info.get('activities', 0)} aktywności · {info.get('days', 0)} dni pomiarów · "
-        f"ostatni dzień z danymi: {row['day']:%d.%m.%Y}"
-        if row is not None
-        else "Brak danych dziennych."
+        f"ostatni dzień z danymi: {row['day']:%d.%m.%Y}" if row is not None else "Brak danych dziennych.",
     )
 
     _hero(activities)
-    _now(frame, row)
-    _places(activities)
-    _recent(activities)
+    left, right = bento.row(2, 2)
+    with left:
+        _now(frame, row)
+    with right:
+        _load()
+    left, right = bento.row(2, 2)
+    with left:
+        _places(activities)
+    with right:
+        _recent(activities)
 
 
 def _hero(activities: pd.DataFrame) -> None:
@@ -95,11 +101,11 @@ def _hero(activities: pd.DataFrame) -> None:
     chosen = with_gps[with_gps["sport"].isin(picked)] if picked else with_gps
     selected = None if len(chosen) == len(with_gps) else [int(i) for i in chosen["activity_id"]]
 
-    columns = st.columns(4)
-    columns[0].metric("Miejsca", f"{chosen['location'].nunique()}")
-    columns[1].metric("Z GPS", f"{len(chosen)}")
-    columns[2].metric("Dystans", f"{chosen['distance_km'].sum():,.0f} km".replace(",", " "))
-    columns[3].metric("Czas", f"{chosen['duration_min'].sum() / 60:,.0f} h".replace(",", " "))
+    columns = bento.row(1, 1, 1, 1)
+    bento.stat(columns[0], "Miejsca", f"{chosen['location'].nunique()}", key="atlas_places")
+    bento.stat(columns[1], "Aktywności z GPS", f"{len(chosen)}", key="atlas_gps")
+    bento.stat(columns[2], "Dystans", f"{chosen['distance_km'].sum():,.0f} km".replace(",", " "), key="atlas_km")
+    bento.stat(columns[3], "Czas", f"{chosen['duration_min'].sum() / 60:,.0f} h".replace(",", " "), key="atlas_h")
 
     if where == "home":
         target = globe.home(starts)
@@ -123,12 +129,8 @@ def _hero(activities: pd.DataFrame) -> None:
         )
 
     st.caption(
-        "Z daleka każdy punkt to start treningu. Wybierz miasto w polu **Kadr** "
-        "albo przybliż kółkiem myszy — na poziomie ulic glob zamienia się w mapę "
-        "ciepła: kolor i grubość mówią, ile różnych treningów przeszło danym "
-        "odcinkiem. **Kliknięcie startu otwiera ślad na stronie *Trasy***; "
-        "kliknięcie skupiska pyta, który trening otworzyć. Filtr sportu działa na "
-        "punkty i na mapę ciepła naraz."
+        "Punkt to start treningu; przybliż albo wybierz **Kadr**, a na poziomie ulic glob staje się mapą ciepła "
+        "(ile treningów przeszło odcinkiem). Klik w start otwiera ślad na stronie *Trasy*."
     )
 
     pick = _fresh_pick(clicked)
@@ -173,59 +175,31 @@ def _request(activity_id: int) -> None:
 
 
 def _now(frame: pd.DataFrame, row: pd.Series | None) -> None:
-    if frame.empty or row is None:
-        return
-    shell.lead(
-        "Stan na dziś",
-        "Cztery liczby, które zmieniają decyzję o dzisiejszym treningu, i ich "
-        "przebieg w wybranym zakresie.",
-        terms=["readiness", "hrv", "rhr"],
-        how="Zmiany na kafelkach: względem średniej z poprzednich 7 dni. " + glossary.TREND_HOW,
-    )
-    shell.metrics(
-        row,
-        shell.week_before(frame),
-        [
-            ("readiness", "Readiness", ""),
-            ("hrv_last_night", "HRV noc", "ms"),
-            ("rhr", "RHR", "bpm", "inverse"),
-            ("sleep_h", "Sen", "h"),
-        ],
-    )
-
     view = shell.clip(frame)
-    pmc = shell.clip(shell.table("pmc"))
-    shell.sub("Readiness")
-    tz.show(tz.trend(view, "day", {"readiness": ("readiness", "readiness_roll7")}, height=190),
-            key="atlas_readiness")
-    shell.sub("HRV w nocy")
-    tz.show(tz.trend(view, "day", {"HRV": ("hrv_last_night", "hrv_last_night_roll7")},
-                     band=("hrv_baseline_low", "hrv_baseline_high"), unit="ms", height=190),
-            key="atlas_hrv")
+    with bento.tile("Readiness", key="atlas_readiness", terms=["readiness"], how=glossary.TREND_HOW,
+                    caption=f"ostatnio <b>{row['readiness']:.0f}</b>" if row is not None and pd.notna(row.get("readiness"))
+                    else None) as t:
+        t.chart(tz.trend(view, "day", {"readiness": ("readiness", "readiness_roll7")}),
+                table=view[["day", "readiness"]].tail(40))
+    with bento.tile("HRV w nocy", key="atlas_hrv", terms=["hrv"], how=glossary.TREND_HOW,
+                    caption=f"ostatnio <b>{row['hrv_last_night']:.0f} ms</b>"
+                    if row is not None and pd.notna(row.get("hrv_last_night")) else None) as t:
+        t.chart(tz.trend(view, "day", {"HRV": ("hrv_last_night", "hrv_last_night_roll7")},
+                         band=("hrv_baseline_low", "hrv_baseline_high"), unit="ms"),
+                table=view[["day", "hrv_last_night"]].tail(40))
 
-    if not pmc.empty:
-        shell.sub(
-            "Obciążenie i forma",
-            "Sprawność rośnie wolno, zmęczenie szybko; forma to ich różnica. "
-            "Pełny model jest na stronie **Forma**.",
-            terms=["ctl", "atl", "tsb"],
-        )
-        tz.show(
-            tz.stacked_panels(
-                pmc,
-                "day",
-                [
-                    {
-                        "title": "CTL / ATL",
-                        "series": {"sprawność": "ctl", "zmęczenie": "atl"},
-                        "kind": "line",
-                        "height": 1.4,
-                    },
-                    {"title": "Load dzienny", "series": {"load": "load_day"}, "kind": "bar", "height": 0.8},
-                ],
-                height=340,
-            )
-        )
+
+def _load() -> None:
+    pmc = shell.clip(shell.table("pmc"))
+    with bento.tile("Obciążenie i forma", rows=2, key="atlas_pmc", terms=["ctl", "atl", "tsb"],
+                    caption="Sprawność rośnie wolno, zmęczenie szybko. Pełny model: strona Forma.") as t:
+        if pmc.empty:
+            shell.missing("pmc", "Uruchom `analytics.py`.")
+            return
+        t.chart(tz.stacked_panels(pmc, "day", [
+            {"title": "CTL / ATL", "series": {"sprawność": "ctl", "zmęczenie": "atl"}, "kind": "line", "height": 1.4},
+            {"title": "Load dzienny", "series": {"load": "load_day"}, "kind": "bar", "height": 0.8},
+        ], height=400), table=pmc[["day", "ctl", "atl", "tsb", "load_day"]].tail(40))
 
 
 def _places(activities: pd.DataFrame) -> None:
@@ -246,22 +220,18 @@ def _places(activities: pd.DataFrame) -> None:
     )
     if places.empty:
         return
-    shell.lead(
-        "Gdzie najwięcej",
-        "Miejsca uszeregowane liczbą aktywności. Treningi w podróży zwykle wyglądają "
-        "inaczej niż domowe — warto o tym pamiętać, patrząc na średnie.",
-    )
     for column in ("km", "godziny"):
         places[column] = places[column].round(1)
     places["ostatnia"] = pd.to_datetime(places["ostatnia"]).dt.date
-    top = places.head(12).copy()
-    tz.show(tz.hbars(top, "miejsce", "aktywności"), table=places)
+    top = places.head(10).copy()
+    with bento.tile("Gdzie najwięcej", rows=2, key="atlas_where",
+                    caption="Treningi w podróży zwykle wyglądają inaczej niż domowe.") as t:
+        t.chart(tz.hbars(top, "miejsce", "aktywności"), table=places)
 
 
 def _recent(activities: pd.DataFrame) -> None:
     if activities.empty:
         return
-    shell.lead("Ostatnie aktywności")
     recent = activities.sort_values("start_local", ascending=False).head(10).copy()
     recent["start_local"] = pd.to_datetime(recent["start_local"]).dt.strftime("%d.%m %H:%M")
     if "pace_min_km" in recent.columns:
@@ -278,7 +248,9 @@ def _recent(activities: pd.DataFrame) -> None:
         "location": "miejsce",
     }
     shown = recent[[c for c in columns if c in recent.columns]].rename(columns=columns)
-    st.dataframe(shown, width="stretch", hide_index=True, column_config=shell.ACTIVITY_COLUMNS)
+    with bento.tile("Ostatnie aktywności", rows=2, key="atlas_recent", caption="Wszystkie sporty, najnowsze na górze."):
+        st.dataframe(shown, width="stretch", hide_index=True, column_config=shell.ACTIVITY_COLUMNS,
+                     height=bento.chart_height(2, caption=True))
 
 
 @st.dialog("Który trening otworzyć?")

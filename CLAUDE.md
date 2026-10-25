@@ -17,7 +17,8 @@ garmin-dashboard/
   analytics.py       modele fizjologiczne i statystyka -> tabele pochodne
   db.py              DuckDB in-memory z widokami na parquet
   theme.py           system wykresów: paleta, buildery, mapy, glob
-  shell.py           wspólny stan stron: dane, zakres czasu, nagłówki
+  shell.py           wspólny stan stron: dane, zakres czasu, style
+  bento.py           siatka stron: kafle, KPI, panele (układ każdej strony)
   insights.py        parser notatek z insights/
   glossary.py        słownik pojęć: co to jest, po co, jak czytać (pomoc na stronach)
   app.py             router (st.navigation) — bez logiki widoków
@@ -219,7 +220,7 @@ rozjadą się w ciągu jednego PR-a.
 
 Trzy reguły wymuszone strukturalnie:
 
-1. **Żadnych tytułów wewnątrz figury.** Tytuł to nagłówek Streamlita nad
+1. **Żadnych tytułów wewnątrz figury.** Tytuł to nagłówek kafla (`bento.tile`) nad
    wykresem (`heading()`); tytuł plotly i legenda u góry walczą o ten sam pas
    i nachodzą na siebie.
 2. **Żadnych podwójnych osi.** `timeseries` przyjmuje jedną oś wartości; dwie
@@ -233,7 +234,8 @@ Trzy reguły wymuszone strukturalnie:
 Buildery: `trend`, `range_bars`, `trail`, `hbars`, `timeseries`, `bars`,
 `stacked`, `scatter`, `heatmap`, `stacked_panels`, `route_map`, `profile` (+ `geo_cells`/`geo_clusters` — binowanie punktów dla globu);
 dekoratory `band`, `threshold`, `zero_lines`; wspólna legenda nad grupą wykresów
-`key(...)`; render przez `show(fig, table=..., note=...)`, który dokłada
+`key(...)`; render w kaflu przez `t.chart(fig, table=...)` (poza siatką:
+`show(fig, table=..., note=...)`), który dokłada
 bliźniaczy widok tabelaryczny.
 
 **Domyślny idiom dla dziennej metryki to `trend`**, nie `timeseries`: dni jako
@@ -252,7 +254,7 @@ to, co sprawiało, że dashboard wyglądał jak arkusz z 2005 roku. Kolejne zasa
   odróżnienia — nie wracaj do `ordinal_colors` dla tych dwóch zbiorów.
 - Daty na osiach są po polsku (`polish_dates`, wołane przez buildery samo);
   wykres zbudowany ręcznie przez `go.Figure` trzeba przepuścić przez nie jawnie.
-- Kafelki (`shell.metrics`) porównują z `shell.week_before(frame)` i mają
+- Kafelki KPI (`bento.kpis`) porównują z `shell.week_before(frame)` i mają
   czwarte pole `delta_color`: `"inverse"` dla tętna spoczynkowego / stresu,
   `"off"` dla zmęczenia i ilorazów obciążenia.
 
@@ -388,23 +390,37 @@ kolidują ścieżkami).
 
 Zasady układu, które trzymają spójność:
 
-- **Jedna kolumna.** Wykresy dostają pełną szerokość kanwy; `st.columns`
-  wyłącznie na paski liczb (`shell.metrics`) i parę kontrolek obok siebie.
-  Dwa wykresy obok siebie ścinają oś czasu i zmuszają do skakania wzrokiem.
-- **Wyjątek: strona *Dziś*** (`views/today.py`, strona startowa) to siatka kart
-  (`st.container(border=True, key="card_…")`, styl w `PAGE_STYLE`). W karcie
-  są liczby, krótkie listy i najwyżej `theme.spark` — nigdy oś do odczytu.
-  Pełny wykres stoi na swojej stronie, karta ma do niej przycisk. Decyzja dnia
-  to `coach.next_session`; przyciski karty wołają `plan.soften` / `plan.postpone`
-  (pojedyncza sesja, z tą samą regułą „mocne dni nie sąsiadują”).
-- **Każda sekcja = `shell.lead(tytuł, zdanie, terms=[...], how=...)`** — zdanie
-  mówi, *po co* jest sekcja. Opis znaczników wykresu („kropki to dni, pas to
-  norma”) nie idzie do podpisu, tylko do `how=`; razem z hasłami `terms` (klucze
-  z `glossary.TERMS`) trafia do przycisku „Co to jest?”. Nowy wskaźnik = nowe
-  hasło w `glossary.py` (co / po co / jak czytać); kafelki `shell.metrics`
-  biorą podpowiedź same przez `glossary.FIELDS`, a `tests/test_glossary.py`
-  pilnuje, że każdy użyty klucz istnieje. Wszystko widać też na stronie
-  *Słownik*. Tytuł nigdy nie idzie do figury (patrz `theme.py`).
+- **Siatka bento (`bento.py`) na każdej stronie.** Kanwa to mozaika kafli na
+  siatce 4 kolumn i stałych rzędów (`ROW` = 196 px). Kafel zajmuje 1–4 kolumny
+  (`bento.row(2, 2)`, `row(2, 1, 1)` — suma zawsze 4) i 1–3 rzędy
+  (`bento.tile(..., rows=2)`); wysokość = `rows·ROW + (rows−1)·GAP`, więc kafel
+  2-rzędowy jest dokładnie tak wysoki jak dwa 1-rzędowe obok i mozaika się
+  domyka. Stały szkielet strony: `bento.header` → pasek KPI → mozaika → panele.
+- **KPI zawsze po 4**: `bento.kpis(row, previous, specs)` dla kolumn `daily`
+  (podpowiedź z `glossary.FIELDS`), `bento.stat(...)` dla innych liczb,
+  `bento.empty_stat` na brakujący slot.
+- **Oś czasu dostaje co najmniej 2 kolumny.** Kafel 1-kolumnowy to liczba,
+  krótka lista (`bento.bullets`), `theme.spark` albo wykres bez osi czasu.
+  Kafel 1-rzędowy mieści jeden wykres — dwa panele `stacked_panels` wymagają
+  `rows=2`.
+- **Kafel ma własne chrome**: tytuł, jednozdaniowy `caption` (dzisiejsza liczba
+  i jej status albo *po co* jest kafel), a w nagłówku ikony „?” (`terms` +
+  `how=` — opis znaczników wykresu idzie tu, nie do podpisu) i tabeli danych
+  (`t.chart(fig, table=...)`). Kontrolki sterujące jednym kaflem (wybór nocy,
+  metryki) idą do `with t.header:` z `label_visibility="collapsed"`, żeby nie
+  zjadały wysokości wykresu; przejście na inną stronę to ikona strzałki tamże.
+  `t.chart` nadpisuje wysokość figury (`bento.chart_height`), więc żaden kafel
+  nie przewija się przez za wysoki wykres.
+- **Formularze, edytory, długie tabele i proza → `bento.panel`**: ten sam
+  wygląd, wysokość według treści (Plan, Zawody, SQL, Insights, Słownik).
+- Nowy wskaźnik = nowe hasło w `glossary.py` (co / po co / jak czytać);
+  `tests/test_glossary.py` pilnuje, że każdy klucz z `terms=[...]` istnieje.
+  Wszystko widać też na stronie *Słownik*. Tytuł nigdy nie idzie do figury.
+- *Dziś* (`views/today.py`) jest stroną startową: decyzja dnia to
+  `coach.next_session`, przyciski kafla wołają `plan.soften` / `plan.postpone`
+  (pojedyncza sesja, z regułą „mocne dni nie sąsiadują”).
+- Glob w *Atlasie* zostaje poza kaflem (hero na pełną szerokość, z poświatą
+  `globe_stage`), reszta Atlasu to zwykła mozaika.
 - **Chrome w szynie bocznej**: nawigacja, jeden globalny zakres czasu
   (`shell.range_picker`) i status hurtowni (`shell.footer`). Kanwa nie
   rezerwuje miejsca na kontrolki.

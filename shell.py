@@ -1,9 +1,9 @@
 """Shared shell for the dashboard pages: data access, chrome, small helpers.
 
 Each page is a module under ``views/`` that calls into here for its tables and
-for the handful of layout primitives the whole app uses. Keeping the chrome in
-one place is what lets the pages stay a single column of full-width charts:
-nothing has to reserve space for navigation or filters.
+the shared chrome (rail, time range, styles); the page layout itself is the
+bento grid in ``bento.py``. Keeping the chrome in the rail is what lets the
+canvas be all tiles: nothing has to reserve space for navigation or filters.
 """
 
 from __future__ import annotations
@@ -23,9 +23,26 @@ import routing
 
 PAGE_STYLE = """
 <style>
-  /* One column, generous measure, no card chrome. The page is a document:
-     a lead paragraph, then the chart it describes, full width. */
-  .block-container {padding-top: 1.6rem; padding-bottom: 5rem; max-width: 1180px;}
+  /* Bento grid (bento.py): the canvas is a mosaic of tiles, so it takes the
+     screen width; the tiles, not a text measure, set the rhythm. */
+  .block-container {padding-top: 1.6rem; padding-bottom: 4rem; max-width: 1560px;}
+  [class*="st-key-tile_"], [class*="st-key-kpi_"] {border-radius: 14px;}
+  [class*="st-key-tile_"]:not([class*="st-key-tile_head_"]) {padding: 0.15rem 0.25rem 0 0.25rem;}
+  [class*="st-key-tile_head_"] {min-height: 30px; flex-wrap: nowrap;}
+  [class*="st-key-tile_head_"] [data-testid="stElementContainer"]:first-child {flex: 1 1 auto; min-width: 0;}
+  [class*="st-key-tile_head_"] [data-testid="stMarkdownContainer"] > div,
+  [class*="st-key-tile_head_"] [data-testid="stMarkdown"] {margin: 0 !important;}
+  .tile-title {white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+  [class*="st-key-tile_head_"] button {padding: 0 0.25rem; min-height: 28px;}
+  .tile-title {font-size: 0.86rem; font-weight: 620; letter-spacing: -0.003em; line-height: 1.3;}
+  .tile-caption {font-size: 0.78rem; opacity: 0.72; margin-top: -0.7rem; line-height: 1.35;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+  [class*="st-key-kpi_"] [data-testid="stMetricValue"] {font-size: 1.6rem;}
+  [class*="st-key-tile_"] [data-testid="stMetricValue"] {font-size: 1.3rem;}
+  .tile-list {margin: 0 !important; padding-left: 1.1rem !important;}
+  .tile-list li {font-size: 0.82rem !important; line-height: 1.45 !important; margin-bottom: 0.2rem !important;}
+  [class*="st-key-kpi_"] .tile-caption {margin-top: -0.4rem;}
+  [class*="st-key-tile_"] [data-testid="stPlotlyChart"] {margin-top: -0.35rem;}
   h1 {font-size: 1.55rem !important; font-weight: 650; letter-spacing: -0.015em;
       margin-bottom: 0.1rem !important;}
   h2 {font-size: 1.05rem !important; font-weight: 620; letter-spacing: -0.005em;
@@ -47,12 +64,6 @@ PAGE_STYLE = """
           rgba(42,120,214,0.00) 61%);}
   .st-key-globe_stage [data-testid="stPlotlyChart"] {margin: 0;}
   hr {margin: 2.2rem 0 0 0; opacity: 0.25;}
-  /* Cards exist on the Dziś page only (st.container(key="card_...")). Inside
-     a card the section rhythm of the document pages is too loose. */
-  [class*="st-key-card_"] {border-radius: 12px; padding: 0.35rem 0.4rem 0.2rem 0.4rem;}
-  [class*="st-key-card_"] h3 {margin-top: 0 !important;}
-  [class*="st-key-card_"] h4 {font-size: 1.05rem !important; font-weight: 620; padding: 0.2rem 0 0 0;}
-  [class*="st-key-card_"] [data-testid="stMetricValue"] {font-size: 1.25rem;}
 </style>
 """
 

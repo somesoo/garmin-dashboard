@@ -1,9 +1,8 @@
 """Local Garmin dashboard -- streamlit run app.py
 
-Router only: every page lives in ``views/`` and every chart is built through
-``theme.py``. The layout is a document, not a grid -- one column of full-width
-figures, each introduced by the sentence that says how to read it. The one
-exception is the Dziś landing page: cards of numbers, no axes to read. All chrome
+Router only: every page lives in ``views/``, every chart is built through
+``theme.py`` and every page is laid out on the bento grid of ``bento.py``:
+a header, four KPI tiles, then a mosaic of fixed-height tiles. All chrome
 (navigation, the single global time filter, warehouse status) sits in the rail,
 so the canvas never has to reserve space for controls.
 """

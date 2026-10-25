@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import bento
 import glossary
 import routing
 import shell
@@ -15,36 +16,59 @@ from views import run_common as rc
 
 
 def render() -> None:
-    st.title("Prognoza wyników")
-    st.caption(
-        "Na jaki czas możesz dziś liczyć na każdym dystansie i jak bardzo tej liczbie ufać. Każda sekcja ma "
-        "„Co to jest?” z objaśnieniem pojęć; nagłówki kolumn tabeli mają podpowiedzi po najechaniu."
-    )
     frame = rc.guard()
+    result = rc.current_forecast() if frame is not None else {}
+    vdot = f" Wydolność dziś: VDOT {result['vdot']:.1f}." if result.get("status") == "ok" else ""
+    bento.header("Prognoza wyników",
+                 "Na jaki czas możesz dziś liczyć na każdym dystansie i jak bardzo tej liczbie ufać." + vdot)
     if frame is None:
         return
-    result = rc.current_forecast()
     if result.get("status") != "ok":
         st.warning(result.get("reason", "Za mało danych na prognozę."))
         return
 
     history = rc.history()
-    _table(result, history)
+    _kpis(result, history)
     for note in result.get("notes", []):
         st.caption(f"⚠ {note}")
 
     key = st.segmented_control(
-        "Dystans", list(units.RACES), default="10k", format_func=units.RACE_LABELS.get, key="forecast_distance"
+        "Dystans", list(units.RACES), default="10k", format_func=units.RACE_LABELS.get, key="forecast_distance",
+        label_visibility="collapsed",
     ) or "10k"
     item = result["distances"][key]
     for warning in item.warnings:
         st.warning(warning)
-    _confidence(result, item)
-    _history_chart(history, key)
-    _advice(result, frame, key)
-    _method(result, item)
-    _backtest(history)
-    _assumptions()
+
+    left, right = bento.row(2, 2)
+    with left:
+        _history_chart(history, key)
+    with right:
+        _confidence(result, item)
+        _advice(result, frame, key)
+
+    left, right = bento.row(2, 2)
+    with left:
+        _backtest(history)
+    with right:
+        _methods(result, item)
+        _anchor(result)
+
+    _table(result, history)
+    with bento.panel("Przygotowanie i założenia modelu", key="assumptions",
+                     caption="Jak brak przygotowania zamienia potencjał w wynik realistyczny i na czym model stoi."):
+        _preparation(result, item)
+        _assumptions()
+
+
+def _kpis(result: dict, history: pd.DataFrame) -> None:
+    for column, (key, item) in zip(bento.row(1, 1, 1, 1), result["distances"].items()):
+        four = forecast.trend(history, key, 4)
+        bento.stat(column, units.RACE_LABELS[key], units.fmt_time(item.realistic_s), key=f"fc_{key}",
+                   delta=units.fmt_delta(four) if four is not None else None, delta_color="inverse",
+                   note=f"{units.fmt_time(item.low_s)}–{units.fmt_time(item.high_s)} · pewność {item.confidence}",
+                   help=f"Zmiana względem prognozy sprzed 4 tygodni (ujemna = szybciej). "
+                        f"{units.fmt_pace(item.pace)}, potencjał {units.fmt_time(item.potential_s)}.")
 
 
 def _table(result: dict, history: pd.DataFrame) -> None:
@@ -67,14 +91,14 @@ def _table(result: dict, history: pd.DataFrame) -> None:
                 "zmiana 12 tyg.": units.fmt_delta(twelve) if twelve is not None else "—",
             }
         )
-    shell.lead(
-        "Prognoza na dziś",
-        f"Twoja wydolność to dziś VDOT {result['vdot']:.1f}; tabela przekłada ją na czasy startowe.",
+    with bento.panel(
+        "Wszystkie liczby", key="forecast_table",
+        caption="Nagłówki kolumn mają podpowiedzi po najechaniu.",
         terms=["realistic", "interval80", "confidence", "potential", "preparation", "vdot", "after_plan"],
         how="Zmiana 4/12 tyg.: ujemna = prognoza szybsza niż wtedy. „Po planie” pojawia się tylko dla "
             "dystansu z wpisanym startem (strona Zawody).",
-    )
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", column_config=_COLUMNS)
+    ):
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", column_config=_COLUMNS)
 
 
 def _help(key: str) -> str:
@@ -97,18 +121,20 @@ def _confidence(result: dict, item: forecast.DistanceForecast) -> None:
     """The confidence label, what it means in seconds, and what holds it back."""
     label = units.RACE_LABELS[item.key]
     spread = (item.high_s - item.low_s) / 2
-    st.markdown(
-        f"**Pewność: {item.confidence} {rc.CONFIDENCE_ICON[item.confidence]}** — w 8 startach na 10 wynik na "
-        f"{label} powinien wypaść między **{units.fmt_time(item.low_s)}** a **{units.fmt_time(item.high_s)}** "
-        f"(ok. ±{units.fmt_time(spread)} od {units.fmt_time(item.realistic_s)})."
-    )
     reasons = forecast.confidence_reasons(item, result.get("perf"))
-    if reasons:
-        st.caption("Co poszerza przedział, od największego: " + "; ".join(reasons) + ".")
-        st.caption("Najszybciej podnosi pewność mocny bieg (start, test) na dystansie bliskim docelowemu, "
-                   "powiązany ze startem na stronie Zawody.")
-    else:
-        st.caption("Świeży wysiłek maksymalny i zgodne metody — prognoza jest tak pewna, jak ten model potrafi.")
+    with bento.tile(
+        f"Pewność — {label}", key="confidence", terms=["confidence", "interval80"],
+        caption=f"<b>{item.confidence} {rc.CONFIDENCE_ICON[item.confidence]}</b> · 8 na 10 startów między "
+                f"{units.fmt_time(item.low_s)} a {units.fmt_time(item.high_s)} (±{units.fmt_time(spread)})",
+        how="Najszybciej podnosi pewność mocny bieg (start, test) na dystansie bliskim docelowemu, powiązany ze "
+            "startem na stronie Zawody.",
+    ):
+        if reasons:
+            st.markdown("<div class='tile-caption'>Co poszerza przedział, od największego:</div>",
+                        unsafe_allow_html=True)
+            bento.bullets(reasons[:3])
+        else:
+            st.caption("Świeży wysiłek maksymalny i zgodne metody — prognoza jest tak pewna, jak ten model potrafi.")
 
 
 def _minutes_axis(fig: go.Figure, values: pd.Series) -> None:
@@ -125,13 +151,16 @@ def _minutes_axis(fig: go.Figure, values: pd.Series) -> None:
 
 
 def _history_chart(history: pd.DataFrame, key: str) -> None:
-    shell.lead(
-        "Jak zmieniała się prognoza",
-        "Czy idziesz do przodu: prognoza liczona co tydzień tylko z danych sprzed tego dnia.",
-        terms=["near_max", "interval80"],
-        how="Wyżej = szybciej. Pas to przedział 80%, linia przerywana — Garmin. Pełne punkty: prognoza oparta "
-            "na wysiłku bliskim maksymalnego; puste: tylko na odcinkach treningowych (dolna granica).",
-    )
+    with bento.tile(
+        "Jak zmieniała się prognoza", rows=2, key="forecast_history", terms=["near_max", "interval80"],
+        caption="Liczona co tydzień tylko z danych sprzed tego dnia. Wyżej = szybciej.",
+        how="Pas to przedział 80%, linia kropkowana — Garmin. Pełne punkty: prognoza oparta na wysiłku bliskim "
+            "maksymalnego; puste: tylko na odcinkach treningowych (dolna granica).",
+    ) as tile:
+        _history_body(tile, history, key)
+
+
+def _history_body(tile, history: pd.DataFrame, key: str) -> None:
     if history.empty:
         st.caption("Brak historii prognoz — uruchom `analytics.py`.")
         return
@@ -164,7 +193,7 @@ def _history_chart(history: pd.DataFrame, key: str) -> None:
                         hovertemplate="%{y:.1f} min<extra>Garmin</extra>")
     fig.update_layout(**tz.base_layout(legend=True, height=340))
     _minutes_axis(fig, pd.concat([minutes["low"], minutes["high"], minutes["garmin"]]))
-    tz.show(
+    tile.chart(
         tz.polish_dates(tz.style_axes(fig), minutes["day"]),
         table=view.assign(
             realistyczny=view["realistic_s"].map(units.fmt_time),
@@ -178,71 +207,68 @@ def _history_chart(history: pd.DataFrame, key: str) -> None:
 
 def _advice(result: dict, frame: pd.DataFrame, key: str) -> None:
     tips = forecast.advice(result, frame, key)
-    shell.lead(
-        f"Co może poprawić wynik — {units.RACE_LABELS[key]}",
-        "Miejsca, w których prognoza jest dziś ograniczana, od największego. To luki w danych, nie diagnoza.",
-        terms=["preparation", "potential"],
-    )
-    if not tips:
-        st.caption("Przygotowanie spełnia przyjęte wymagania dla tego dystansu — dalszy postęp to głównie "
-                   "regularność i stopniowe podnoszenie jakości.")
-        return
-    st.markdown("\n".join(f"- {tip}" for tip in tips))
+    with bento.tile("Co może poprawić wynik", key="advice", terms=["preparation", "potential"],
+                    caption="Gdzie prognoza jest dziś ograniczana, od największego — luki, nie diagnoza."):
+        if not tips:
+            st.caption("Przygotowanie spełnia przyjęte wymagania dla tego dystansu — dalszy postęp to głównie "
+                       "regularność i stopniowe podnoszenie jakości.")
+            return
+        bento.bullets(tips[:3])
 
 
-def _method(result: dict, item: forecast.DistanceForecast) -> None:
-    shell.lead("Z czego to wynika", "Wszystkie wejścia tej prognozy — do sprawdzenia, nie do wiary na słowo.",
-               terms=["methods", "near_max", "vdot"])
+def _methods(result: dict, item: forecast.DistanceForecast) -> None:
+    weights = ", ".join(f"{name} {weight:.0%}" for name, weight in result["weights"].items())
+    with bento.tile(
+        "Metody i ich zgodność", key="methods", terms=["methods", "vdot"], caption=f"wagi w VDOT: {weights}",
+        how=f"Rozbieżność metod i odległość od dystansu kotwicy składają się na σ = {item.sigma:.3f} (log-czas), "
+            f"co daje przedział ±{(pow(2.718, 1.28 * item.sigma) - 1):.0%}.",
+    ):
+        columns = st.columns(3)
+        for column, (label, name, role) in zip(columns, (
+            ("wysiłki (Daniels)", "wyniki", "Kotwica prognozy: udokumentowane wysiłki."),
+            ("tętno ↔ tempo", "tętno", "Trend i niezależna kontrola (skalibrowane)."),
+            ("Garmin", "Garmin", "Odniesienie zewnętrzne (Firstbeat) — tylko poszerza przedział."),
+        )):
+            column.metric(label, units.fmt_time(item.methods.get(name)), help=role)
+
+
+def _anchor(result: dict) -> None:
     perf = result.get("perf")
-    with st.expander("Metody i ich zgodność", expanded=True):
-        methods = pd.DataFrame(
-            [
-                {"metoda": "Udokumentowane wysiłki (Daniels)", "czas": units.fmt_time(item.methods.get("wyniki")),
-                 "rola": "kotwica prognozy"},
-                {"metoda": "Tętno ↔ tempo (skalibrowane)", "czas": units.fmt_time(item.methods.get("tętno")),
-                 "rola": "trend i niezależna kontrola"},
-                {"metoda": "Garmin (Firstbeat)", "czas": units.fmt_time(item.methods.get("Garmin")),
-                 "rola": "odniesienie zewnętrzne — poszerza przedział"},
-            ]
-        )
-        st.dataframe(methods, hide_index=True, width="stretch")
-        weights = ", ".join(f"{name} {weight:.0%}" for name, weight in result["weights"].items())
-        st.caption(
-            f"Wagi w VDOT: {weights}. Rozbieżność metod i odległość od dystansu kotwicy składają się "
-            f"na σ = {item.sigma:.3f} (log-czas), co daje przedział ±{(pow(2.718, 1.28 * item.sigma) - 1):.0%}."
-        )
-    with st.expander("Wysiłek, na którym stoi prognoza"):
+    with bento.tile("Wysiłek, na którym stoi prognoza", key="anchor", terms=["near_max"],
+                    caption=(f"{perf['day']:%d.%m.%Y} · {perf['age_days']} dni temu · {perf['source']}"
+                             if perf else None)) as t:
         if not perf:
             st.caption("Brak udokumentowanego wysiłku — prognoza stoi na tętnie.")
-        else:
-            label = sessions.EFFORT_LABELS.get(perf["effort"], perf["effort"])
-            st.markdown(
-                f"**{label}** ({perf['distance_m'] / 1000:.2f} km) w **{units.fmt_time(perf['seconds'])}** "
-                f"({units.fmt_pace(units.pace_from(perf['seconds'], perf['distance_m'] / 1000))}), "
-                f"{perf['day']:%d.%m.%Y}, {perf['age_days']} dni temu · źródło: {perf['source']}"
-            )
-            hr = f"{perf['hr_frac']:.0%} HRmax" if perf.get("hr_frac") else "bez tętna"
-            st.caption(
-                f"Tętno na tym odcinku: {hr} → "
-                + ("wysiłek bliski maksymalnego (≥ 91% HRmax przez ≥ 6 min albo start)."
-                   if perf["near_max"] else "nie był maksymalny: wynik z niego to dolna granica.")
-                + f" VDOT {perf['vdot_raw']:.1f}"
-                + (f", po korekcie na wiek wyniku {perf['vdot']:.1f}" if abs(perf["vdot"] - perf["vdot_raw"]) > 0.05 else "")
-                + f". Wysiłków w oknie 120 dni: {perf['n_efforts']}."
-            )
-            if st.button("Otwórz ten trening", key="forecast_open_anchor"):
+            return
+        with t.header:
+            if st.button("", icon=":material/open_in_new:", type="tertiary", key="forecast_open_anchor",
+                         help="Otwórz ten trening"):
                 routing.open_run(perf["activity_id"])
-        hr = result.get("hr")
-        calibration = result.get("calibration")
-        if hr:
-            st.caption(
-                f"Tętno: {hr['n']} spokojnych biegów z 42 dni, surowy VDOT z tętna {hr['raw']:.1f} "
-                + (f"× kalibracja {calibration['factor']:.2f} (z {calibration['n']} wysiłków bliskich maksimum) "
-                   f"= {hr['vdot']:.1f}." if calibration else "— bez kalibracji, więc poza prognozą.")
-                + f" HRmax {result['hr_max']:.0f} (trzecie najwyższe maksimum z biegów — pojedyncze skoki czujnika "
-                "się nie liczą)."
-            )
-    with st.expander("Przygotowanie do dystansu"):
+        label = sessions.EFFORT_LABELS.get(perf["effort"], perf["effort"])
+        columns = st.columns(3)
+        columns[0].metric(label, units.fmt_time(perf["seconds"]),
+                          help=f"{perf['distance_m'] / 1000:.2f} km")
+        columns[1].metric("tempo", units.fmt_pace(units.pace_from(perf["seconds"], perf["distance_m"] / 1000), False))
+        columns[2].metric("VDOT", f"{perf['vdot']:.1f}",
+                          help=f"surowy {perf['vdot_raw']:.1f}; wysiłków w oknie 120 dni: {perf['n_efforts']}")
+        hr = f"{perf['hr_frac']:.0%} HRmax" if perf.get("hr_frac") else "bez tętna"
+        st.markdown(f"<div class='tile-caption'>{hr} — "
+                    + ("bliski maksymalnego" if perf["near_max"] else "nie maksymalny: dolna granica") + "</div>",
+                    unsafe_allow_html=True)
+
+
+def _preparation(result: dict, item: forecast.DistanceForecast) -> None:
+    perf = result.get("perf")
+    hr = result.get("hr")
+    calibration = result.get("calibration")
+    if hr:
+        st.caption(
+            f"Tętno: {hr['n']} spokojnych biegów z 42 dni, surowy VDOT z tętna {hr['raw']:.1f} "
+            + (f"× kalibracja {calibration['factor']:.2f} (z {calibration['n']} wysiłków bliskich maksimum) "
+               f"= {hr['vdot']:.1f}." if calibration else "— bez kalibracji, więc poza prognozą.")
+            + f" HRmax {result['hr_max']:.0f} (trzecie najwyższe maksimum z biegów)."
+        )
+    with st.expander(f"Przygotowanie do dystansu — {units.RACE_LABELS[item.key]}"):
         prep = item.prep
         st.dataframe(
             pd.DataFrame(
@@ -271,22 +297,22 @@ def _backtest(history: pd.DataFrame) -> None:
     if efforts.empty or "near_max" not in efforts.columns:
         return
     table = forecast.backtest(history, efforts)
-    shell.lead(
-        "Sprawdzenie wstecz",
-        "Ile ta prognoza była warta na twoich danych: mocne biegi (≥ 3 km) wobec tego, co model "
-        "przewidywał tydzień wcześniej.",
-        terms=["backtest"],
-    )
-    if table.empty:
-        st.caption("Brak wysiłków bliskich maksymalnego ≥ 3 km z prognozą tydzień wcześniej — nie ma czego sprawdzać.")
-        return
-    error = table["error_pct"].abs()
-    slower = int((table["error_pct"] > 0).sum())
-    st.caption(
-        f"{len(table)} porównań · mediana błędu bezwzględnego {error.median():.1f}% · model przewidział "
-        f"wolniej niż wyszło w {slower}, szybciej w {len(table) - slower} przypadkach. Dodatni błąd = "
-        "prognoza zbyt ostrożna (zwykle po okresie szybkiego postępu)."
-    )
+    error = table["error_pct"].abs() if not table.empty else pd.Series(dtype=float)
+    slower = int((table["error_pct"] > 0).sum()) if not table.empty else 0
+    with bento.tile(
+        "Sprawdzenie wstecz", rows=2, key="backtest", terms=["backtest"],
+        caption=(f"{len(table)} porównań · mediana błędu <b>{error.median():.1f}%</b> · za wolno {slower}, "
+                 f"za szybko {len(table) - slower}") if not table.empty else None,
+        how="Mocne biegi (≥ 3 km) wobec tego, co model przewidywał tydzień wcześniej. Dodatni błąd = prognoza "
+            "zbyt ostrożna (zwykle po okresie szybkiego postępu).",
+    ):
+        if table.empty:
+            st.caption("Brak wysiłków bliskich maksymalnego ≥ 3 km z prognozą tydzień wcześniej.")
+            return
+        _backtest_table(table)
+
+
+def _backtest_table(table: pd.DataFrame) -> None:
     table = table.sort_values("day", ascending=False)
     st.dataframe(
         pd.DataFrame(
@@ -298,7 +324,7 @@ def _backtest(history: pd.DataFrame) -> None:
                 "błąd %": table["error_pct"],
             }
         ),
-        hide_index=True, width="stretch",
+        hide_index=True, width="stretch", height=bento.chart_height(2, caption=True),
     )
 
 

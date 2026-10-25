@@ -8,8 +8,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import bento
 import routing
-import shell
 import theme as tz
 from running import forecast, plan as planning, store, units
 from views import run_common as rc
@@ -18,10 +18,10 @@ PRIORITY_HELP = "A — start docelowy sezonu, B — ważny sprawdzian, C — sta
 
 
 def render() -> None:
-    st.title("Zawody i cele")
-    st.caption(
-        "Starty zapisane tutaj trafiają do prognozy (kolumna „po planie”), do planu treningowego i do briefu "
-        "dla asystenta. Dane leżą w `data/coach/races.json` — prywatnie, poza gitem."
+    bento.header(
+        "Zawody i cele",
+        "Starty zapisane tutaj trafiają do prognozy („po planie”), do planu i do briefu dla asystenta. "
+        "Dane leżą w `data/coach/races.json` — prywatnie, poza gitem.",
     )
     frame = rc.guard()
     if frame is None:
@@ -36,19 +36,33 @@ def render() -> None:
         st.info("Brak nadchodzących startów. Dodaj pierwszy poniżej.")
     for race in upcoming:
         _race_card(race, result, today)
-    _add_form()
     if past:
-        _past(past, frame)
+        left, right = bento.row(2, 2)
+        with left:
+            _add_form()
+        with right:
+            _past(past, frame)
+    else:
+        _add_form()
 
 
 def _race_card(race: dict, result: dict, today: dt.date) -> None:
     date = dt.date.fromisoformat(race["date"])
     days = (date - today).days
-    shell.lead(
-        f"{race['name']} — {units.RACE_LABELS[race['distance']]}",
-        f"{date:%d.%m.%Y} · za {days} dni ({days / 7:.1f} tyg.) · priorytet {race.get('priority', 'A')}"
+    with bento.panel(
+        f"{race['name']} — {units.RACE_LABELS[race['distance']]}", key=f"race_{race['id']}",
+        caption=f"{date:%d.%m.%Y} · za {days} dni ({days / 7:.1f} tyg.) · priorytet {race.get('priority', 'A')}"
         + (f" · {race['notes']}" if race.get("notes") else ""),
-    )
+    ):
+        left, right = st.columns(2, gap="medium")
+        with left:
+            _race_numbers(race, result)
+        with right:
+            item = result["distances"].get(race["distance"]) if result.get("status") == "ok" else None
+            _trend(race, item)
+
+
+def _race_numbers(race: dict, result: dict) -> None:
     item = result["distances"].get(race["distance"]) if result.get("status") == "ok" else None
     goal = race.get("goal_s")
     columns = st.columns(4)
@@ -92,7 +106,6 @@ def _race_card(race: dict, result: dict, today: dt.date) -> None:
     if columns[2].button("Usuń", key=f"race_delete_{race['id']}", width="stretch"):
         store.delete_race(race["id"])
         st.rerun()
-    _trend(race, item)
 
 
 def _trend(race: dict, item) -> None:
@@ -113,13 +126,15 @@ def _trend(race: dict, item) -> None:
         fig.add_hline(y=race["goal_s"] / 60, line=dict(color=t["series"][1], width=1.4, dash="dash"),
                       annotation_text=f"cel {units.fmt_time(race['goal_s'])}",
                       annotation_font=dict(size=11, color=t["series"][1]), annotation_position="top left")
-    fig.update_layout(**tz.base_layout(legend=False, height=220))
+    fig.update_layout(**tz.base_layout(legend=False, height=260))
     values = pd.concat([view["realistic_s"] / 60, pd.Series([(race.get("goal_s") or view["realistic_s"].iloc[-1]) / 60])])
     low, high = float(values.min()), float(values.max())
     pad = max(0.5, (high - low) * 0.1)
     fig.update_yaxes(range=[high + pad, low - pad], tickformat=".0f", title_text="min")
-    tz.show(tz.polish_dates(tz.style_axes(fig), view["day"]), key=f"race_trend_{race['id']}",
-            note="Prognoza realistyczna z ostatnich 6 miesięcy na ten dystans; wyżej = szybciej.")
+    st.markdown("<div class='tile-caption'>Prognoza z ostatnich 6 miesięcy; wyżej = szybciej.</div>",
+                unsafe_allow_html=True)
+    st.plotly_chart(tz.polish_dates(tz.style_axes(fig), view["day"]), width="stretch",
+                    key=f"race_trend_{race['id']}", config={"displayModeBar": False})
 
 
 def _race_form(race: dict | None, key: str) -> None:
@@ -154,16 +169,20 @@ def _race_form(race: dict | None, key: str) -> None:
 
 
 def _add_form() -> None:
-    shell.lead("Dodaj start", "Wiele startów naraz to norma: start A na końcu sezonu, B i C po drodze.")
-    _race_form(None, key="race_add")
+    with bento.panel("Dodaj start", key="race_add_panel",
+                     caption="Wiele startów naraz to norma: A na końcu sezonu, B i C po drodze."):
+        _race_form(None, key="race_add")
 
 
 def _past(past: list[dict], frame: pd.DataFrame) -> None:
-    shell.lead(
-        "Starty, które już się odbyły",
-        "Powiąż start z biegiem z zegarka: zostanie oznaczony jako start, a wynik stanie się wysiłkiem "
-        "maksymalnym — najmocniejszą kotwicą prognozy.",
-    )
+    with bento.panel(
+        "Starty, które już się odbyły", key="races_past",
+        caption="Powiąż start z biegiem: wynik stanie się najmocniejszą kotwicą prognozy.",
+    ):
+        _past_rows(past, frame)
+
+
+def _past_rows(past: list[dict], frame: pd.DataFrame) -> None:
     for race in sorted(past, key=lambda r: r["date"], reverse=True):
         date = pd.Timestamp(race["date"])
         nearby = frame[(frame["day"] >= date - pd.Timedelta(days=1)) & (frame["day"] <= date + pd.Timedelta(days=1))]

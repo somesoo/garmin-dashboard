@@ -11,6 +11,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+import bento
 import shell
 import theme as tz
 
@@ -32,7 +33,7 @@ def render() -> None:
     routes = shell.table("routes")
     activities = shell.table("activities")
 
-    st.title("Trasy")
+    bento.header("Trasy", "Jeden ślad GPS naraz. Wszystkie ślady (mapa ciepła) są na globie w Atlasie.")
     if routes.empty:
         st.caption(
             "Brak śladów GPS. `etl/run.py` pobiera je automatycznie — jeden request "
@@ -46,11 +47,6 @@ def render() -> None:
         return
 
     _explorer(routes, catalogue)
-    st.caption(
-        "Wszystkie ślady naraz są na globie w *Atlasie* (przełącznik „Pokaż "
-        "glob”): przybliż miasto, a glob pokaże mapę ciepła — ile razy "
-        "przebiegnięty jest każdy odcinek."
-    )
 
 
 def _catalogue(routes: pd.DataFrame, activities: pd.DataFrame) -> pd.DataFrame:
@@ -92,7 +88,7 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
     picker, colour = st.columns([3, 2], vertical_alignment="bottom")
     with picker:
         chosen = st.selectbox(
-            "Aktywność", options, format_func=describe, key="routes_activity"
+            "Aktywność", options, format_func=describe, key="routes_activity", label_visibility="collapsed"
         )
     with colour:
         colour_by = st.segmented_control(
@@ -100,6 +96,7 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
             list(COLOUR_CHOICES),
             default="pace_min_km",
             format_func=lambda v: COLOUR_CHOICES[v],
+            label_visibility="collapsed",
         )
     colour_by = colour_by or "pace_min_km"
 
@@ -108,51 +105,44 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
     summary = summary.iloc[0] if not summary.empty else None
 
     if summary is not None:
-        columns = st.columns(5)
-        columns[0].metric("Dystans", f"{summary.get('distance_km', float('nan')):.2f} km")
-        columns[1].metric("Czas", f"{summary.get('duration_min', float('nan')):.0f} min")
-        columns[2].metric("Tempo", shell.pace(summary.get("pace_min_km")))
-        columns[3].metric("Tętno śr.", f"{summary.get('avg_hr', float('nan')):.0f}")
-        columns[4].metric("Load", f"{summary.get('training_load', float('nan')):.0f}")
+        columns = bento.row(1, 1, 1, 1)
+        bento.stat(columns[0], "Dystans", f"{summary.get('distance_km', float('nan')):.2f} km", key="r_km")
+        bento.stat(columns[1], "Czas", f"{summary.get('duration_min', float('nan')):.0f} min", key="r_time")
+        bento.stat(columns[2], "Tempo", shell.pace(summary.get("pace_min_km")), key="r_pace")
+        bento.stat(columns[3], "Tętno śr.", f"{summary.get('avg_hr', float('nan')):.0f}", key="r_hr",
+                   note=f"load {summary.get('training_load', float('nan')):.0f}")
 
-    tz.show(
-        tz.route_map(
-            track,
-            color=colour_by,
-            color_title=COLOUR_UNITS[colour_by],
-            reverse_scale=(colour_by == "pace_min_km"),
-            pace=(colour_by == "pace_min_km"),
-            height=560,
-            # Tied to the activity, not the metric: recolouring keeps the view.
-            uirevision=f"route-{int(chosen)}",
-        ),
-        empty="Ta aktywność nie ma śladu GPS.",
-        key=f"route_map_{int(chosen)}",
-    )
-    st.caption(
-        "Linia pod spodem trzyma kształt trasy, kolorowe punkty niosą wartość — "
-        "ślad zostaje czytelny też tam, gdzie zawraca po sobie. Skala jest "
-        "przycięta do kwantyli 5–95%, żeby postój na światłach nie zjadł całego "
-        "zakresu. Tempo ma odwróconą rampę: ciemniej = szybciej."
-    )
-
-    shell.sub("Profil wysokości")
-    tz.show(tz.profile(track), empty="Brak danych wysokości.")
-
-    panels = []
-    if "hr" in track.columns and track["hr"].notna().any():
-        panels.append({"title": "Tętno (bpm)", "series": {"tętno": "hr"}, "kind": "line"})
-    if "pace_min_km" in track.columns and track["pace_min_km"].notna().any():
-        panels.append({"title": "Tempo (/km, wyżej = szybciej)", "series": {"tempo": "pace_min_km"},
-                       "kind": "line", "pace": True})
-    if "cadence" in track.columns and track["cadence"].notna().any():
-        panels.append({"title": "Kadencja", "series": {"kadencja": "cadence"}, "kind": "line"})
-    if panels:
-        shell.sub("Przebieg wzdłuż dystansu")
-        figure = tz.stacked_panels(track, "distance_km", panels, height=120 * len(panels) + 60)
-        if figure is not None:
-            figure.update_xaxes(title_text="dystans (km)", row=len(panels), col=1)
-        tz.show(figure, table=track.head(200))
+    left, right = bento.row(2, 2)
+    with left, bento.tile(
+        "Ślad", rows=3, key="route_map", caption=f"kolor: {COLOUR_UNITS[colour_by]} · skala przycięta do 5–95%",
+        how="Linia pod spodem trzyma kształt trasy, kolor niesie wartość — ślad zostaje czytelny też tam, gdzie "
+            "zawraca po sobie. Postój na światłach nie zjada zakresu. Tempo ma odwróconą rampę: ciemniej = szybciej.",
+    ) as t:
+        t.chart(
+            tz.route_map(
+                track, color=colour_by, color_title=COLOUR_UNITS[colour_by],
+                reverse_scale=(colour_by == "pace_min_km"), pace=(colour_by == "pace_min_km"), height=560,
+                # Tied to the activity, not the metric: recolouring keeps the view.
+                uirevision=f"route-{int(chosen)}",
+            ),
+            empty="Ta aktywność nie ma śladu GPS.", key=f"route_map_{int(chosen)}",
+        )
+    with right:
+        with bento.tile("Profil wysokości", key="route_profile") as t:
+            t.chart(tz.profile(track), empty="Brak danych wysokości.")
+        panels = []
+        if "hr" in track.columns and track["hr"].notna().any():
+            panels.append({"title": "Tętno (bpm)", "series": {"tętno": "hr"}, "kind": "line"})
+        if "pace_min_km" in track.columns and track["pace_min_km"].notna().any():
+            panels.append({"title": "Tempo (/km)", "series": {"tempo": "pace_min_km"}, "kind": "line", "pace": True})
+        if "cadence" in track.columns and track["cadence"].notna().any():
+            panels.append({"title": "Kadencja", "series": {"kadencja": "cadence"}, "kind": "line"})
+        with bento.tile("Przebieg wzdłuż dystansu", rows=2, key="route_streams",
+                        caption="Wyżej na panelu tempa = szybciej.") as t:
+            figure = tz.stacked_panels(track, "distance_km", panels, height=400) if panels else None
+            if figure is not None:
+                figure.update_xaxes(title_text="dystans (km)", row=len(panels), col=1)
+            t.chart(figure, table=track.head(200), empty="Brak strumienia próbek.")
 
     with st.expander("Plik GPX"):
         st.caption("Ślad jest już w tabeli `routes`; oryginalny GPX pobierzesz z API:")

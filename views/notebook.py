@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+import bento
 import db
 import insights as insights_mod
 import shell
@@ -11,11 +12,10 @@ import theme as tz
 
 
 def insights() -> None:
-    st.title("Insights")
-    st.caption(
-        "Notatki z katalogu `insights/`: proza plus bloki SQL, które liczą się na "
-        "świeżych danych przy każdym wejściu na stronę — wniosek nie zestarzeje się "
-        "po cichu. Nowy dodaje `/garmin-insight` w Claude Code."
+    bento.header(
+        "Insights",
+        "Notatki z `insights/`: proza plus bloki SQL liczone na świeżych danych przy każdym wejściu — wniosek nie "
+        "zestarzeje się po cichu. Nowy dodaje `/garmin-insight` w Claude Code.",
     )
     found = insights_mod.load_all()
     if not found:
@@ -23,19 +23,15 @@ def insights() -> None:
         return
 
     for insight in found:
-        with st.expander(
-            f"{'📌 ' if insight.meta.get('pinned') else ''}{insight.title}"
-            f"{f'  ·  {insight.created}' if insight.created else ''}",
-            expanded=bool(insight.meta.get("pinned")) or len(found) == 1,
-        ):
-            if insight.tags:
-                st.caption(" ".join(f"`{tag}`" for tag in insight.tags))
-            for index, block in enumerate(insight.blocks):
-                if block.kind == "text":
-                    st.markdown(block.body)
-                    continue
-                _render_sql_block(insight, index, block)
-            st.caption(f"`{insight.path.name}`")
+        meta = [insight.created or "", " ".join(f"#{tag}" for tag in insight.tags), insight.path.name]
+        with bento.panel(f"{'📌 ' if insight.meta.get('pinned') else ''}{insight.title}",
+                         caption=" · ".join(m for m in meta if m), key=f"insight_{insight.slug}"):
+            with st.expander("Treść", expanded=bool(insight.meta.get("pinned")) or len(found) == 1):
+                for index, block in enumerate(insight.blocks):
+                    if block.kind == "text":
+                        st.markdown(block.body)
+                        continue
+                    _render_sql_block(insight, index, block)
 
 
 def _render_sql_block(insight, index: int, block) -> None:
@@ -87,25 +83,24 @@ def _render_sql_block(insight, index: int, block) -> None:
 
 
 def sql() -> None:
-    st.title("SQL")
     schema = db.schema()
-    st.caption(
-        "Hurtownia jest otwarta: " + ", ".join(f"`{name}`" for name in schema)
-        + ". Zapytania tylko czytają pliki parquet."
-    )
+    bento.header("SQL", "Hurtownia jest otwarta (DuckDB na plikach parquet); zapytania tylko czytają.")
     default = (
         "SELECT p.day, p.ctl, p.atl, p.tsb, d.hrv_last_night, d.rhr, d.readiness\n"
         "FROM pmc p LEFT JOIN daily d USING (day)\n"
         "ORDER BY p.day DESC\nLIMIT 50"
     )
-    query = st.text_area("SQL", default, height=180, label_visibility="collapsed")
-    if st.button("Wykonaj", type="primary"):
-        try:
-            st.dataframe(db.query(query), width="stretch", hide_index=True)
-        except Exception as exc:  # noqa: BLE001
-            st.error(str(exc))
-
-    with st.expander("Kolumny"):
+    left, right = st.columns([3, 1], gap="small")
+    with left, bento.panel("Zapytanie", key="sql_query"):
+        query = st.text_area("SQL", default, height=180, label_visibility="collapsed")
+        run = st.button("Wykonaj", type="primary")
+    with right, bento.panel("Tabele", key="sql_tables", caption="Rozwiń, żeby zobaczyć kolumny."):
         for name, columns in schema.items():
-            st.markdown(f"**{name}** ({len(columns)})")
-            st.code(", ".join(columns))
+            with st.expander(f"{name} ({len(columns)})"):
+                st.code(", ".join(columns))
+    if run:
+        with bento.panel("Wynik", key="sql_result"):
+            try:
+                st.dataframe(db.query(query), width="stretch", hide_index=True)
+            except Exception as exc:  # noqa: BLE001
+                st.error(str(exc))

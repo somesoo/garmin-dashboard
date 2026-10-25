@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+import bento
 import shell
 import theme as tz
 
@@ -30,19 +31,20 @@ COLUMNS = {
 
 def render() -> None:
     activities = shell.clip(shell.table("activities"))
-    st.title("Aktywności")
+    bento.header("Aktywności", "Wszystkie treningi w wybranym zakresie, każdy sport.")
     if activities.empty:
         st.caption("Brak aktywności w tym zakresie.")
         return
 
-    columns = st.columns(4)
-    columns[0].metric("Treningi", int(activities["activity_id"].count()))
-    columns[1].metric("Dystans", f"{activities['distance_km'].sum():.0f} km")
-    columns[2].metric("Czas", f"{activities['duration_min'].sum() / 60:.0f} h")
-    columns[3].metric("Load", f"{activities['training_load'].sum():.0f}")
-
     sports = sorted(activities["sport"].dropna().unique())
-    picked = st.multiselect("Sport", sports, default=sports, key="activities_sport")
+    picked = st.multiselect("Sport", sports, default=sports, key="activities_sport", label_visibility="collapsed",
+                            placeholder="wszystkie sporty")
+    chosen = activities[activities["sport"].isin(picked)] if picked else activities
+    columns = bento.row(1, 1, 1, 1)
+    bento.stat(columns[0], "Treningi", f"{int(chosen['activity_id'].count())}", key="a_count")
+    bento.stat(columns[1], "Dystans", f"{chosen['distance_km'].sum():.0f} km", key="a_km")
+    bento.stat(columns[2], "Czas", f"{chosen['duration_min'].sum() / 60:.0f} h", key="a_h")
+    bento.stat(columns[3], "Load", f"{chosen['training_load'].sum():.0f}", key="a_load")
     shown = activities[activities["sport"].isin(picked)] if picked else activities
 
     frame = shown.sort_values("start_local", ascending=False)
@@ -58,9 +60,12 @@ def render() -> None:
     frame = frame.rename(columns=COLUMNS).rename(
         columns={"najlepszy 1 km (s)": "najlepszy 1 km", "najlepszy 5 km (s)": "najlepszy 5 km"}
     )
-    st.dataframe(frame, width="stretch", hide_index=True, height=440,
-                 column_config=shell.ACTIVITY_COLUMNS)
+    _charts(shown)
+    with bento.panel("Dziennik", key="activities_log", caption="Najnowsze na górze; tabelę można sortować."):
+        st.dataframe(frame, width="stretch", hide_index=True, height=440, column_config=shell.ACTIVITY_COLUMNS)
 
+
+def _charts(shown: pd.DataFrame) -> None:
     runs = shown[shown["sport"].astype(str).str.contains("running", na=False)].copy()
     if runs.empty or not {"pace_min_km", "avg_hr"} <= set(runs.columns):
         return
@@ -74,31 +79,15 @@ def render() -> None:
     if runs.empty:
         return
 
-    shell.lead(
-        "Tempo w czasie",
-        "Czy biegasz szybciej niż kiedyś — i przy jakim tętnie.",
-        how="Wyżej = szybciej. Rozmiar punktu to dystans, kolor — tętno średnie.",
-    )
-    tz.show(
-        tz.scatter(
-            runs, "start_local", "pace_min_km",
-            color="avg_hr", color_kind="sequential", color_title="tętno",
-            size="distance_km", hover=("name", "distance_km", "training_load"),
-            x_title="", y_title="tempo /km", reverse_y=True, pace_y=True, height=380,
-        )
-    )
-
-    shell.lead(
-        "Tętno vs tempo",
-        "Ile tętna kosztuje cię prędkość: im mniej, tym lepsza wydolność.",
-        terms=["ef"],
-        how="Im bardziej chmura spłaszczona i przesunięta w lewo, tym taniej kupujesz tempo.",
-    )
-    tz.show(
-        tz.scatter(
-            runs, "avg_hr", "pace_min_km",
-            size="distance_km", hover=("name", "distance_km"),
-            x_title="tętno średnie (bpm)", y_title="tempo /km",
-            reverse_y=True, pace_y=True, height=380,
-        )
-    )
+    left, right = bento.row(2, 2)
+    with left, bento.tile("Tempo biegów w czasie", rows=2, key="pace_time",
+                          caption="Czy biegasz szybciej niż kiedyś — i przy jakim tętnie.",
+                          how="Wyżej = szybciej. Rozmiar punktu to dystans, kolor — tętno średnie.") as t:
+        t.chart(tz.scatter(runs, "start_local", "pace_min_km", color="avg_hr", color_kind="sequential",
+                           color_title="tętno", size="distance_km", hover=("name", "distance_km", "training_load"),
+                           x_title="", y_title="tempo /km", reverse_y=True, pace_y=True))
+    with right, bento.tile("Tętno vs tempo", rows=2, key="hr_pace", terms=["ef"],
+                           caption="Ile tętna kosztuje cię prędkość.",
+                           how="Im bardziej chmura spłaszczona i przesunięta w lewo, tym taniej kupujesz tempo.") as t:
+        t.chart(tz.scatter(runs, "avg_hr", "pace_min_km", size="distance_km", hover=("name", "distance_km"),
+                           x_title="tętno średnie (bpm)", y_title="tempo /km", reverse_y=True, pace_y=True))

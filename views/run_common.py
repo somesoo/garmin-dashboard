@@ -143,7 +143,7 @@ RUN_COLUMNS = {
 }
 
 
-def pickable_runs(frame: pd.DataFrame, key: str, height: int | None = None) -> None:
+def pickable_runs(frame: pd.DataFrame, key: str, height: int | None = None, hint: bool = True) -> None:
     """Run log where clicking a row opens the session page."""
     import routing
 
@@ -155,7 +155,8 @@ def pickable_runs(frame: pd.DataFrame, key: str, height: int | None = None) -> N
     rows = getattr(getattr(event, "selection", None), "rows", None) or []
     if rows:
         routing.open_run(int(shown.iloc[rows[0]]["activity_id"]))
-    st.caption("Kliknij wiersz, żeby otworzyć szczegóły treningu.")
+    if hint:
+        st.caption("Kliknij wiersz, żeby otworzyć szczegóły treningu.")
 
 
 def download_brief(prefix: str) -> None:
@@ -186,13 +187,20 @@ def active_plan(today: dt.date | None = None) -> dict[str, Any] | None:
     return min(ahead, key=lambda p: p["request"]["race_date"]) if ahead else None
 
 
-def forecast_tiles(result: dict[str, Any], keys: list[str] | None = None) -> None:
-    """Realistic time per distance with the 80% interval underneath."""
+def forecast_tiles(result: dict[str, Any], keys: list[str] | None = None, compact: bool = False) -> None:
+    """Realistic time per distance with the 80% interval underneath (``compact``:
+    the interval only, for a 1-row bento tile; pace and confidence go to the tooltip)."""
     if result.get("status") != "ok":
         st.caption(result.get("reason", "Brak prognozy."))
         return
     items = [(k, v) for k, v in result["distances"].items() if keys is None or k in keys]
     for column, (key, item) in zip(st.columns(len(items)), items):
+        if compact:
+            column.metric(units.RACE_LABELS[key], units.fmt_time(item.realistic_s),
+                          help=f"{units.fmt_pace(item.pace)} · pewność {item.confidence}")
+            column.markdown(f"<div class='tile-caption'>{units.fmt_time(item.low_s)}–{units.fmt_time(item.high_s)}"
+                            "</div>", unsafe_allow_html=True)
+            continue
         column.metric(units.RACE_LABELS[key], units.fmt_time(item.realistic_s))
         column.caption(
             f"{units.fmt_time(item.low_s)}–{units.fmt_time(item.high_s)} · {units.fmt_pace(item.pace)}  \n"
