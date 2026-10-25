@@ -40,6 +40,25 @@ Python: `.venv` w katalogu repo — `.venv/bin/python` na macOS (główna maszyn
 Python 3.13 z Homebrew) i Linuxie, `.venv/Scripts/python.exe` na Windowsie (3.12+). `garminconnect` to zwykła zależność
 z `requirements.txt`, nie editable install z sąsiedniego repo.
 
+## Oficjalne API Garmina (sprawdzone 2026-10-25)
+
+Garmin otworzył Connect Developer Program 21.10.2026 z tierem **Personal**
+(darmowy klucz z ustawień Garmin Connect, bez wniosku; klucz wymienia się na
+token, wygasa po 30 dniach – roku, nie odnawia się z kodu). **Nie przechodzimy
+na nie** — `garminconnect` daje więcej:
+
+- Personal jest tylko do odczytu (pull): podsumowania aktywności + pliki FIT,
+  sen, HRV, Body Battery, stres, kroki, RHR. **Nie ma** VO2max, training
+  readiness, training status, recovery time (wycinane też z FIT), backfillu
+  ani Training/Courses API (wysyłanie treningów na zegarek = tier Starter:
+  publiczna strona, polityka prywatności, przegląd).
+- Zakres na wywołanie: podsumowania dzienne i HRV ≤ 180 dni, sen i Body Battery
+  ≤ 28 dni, stres i kroki ≤ 7 dni. Limitów zapytań brak w dokumentacji.
+- `garminconnect` ma `upload_workout` / `schedule_workout` / `get_activity_splits`
+  — dokładnie to, czego Personal nie daje. Personal API to plan awaryjny,
+  gdyby nieoficjalny login przestał działać (pola nocne, readiness i status
+  trzeba by wtedy uznać za utracone).
+
 ## Uruchamianie lokalne
 
 `Dashboard.command` / `Dashboard.cmd`: ETL → `serve.py` w tle → przeglądarka.
