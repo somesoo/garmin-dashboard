@@ -1,0 +1,11 @@
+# The app is always dark on a black ground, whatever the system theme: the
+# widget CSS (shell.page_style) and the chart palette (theme.DARK) are tuned
+# for it. serve.py passes the same values, because the launchers do not start
+# Streamlit from this directory and so do not read this file.
+[theme]
+base = "dark"
+# backgroundColor is what Streamlit paints inside widgets (tables, popovers);
+# the black page itself comes from shell.page_style.
+backgroundColor = "#17191d"
+secondaryBackgroundColor = "#23262c"
+textColor = "#fafafa"

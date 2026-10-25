@@ -74,10 +74,10 @@ def _render_sql_block(insight, index: int, block) -> None:
                 key=key,
             )
         else:
-            st.dataframe(result, width="stretch", hide_index=True)
+            st.dataframe(tz.readable_paces(result), width="stretch", hide_index=True)
     except Exception as exc:  # noqa: BLE001
         st.error(f"Nie udało się narysować: {exc}")
-        st.dataframe(result, width="stretch", hide_index=True)
+        st.dataframe(tz.readable_paces(result), width="stretch", hide_index=True)
     with st.popover("SQL"):
         st.code(block.body, language="sql")
 
@@ -101,6 +101,6 @@ def sql() -> None:
     if run:
         with bento.panel("Wynik", key="sql_result"):
             try:
-                st.dataframe(db.query(query), width="stretch", hide_index=True)
+                st.dataframe(tz.readable_paces(db.query(query)), width="stretch", hide_index=True)
             except Exception as exc:  # noqa: BLE001
                 st.error(str(exc))

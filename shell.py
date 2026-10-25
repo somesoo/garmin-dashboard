@@ -29,10 +29,15 @@ _SURFACES = {
               "inset 0 1px 0 rgba(255,255,255,0.9)",
               "0 1px 2px rgba(15,23,42,0.05), 0 8px 24px -12px rgba(15,23,42,0.14)",
               "0 2px 4px rgba(15,23,42,0.06), 0 16px 32px -14px rgba(15,23,42,0.22)"),
-    "dark": ("#000000", "#0a0a0b", "#111214", "rgba(255,255,255,0.08)",
-             "inset 0 1px 0 rgba(255,255,255,0.04)",
-             "0 1px 2px rgba(0,0,0,0.6)",
-             "0 10px 28px -12px rgba(0,0,0,0.9)"),
+    # Graphite cards with a sheen from the top-left, so they read as lit
+    # objects on the black ground, not as holes in it.
+    "dark": ("#000000", "#0a0a0b",
+             "radial-gradient(140% 90% at 0% 0%, rgba(255,255,255,0.075) 0%, rgba(255,255,255,0) 55%),"
+             " linear-gradient(180deg, #1c1e23 0%, #16181c 100%)",
+             "rgba(255,255,255,0.11)",
+             "inset 0 1px 0 rgba(255,255,255,0.10)",
+             "0 1px 2px rgba(0,0,0,0.6), 0 10px 26px -14px rgba(0,0,0,0.9)",
+             "0 2px 4px rgba(0,0,0,0.6), 0 18px 36px -14px rgba(0,0,0,0.95)"),
 }
 
 _STYLE = """
@@ -99,6 +104,7 @@ _STYLE = """
       animation-delay: calc(var(--row-delay, 0ms) + var(--col-delay, 0ms) + 120ms);}
   [class*="st-key-wgt_"] [data-testid="stMetricValue"] {font-size: 1.3rem;}
   [class*="st-key-wgt_"] [data-testid="stPlotlyChart"] {margin-top: -0.35rem;}
+  [class*="st-key-wgt_"] .maplibregl-map, [class*="st-key-wgt_"] .mapboxgl-map {border-radius: 8px; overflow: hidden;}
   .tile-list {margin: 0 !important; padding-left: 1.1rem !important;}
   .tile-list li {font-size: 0.82rem !important; line-height: 1.45 !important; margin-bottom: 0.2rem !important;}
 

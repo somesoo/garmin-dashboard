@@ -60,7 +60,7 @@ LIGHT: dict[str, Any] = {
 }
 
 DARK: dict[str, Any] = {
-    "surface": "#0e1117",
+    "surface": "#17191d",
     "ink": "#ffffff",
     "ink_secondary": "#c3c2b7",
     "muted": "#898781",
@@ -115,17 +115,26 @@ def intensity_colors() -> dict[str, str]:
 
 
 def mode() -> str:
-    """Which theme the browser is actually rendering."""
+    """Which theme the page is actually rendered in.
+
+    A theme pinned in the config (``theme.base``, set by serve.py and
+    .streamlit/config.toml) wins: Streamlit renders it whatever the system
+    prefers, while ``st.context.theme`` can still report the browser's own
+    preference -- trusting that put light widget CSS under dark white text.
+    """
+    try:
+        base = st.get_option("theme.base")
+        if base in ("light", "dark"):
+            return base
+    except Exception:  # noqa: BLE001
+        pass
     try:
         value = st.context.theme.type  # Streamlit >= 1.46
         if value in ("light", "dark"):
             return value
     except Exception:  # noqa: BLE001 - older Streamlit or no context
         pass
-    try:
-        return "dark" if st.get_option("theme.base") == "dark" else "light"
-    except Exception:  # noqa: BLE001
-        return "light"
+    return "light"
 
 
 def tokens() -> dict[str, Any]:
@@ -817,7 +826,7 @@ def show(
         st.caption(note)
     if table is not None and not table.empty:
         with st.expander("dane"):
-            st.dataframe(table, width="stretch", hide_index=True)
+            st.dataframe(readable_paces(table), width="stretch", hide_index=True)
 
 
 def _alpha(color: str, alpha: float) -> str:
@@ -832,6 +841,25 @@ def pace_text(minutes: Any) -> str | None:
         return None
     seconds = int(round(float(minutes) * 60))
     return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def readable_paces(frame: pd.DataFrame | None) -> pd.DataFrame | None:
+    """Every pace column (decimal min/km, named *pace* or *tempo*) as ``m:ss``.
+
+    Applied to every table a person reads -- widget tables, the data twin
+    behind the table icon, SQL results -- so 4.36 never shows up where 4:22
+    is meant. Text columns (already formatted) are left alone.
+    """
+    if frame is None or frame.empty:
+        return frame
+    out = frame
+    for column in frame.columns:
+        name = str(column).lower()
+        if ("pace" in name or "tempo" in name) and pd.api.types.is_float_dtype(frame[column]):
+            if out is frame:
+                out = frame.copy()
+            out[column] = frame[column].map(pace_text)
+    return out
 
 
 def pace_axis(
@@ -1274,9 +1302,9 @@ def _map_layout(
 ) -> go.Figure:
     """Centre and zoom a map on its own track, with a neutral basemap.
 
-    The basemap style is a light raster for both themes: a dark basemap plus a
-    sequential ramp fights for the same lightness band, and the track is the
-    subject here, not the terrain.
+    The basemap follows the theme (positron / dark matter): a light raster in a
+    dark widget reads as a pasted-in screenshot. ``route_map`` picks the ramp to
+    match, so the track keeps its contrast on either.
     """
     t = tokens()
     lat = pd.to_numeric(points["lat"], errors="coerce").dropna()
@@ -1314,7 +1342,7 @@ def _map_layout(
     )
     fig.update_layout(
         map=dict(
-            style="carto-positron",
+            style="carto-darkmatter" if mode() == "dark" else "carto-positron",
             center=dict(
                 lat=float((lat_low + lat_high) / 2), lon=float((lon_low + lon_high) / 2)
             ),
@@ -1376,9 +1404,10 @@ def route_map(
         return None
 
     t = tokens()
-    # The basemap is light in both themes, so the marks on it take the light
-    # palette too; the dark ramp ends in near-white, which vanishes on it.
-    m = LIGHT
+    # The basemap follows the theme (see _map_layout). On the dark one the two
+    # darkest ramp steps sink into the tiles, so the ramp starts at step 3.
+    dark = mode() == "dark"
+    m = dict(DARK, sequential=DARK["sequential"][2:]) if dark else LIGHT
     fig = go.Figure()
     # A single wide pass underneath keeps the route legible where it doubles
     # back on itself and where one segment is a different shade from the next.

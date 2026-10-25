@@ -190,7 +190,8 @@ def _history_body(tile, history: pd.DataFrame, key: str) -> None:
     if minutes["garmin"].notna().sum() >= 3:
         fig.add_scatter(x=minutes["day"], y=minutes["garmin"], mode="lines", name="Garmin",
                         line=dict(width=1.6, color=t["muted"], dash="dot"),
-                        hovertemplate="%{y:.1f} min<extra>Garmin</extra>")
+                        customdata=(minutes["garmin"] * 60).map(units.fmt_time),
+                        hovertemplate="%{customdata}<extra>Garmin</extra>")
     fig.update_layout(**tz.base_layout(legend=True, height=340))
     _minutes_axis(fig, pd.concat([minutes["low"], minutes["high"], minutes["garmin"]]))
     tile.chart(

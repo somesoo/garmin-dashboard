@@ -115,7 +115,10 @@ Kolumny wyliczane w ETL (nie z API):
 ## Tabela `activities` (jeden wiersz = jeden trening)
 
 Tempo jest zapisane jako ułamek minut (5.72 = 5:43). **Nigdy nie pokazuj go
-w tej postaci**: kafelki przez `shell.pace`, tabele przez `shell.pace_column`,
+w tej postaci** (ani w podpowiedzi wykresu — `%{y}` na serii tempa to błąd;
+daj `customdata` z `units.fmt_pace`): kafelki przez `shell.pace`, tabele przez
+`shell.pace_column` (każda tabela w kaflu, pod ikoną danych i wynik SQL i tak
+przechodzi przez `theme.readable_paces`, które zamienia kolumny *pace*/*tempo*),
 osie wykresów przez `scatter(pace_y=True)` / panel `"pace": True` /
 `route_map(pace=True)` (pod spodem `theme.pace_axis`, szybciej = wyżej).
 
@@ -272,8 +275,13 @@ Zachowania, które wyglądają jak magia, ale są celowe:
 - Rampy sekwencyjne są przycinane do kwantyli 5–95%, żeby pojedynczy odstający
   pomiar (postój na światłach w tempie 20 min/km) nie zjadł całej skali.
 - Osie mają `automargin`; nie ustawiaj marginesów ręcznie.
-- Paleta ma dwa warianty (jasny / ciemny) wybierane po `st.context.theme.type`.
-  Wartości przeszły walidator ze skilla `dataviz` dla obu powierzchni.
+- **Aplikacja jest zawsze ciemna, na czarnym tle**: `serve.py` (flagi
+  `--theme.*`) i `.streamlit/config.toml` przypinają `theme.base = "dark"`.
+  `theme.mode()` najpierw czyta przypięty motyw, dopiero potem
+  `st.context.theme.type` — ten drugi zgłasza preferencję przeglądarki, co przy
+  jasnym systemie dawało jasny CSS kafli pod białym tekstem ciemnego motywu.
+  `theme.backgroundColor` to kolor *wnętrza* widżetów (tabele, popovery) =
+  kolor kafla; czarną stronę maluje `shell.page_style`.
 
 ## Glob na stronie Atlas
 
@@ -383,8 +391,10 @@ z bounding boxu po wzorze Web Mercatora dla kafli 512 px (MapLibre); stała
 - Mapa wszystkich śladów naraz żyje na globie w Atlasie (patrz wyżej). Wcześniej
   była tu mapa plotly z półprzezroczystymi liniami — po przybliżeniu rozpadała
   się na blade nitki zlewające się z ulicami podkładu, stąd liczenie przebiegów.
-- Ślady na mapach plotly biorą paletę **jasną** w obu motywach (`LIGHT`), bo
-  podkład CARTO jest zawsze jasny; ciemna rampa kończy się prawie bielą.
+- Podkład map plotly idzie za motywem: `carto-darkmatter` w ciemnym (jasny raster
+  w ciemnym kaflu wyglądał na wklejony zrzut), `carto-positron` w jasnym.
+  `route_map` dobiera paletę do podkładu; na ciemnym rampa zaczyna się od 3.
+  stopnia, bo dwa najciemniejsze toną w kafelkach mapy.
 
 ## Układ aplikacji
 

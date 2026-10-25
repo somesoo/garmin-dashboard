@@ -34,6 +34,7 @@ import streamlit as st
 
 import glossary
 import routing
+import theme as tz
 
 CHART = 150      # px of a chart in a 1-row widget
 CHROME = 82      # px of a widget's header, status line and padding
@@ -85,6 +86,7 @@ class Tile:
     def table(self, frame: pd.DataFrame, *, full: pd.DataFrame | None = None, **kwargs: Any) -> None:
         """A table as the widget's content: the first rows that fit, no inner
         scroll; when there are more, the whole table is behind the header icon."""
+        frame = tz.readable_paces(frame)
         shown = frame.head(table_rows(self.rows))
         st.dataframe(shown, width="stretch", hide_index=True, height=table_height(len(shown)), **kwargs)
         rest = full if full is not None else frame
@@ -98,7 +100,7 @@ class Tile:
             return
         with self.header:
             with st.popover("", icon=":material/table_view:", type="tertiary", help="Dane"):
-                st.dataframe(table, width="stretch", hide_index=True)
+                st.dataframe(tz.readable_paces(table), width="stretch", hide_index=True)
 
 
 @contextmanager

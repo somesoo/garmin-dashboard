@@ -25,6 +25,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 RECORD = ROOT / "data" / "server.json"
+# Same as .streamlit/config.toml: Streamlit reads that file from the working
+# directory, and a launcher double-clicked in Finder starts in $HOME.
+THEME = ["--theme.base", "dark", "--theme.backgroundColor", "#17191d",
+         "--theme.secondaryBackgroundColor", "#23262c", "--theme.textColor", "#fafafa"]
 SKIP = {".venv", "data", "__pycache__", ".git", "cache"}
 
 
@@ -79,5 +83,6 @@ if __name__ == "__main__":
     RECORD.parent.mkdir(parents=True, exist_ok=True)
     RECORD.write_text(json.dumps({"pid": os.getpid(), "stamp": code_stamp()}), encoding="utf-8")
     lifecycle.idle_exit()
-    sys.argv = ["streamlit", "run", str(ROOT / "app.py"), *sys.argv[1:]]
+    theme = [] if any(arg.startswith("--theme.") for arg in sys.argv[1:]) else THEME
+    sys.argv = ["streamlit", "run", str(ROOT / "app.py"), *theme, *sys.argv[1:]]
     sys.exit(cli.main())
