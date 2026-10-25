@@ -390,12 +390,31 @@ kolidują ścieżkami).
 
 Zasady układu, które trzymają spójność:
 
-- **Siatka bento (`bento.py`) na każdej stronie.** Kanwa to mozaika kafli na
-  siatce 4 kolumn i stałych rzędów (`ROW` = 196 px). Kafel zajmuje 1–4 kolumny
-  (`bento.row(2, 2)`, `row(2, 1, 1)` — suma zawsze 4) i 1–3 rzędy
-  (`bento.tile(..., rows=2)`); wysokość = `rows·ROW + (rows−1)·GAP`, więc kafel
-  2-rzędowy jest dokładnie tak wysoki jak dwa 1-rzędowe obok i mozaika się
-  domyka. Stały szkielet strony: `bento.header` → pasek KPI → mozaika → panele.
+- **Siatka bento (`bento.py`) na każdej stronie — pływające widgety.** Kanwa
+  (przyciemnione tło) to mozaika kart z cieniem na siatce 4 kolumn. Kafel
+  zajmuje 1–4 kolumny (`bento.row(2, 2)`, `row(2, 1, 1)` — suma zawsze 4)
+  i 1–3 rzędy (`bento.tile(..., rows=2)`). **Kafle nie mają stałej wysokości**
+  (stała wysokość = ucięta treść albo przewijanie w środku); rzędy wyrównuje
+  CSS w `shell.page_style`: kolumny rzędu rozciągają się do najwyższej, kafle
+  rosną (`flex: 1 0 auto` — nigdy nie kurczą się poniżej treści). `rows` ustala
+  wysokość wykresu (`bento.chart_height`), dobraną tak, że wykres 2-rzędowy
+  z chrome = dwa kafle 1-rzędowe. Szkielet strony: `bento.header` → pasek KPI
+  → mozaika → panele. Klucze kontenerów: `wgt_` kafel, `wgthd_` jego nagłówek,
+  `kpi_` liczba, `pnl_` panel — CSS wybiera po tych prefiksach.
+- **Tabela w kaflu nigdy się nie przewija**: `t.table(df)` pokazuje tyle
+  wierszy, ile mieści się w miejscu wykresu (`table_rows`), dokładnie na ich
+  wysokość; reszta jest pod ikoną tabeli w nagłówku.
+- **Ruch** (CSS, `page_style`): kafle wjeżdżają rząd po rzędzie i kolumna po
+  kolumnie (zmienne `--row-delay`/`--col-delay`), wykres odsłania się od lewej
+  (kierunek czasu) w chwili, gdy Plotly go narysuje, liczby KPI osiadają na
+  końcu; najechanie podnosi kartę i pokazuje ikony nagłówka. Streamlit trzyma
+  DOM między rerunami, więc animacja gra tylko przy wejściu na stronę.
+  `prefers-reduced-motion` wyłącza wszystko.
+- Pułapki CSS: Streamlit daje blokom markdown `margin-bottom: -1rem` — tekst
+  w `<div>` (podpis, lista) wylewa się wtedy z kafla, dlatego `page_style`
+  zeruje ten margines dla `.tile-caption/.tile-list/.tile-title`; podpis
+  podciąga się ujemnym marginesem na **kontenerze elementu**, nigdy na tekście.
+  Grupa śladów Plotly to `.cartesianlayer .overplot` (nie `.plot`).
 - **KPI zawsze po 4**: `bento.kpis(row, previous, specs)` dla kolumn `daily`
   (podpowiedź z `glossary.FIELDS`), `bento.stat(...)` dla innych liczb,
   `bento.empty_stat` na brakujący slot.
@@ -409,8 +428,7 @@ Zasady układu, które trzymają spójność:
   (`t.chart(fig, table=...)`). Kontrolki sterujące jednym kaflem (wybór nocy,
   metryki) idą do `with t.header:` z `label_visibility="collapsed"`, żeby nie
   zjadały wysokości wykresu; przejście na inną stronę to ikona strzałki tamże.
-  `t.chart` nadpisuje wysokość figury (`bento.chart_height`), więc żaden kafel
-  nie przewija się przez za wysoki wykres.
+  `t.chart` nadpisuje wysokość figury (`bento.chart_height`).
 - **Formularze, edytory, długie tabele i proza → `bento.panel`**: ten sam
   wygląd, wysokość według treści (Plan, Zawody, SQL, Insights, Słownik).
 - Nowy wskaźnik = nowe hasło w `glossary.py` (co / po co / jak czytać);

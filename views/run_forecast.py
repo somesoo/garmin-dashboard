@@ -305,16 +305,16 @@ def _backtest(history: pd.DataFrame) -> None:
                  f"za szybko {len(table) - slower}") if not table.empty else None,
         how="Mocne biegi (≥ 3 km) wobec tego, co model przewidywał tydzień wcześniej. Dodatni błąd = prognoza "
             "zbyt ostrożna (zwykle po okresie szybkiego postępu).",
-    ):
+    ) as t:
         if table.empty:
             st.caption("Brak wysiłków bliskich maksymalnego ≥ 3 km z prognozą tydzień wcześniej.")
             return
-        _backtest_table(table)
+        _backtest_table(t, table)
 
 
-def _backtest_table(table: pd.DataFrame) -> None:
+def _backtest_table(t, table: pd.DataFrame) -> None:
     table = table.sort_values("day", ascending=False)
-    st.dataframe(
+    t.table(
         pd.DataFrame(
             {
                 "dzień": pd.to_datetime(table["day"]).dt.strftime("%d.%m.%Y"),
@@ -324,7 +324,6 @@ def _backtest_table(table: pd.DataFrame) -> None:
                 "błąd %": table["error_pct"],
             }
         ),
-        hide_index=True, width="stretch", height=bento.chart_height(2, caption=True),
     )
 
 

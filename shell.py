@@ -21,28 +21,96 @@ import db
 import glossary
 import routing
 
-PAGE_STYLE = """
+_SURFACES = {
+    # canvas, widget, hairline, resting shadow, raised shadow
+    "light": ("#eef1f6", "#ffffff", "rgba(15,23,42,0.06)",
+              "0 1px 2px rgba(15,23,42,0.04), 0 6px 20px -8px rgba(15,23,42,0.10)",
+              "0 2px 4px rgba(15,23,42,0.05), 0 16px 36px -12px rgba(15,23,42,0.20)"),
+    "dark": ("#0b0e14", "#141922", "rgba(255,255,255,0.06)",
+             "0 1px 2px rgba(0,0,0,0.45), 0 8px 24px -10px rgba(0,0,0,0.65)",
+             "0 2px 6px rgba(0,0,0,0.5), 0 18px 40px -12px rgba(0,0,0,0.75)"),
+}
+
+_STYLE = """
 <style>
-  /* Bento grid (bento.py): the canvas is a mosaic of tiles, so it takes the
-     screen width; the tiles, not a text measure, set the rhythm. */
+  /* ---- canvas: widgets float on a tinted ground ------------------------- */
+  [data-testid="stAppViewContainer"], [data-testid="stMain"] {background: @CANVAS@;}
+  [data-testid="stHeader"] {background: transparent;}
   .block-container {padding-top: 1.6rem; padding-bottom: 4rem; max-width: 1560px;}
-  [class*="st-key-tile_"], [class*="st-key-kpi_"] {border-radius: 14px;}
-  [class*="st-key-tile_"]:not([class*="st-key-tile_head_"]) {padding: 0.15rem 0.25rem 0 0.25rem;}
-  [class*="st-key-tile_head_"] {min-height: 30px; flex-wrap: nowrap;}
-  [class*="st-key-tile_head_"] [data-testid="stElementContainer"]:first-child {flex: 1 1 auto; min-width: 0;}
-  [class*="st-key-tile_head_"] [data-testid="stMarkdownContainer"] > div,
-  [class*="st-key-tile_head_"] [data-testid="stMarkdown"] {margin: 0 !important;}
-  .tile-title {white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
-  [class*="st-key-tile_head_"] button {padding: 0 0.25rem; min-height: 28px;}
-  .tile-title {font-size: 0.86rem; font-weight: 620; letter-spacing: -0.003em; line-height: 1.3;}
-  .tile-caption {font-size: 0.78rem; opacity: 0.72; margin-top: -0.7rem; line-height: 1.35;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
-  [class*="st-key-kpi_"] [data-testid="stMetricValue"] {font-size: 1.6rem;}
-  [class*="st-key-tile_"] [data-testid="stMetricValue"] {font-size: 1.3rem;}
+
+  /* ---- widgets (bento.py): wgt_ = chart tile, kpi_ = number, pnl_ = form */
+  [class*="st-key-wgt_"], [class*="st-key-kpi_"], [class*="st-key-pnl_"] {
+      background: @WIDGET@; border: 1px solid @LINE@ !important; border-radius: 16px;
+      box-shadow: @SHADOW@; padding: 0.2rem 0.3rem 0.1rem 0.3rem;
+      transition: transform .25s cubic-bezier(.2,.75,.25,1), box-shadow .25s ease;
+      animation: wgt-rise .55s cubic-bezier(.2,.75,.25,1) both;
+      animation-delay: calc(var(--row-delay, 0ms) + var(--col-delay, 0ms));}
+  [class*="st-key-wgt_"]:hover, [class*="st-key-kpi_"]:hover {transform: translateY(-2px); box-shadow: @RAISED@;}
+
+  /* Rows line up without fixed heights: columns of a widget row stretch to the
+     tallest, and widgets grow to fill their column -- nothing is clipped and
+     nothing scrolls inside. Forms (pnl_) keep their own height. */
+  [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [class*="st-key-wgt_"]),
+  [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [class*="st-key-kpi_"]) {
+      align-items: stretch !important;}
+  [data-testid="stColumn"]:has([class*="st-key-wgt_"]) > [data-testid="stVerticalBlock"],
+  [data-testid="stColumn"]:has([class*="st-key-kpi_"]) > [data-testid="stVerticalBlock"] {height: 100%;}
+  [data-testid="stColumn"] > [data-testid="stVerticalBlock"]
+      > [data-testid="stLayoutWrapper"]:has(> [class*="st-key-wgt_"], > [class*="st-key-kpi_"]) {
+      flex: 1 0 auto; display: flex; flex-direction: column;}
+  /* Grow, never shrink: shrinking below the content is exactly the clipping
+     this layout exists to avoid. */
+  [class*="st-key-wgt_"], [class*="st-key-kpi_"] {flex: 1 0 auto;}
+
+  /* ---- widget chrome ------------------------------------------------------ */
+  [class*="st-key-wgthd_"] {min-height: 30px; flex-wrap: nowrap;}
+  [class*="st-key-wgthd_"] [data-testid="stElementContainer"]:first-child {flex: 1 1 auto; min-width: 0;}
+  [class*="st-key-wgthd_"] [data-testid="stMarkdownContainer"] > div,
+  [class*="st-key-wgthd_"] [data-testid="stMarkdown"] {margin: 0 !important;}
+  [class*="st-key-wgthd_"] button {padding: 0 0.25rem; min-height: 28px; opacity: .38; transition: opacity .2s;}
+  [class*="st-key-wgt_"]:hover [class*="st-key-wgthd_"] button,
+  [class*="st-key-pnl_"]:hover [class*="st-key-wgthd_"] button,
+  [class*="st-key-wgthd_"] button:focus-visible {opacity: 1;}
+  @media (hover: none) {[class*="st-key-wgthd_"] button {opacity: .8;}}
+  .tile-title {font-size: 0.86rem; font-weight: 640; letter-spacing: -0.003em; line-height: 1.3;}
+  .tile-caption {font-size: 0.78rem; opacity: 0.72; line-height: 1.4;}
+  /* Pull the status line up to its title by moving the whole element box, not
+     the text inside it: a negative margin on the text sticks out of its own
+     container and past the widget's edge. */
+  [data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"] .tile-caption) {margin-top: -0.65rem;}
+  /* Streamlit gives every markdown block margin-bottom: -1rem (it expects a
+     trailing <p>); with a bare <div> that collapses the block to ~1 px and the
+     text spills out of the widget. Widget text gets its real height back. */
+  [data-testid="stMarkdownContainer"]:has(> .tile-caption),
+  [data-testid="stMarkdownContainer"]:has(> .tile-list),
+  [data-testid="stMarkdownContainer"]:has(> .tile-title) {margin-bottom: 0 !important;}
+  [class*="st-key-kpi_"] [data-testid="stMetricValue"] {font-size: 1.6rem;
+      animation: wgt-num .6s cubic-bezier(.2,.75,.25,1) both;
+      animation-delay: calc(var(--row-delay, 0ms) + var(--col-delay, 0ms) + 120ms);}
+  [class*="st-key-wgt_"] [data-testid="stMetricValue"] {font-size: 1.3rem;}
+  [class*="st-key-wgt_"] [data-testid="stPlotlyChart"] {margin-top: -0.35rem;}
   .tile-list {margin: 0 !important; padding-left: 1.1rem !important;}
   .tile-list li {font-size: 0.82rem !important; line-height: 1.45 !important; margin-bottom: 0.2rem !important;}
-  [class*="st-key-kpi_"] .tile-caption {margin-top: -0.4rem;}
-  [class*="st-key-tile_"] [data-testid="stPlotlyChart"] {margin-top: -0.35rem;}
+
+  /* ---- motion --------------------------------------------------------------
+     Widgets rise in row by row, column by column; charts wipe in left to right
+     (the direction time runs), numbers settle last. Only on first paint of a
+     page: Streamlit keeps the DOM across reruns, so a rerun does not replay. */
+  @keyframes wgt-rise {from {opacity: 0; transform: translateY(12px) scale(.985);} to {opacity: 1; transform: none;}}
+  @keyframes wgt-num {from {opacity: 0; transform: translateY(6px);} to {opacity: 1; transform: none;}}
+  @keyframes wgt-wipe {from {clip-path: inset(0 100% 0 0);} to {clip-path: inset(0 0 0 0);}}
+  /* Plotly draws later than the widget appears (its library loads after the
+     page), so the wipe starts when the traces arrive, not on the row stagger. */
+  [class*="st-key-wgt_"] .js-plotly-plot .cartesianlayer .overplot {
+      animation: wgt-wipe .9s cubic-bezier(.45,.05,.25,1) .05s both;}
+@DELAYS@
+  @media (prefers-reduced-motion: reduce) {
+      [class*="st-key-wgt_"], [class*="st-key-kpi_"], [class*="st-key-pnl_"],
+      [class*="st-key-kpi_"] [data-testid="stMetricValue"],
+      [class*="st-key-wgt_"] .js-plotly-plot .cartesianlayer .overplot {animation: none !important; transition: none;}
+      [class*="st-key-wgt_"]:hover, [class*="st-key-kpi_"]:hover {transform: none;}}
+
+  /* ---- type and the rest ---------------------------------------------------- */
   h1 {font-size: 1.55rem !important; font-weight: 650; letter-spacing: -0.015em;
       margin-bottom: 0.1rem !important;}
   h2 {font-size: 1.05rem !important; font-weight: 620; letter-spacing: -0.005em;
@@ -55,8 +123,8 @@ PAGE_STYLE = """
   div[data-testid="stExpander"] details summary p {font-size: 0.8rem; opacity: 0.65;}
   div[data-testid="stExpander"] {border: none; border-top: 1px solid rgba(128,128,128,0.18);
       border-radius: 0;}
-  /* The globe bleeds past the text measure -- it is the one element that should
-     feel bigger than the document -- and a sphere floating on a flat page needs
+  /* The globe bleeds past the grid -- it is the one element that should feel
+     bigger than the page -- and a sphere floating on a flat page needs
      something behind it, so the stage carries its own soft halo. */
   .st-key-globe_stage {margin: 0 -3.5rem;
       background: radial-gradient(circle at 50% 47%,
@@ -66,6 +134,29 @@ PAGE_STYLE = """
   hr {margin: 2.2rem 0 0 0; opacity: 0.25;}
 </style>
 """
+
+
+def _delays() -> str:
+    # Stagger as CSS variables: the page row sets --row-delay, the column inside
+    # it adds --col-delay, and every widget below inherits both.
+    rows = "\n".join(
+        f'  [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :nth-child({n})'
+        f" {{--row-delay: {min(n, 12) * 55}ms;}}"
+        for n in range(1, 25)
+    )
+    columns = "\n".join(
+        f'  [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child({n}) {{--col-delay: {n * 70}ms;}}'
+        for n in range(1, 5)
+    )
+    return rows + "\n" + columns
+
+
+def page_style(mode: str = "light") -> str:
+    """The app's CSS for the theme the browser renders (``theme.mode()``)."""
+    canvas, widget, line, shadow, raised = _SURFACES.get(mode, _SURFACES["light"])
+    return (_STYLE.replace("@CANVAS@", canvas).replace("@WIDGET@", widget).replace("@LINE@", line)
+            .replace("@SHADOW@", shadow).replace("@RAISED@", raised).replace("@DELAYS@", _delays()))
+
 
 # Column formats for activity tables: raw floats ("130.3395") and seconds on
 # the start time are noise in a log you scan by eye.

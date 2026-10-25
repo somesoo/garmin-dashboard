@@ -19,6 +19,7 @@ import streamlit as st  # noqa: E402
 
 import routing  # noqa: E402
 import shell  # noqa: E402
+import theme  # noqa: E402
 from views import (  # noqa: E402
     activities,
     atlas,
@@ -46,7 +47,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-st.markdown(shell.PAGE_STYLE, unsafe_allow_html=True)
+st.markdown(shell.page_style(theme.mode()), unsafe_allow_html=True)
 
 if not shell.has_data():
     shell.no_data_screen()

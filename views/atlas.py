@@ -248,9 +248,9 @@ def _recent(activities: pd.DataFrame) -> None:
         "location": "miejsce",
     }
     shown = recent[[c for c in columns if c in recent.columns]].rename(columns=columns)
-    with bento.tile("Ostatnie aktywności", rows=2, key="atlas_recent", caption="Wszystkie sporty, najnowsze na górze."):
-        st.dataframe(shown, width="stretch", hide_index=True, column_config=shell.ACTIVITY_COLUMNS,
-                     height=bento.chart_height(2, caption=True))
+    with bento.tile("Ostatnie aktywności", rows=2, key="atlas_recent",
+                    caption="Wszystkie sporty, najnowsze na górze.") as t:
+        t.table(shown, column_config=shell.ACTIVITY_COLUMNS)
 
 
 @st.dialog("Który trening otworzyć?")

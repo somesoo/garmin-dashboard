@@ -142,12 +142,12 @@ def _structure(run: pd.Series) -> None:
             return
         order = list(SEGMENT_LABELS)
         phases = phases.assign(order=phases["split_type"].map({k: i for i, k in enumerate(order)})).sort_values("order")
-        st.dataframe(pd.DataFrame({
+        t.table(pd.DataFrame({
             "faza": phases["split_type"].map(SEGMENT_LABELS).fillna(phases["split_type"]),
             "powt.": phases["splits"].fillna(1).astype(int),
             "km": (phases["distance_m"] / 1000).round(2),
             "tempo": phases["avg_speed_ms"].map(lambda v: units.fmt_pace(units.pace_from_speed(v), False)),
-        }), hide_index=True, width="stretch", height=bento.chart_height(1, caption=True))
+        }))
 
 
 def _splits(run: pd.Series) -> None:
@@ -232,5 +232,7 @@ def _similar(frame: pd.DataFrame, run: pd.Series) -> None:
         if peers.empty:
             st.caption("Brak podobnych biegów do porównania.")
             return
-        rc.pickable_runs(peers, key=f"similar_{int(run['activity_id'])}",
-                         height=bento.chart_height(2, caption=True) - 8, hint=False)
+        count = bento.table_rows(2)
+        shown = peers.sort_values("start_local", ascending=False).head(count)
+        rc.pickable_runs(shown, key=f"similar_{int(run['activity_id'])}", height=bento.table_height(len(shown)),
+                         hint=False)

@@ -80,12 +80,11 @@ def _significant(significant: pd.DataFrame) -> None:
     with bento.tile(
         "Co przeszło kontrolę FDR", rows=2, key="fdr", terms=["correlation"],
         caption="Uwaga na wspólny trend: ctl i rhr korelują też dlatego, że przez dwa lata oba się zmieniały.",
-    ):
+    ) as t:
         if significant.empty:
             st.caption("Nic. Przy tej liczbie dni to normalny wynik — i uczciwszy niż wykres z dorysowaną linią trendu.")
             return
-        st.dataframe(significant[["driver", "response", "lag_days", "rho", "q", "n"]].head(50),
-                     width="stretch", hide_index=True, height=bento.chart_height(2, caption=True))
+        t.table(significant[["driver", "response", "lag_days", "rho", "q", "n"]])
 
 
 @st.fragment
@@ -125,12 +124,11 @@ def _changepoints(points: pd.DataFrame) -> None:
         caption="Daty, od których metryka trwale się przesunęła — zmiana, nie szum.",
         how="Segmentacja binarna na z-score: podział musi zmniejszyć sumę kwadratów bardziej niż kara "
             "~2·ln(n), więc szum nie przechodzi.",
-    ):
+    ) as t:
         if points.empty:
             shell.missing("changepoints", "Żadne przesunięcie nie przebiło kary.")
             return
-        st.dataframe(points.assign(day=pd.to_datetime(points["day"]).dt.date), width="stretch", hide_index=True,
-                     height=bento.chart_height(2, caption=True))
+        t.table(points.assign(day=pd.to_datetime(points["day"]).dt.date))
 
 
 @st.fragment

@@ -43,8 +43,8 @@ def render() -> None:
         _records()
     with right, bento.tile("Ostatnie treningi", rows=2, key="recent_runs", terms=["run_kind", "training_load"],
                            caption="Kliknij wiersz, żeby otworzyć szczegóły treningu."):
-        rc.pickable_runs(frame.tail(15), key="overview_runs", height=bento.chart_height(2, caption=True) - 8,
-                         hint=False)
+        recent = frame.sort_values("start_local").tail(bento.table_rows(2))
+        rc.pickable_runs(recent, key="overview_runs", height=bento.table_height(len(recent)), hint=False)
 
 
 def _volume_strip(frame: pd.DataFrame, end: pd.Timestamp) -> None:

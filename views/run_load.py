@@ -122,17 +122,16 @@ def _breaks(frame: pd.DataFrame, edge) -> None:
         "Przerwy ≥ 10 dni", rows=2, key="breaks",
         caption=f"Typowy odstęp między biegami: {gaps.median():.0f} dni." if len(gaps) else None,
         how="Po przerwie ≥ 10 dni dobrze wrócić od ~70% wcześniejszej objętości.",
-    ):
+    ) as t:
         if breaks.empty:
             st.caption("Bez przerw ≥ 10 dni w tym zakresie.")
             return
-        st.dataframe(
+        t.table(
             pd.DataFrame({
                 "ostatni bieg przed": pd.to_datetime(breaks["od"]).dt.strftime("%d.%m.%Y"),
                 "pierwszy po": pd.to_datetime(breaks["do"]).dt.strftime("%d.%m.%Y"),
                 "dni przerwy": (breaks["dni"] - 1).astype(int),
             }).sort_values("pierwszy po", ascending=False),
-            hide_index=True, width="stretch", height=bento.chart_height(2, caption=True),
         )
 
 

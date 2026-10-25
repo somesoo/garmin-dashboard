@@ -265,7 +265,7 @@ def _predictions_body(t, view, present, labels, frame) -> None:
         minutes["5 km"] = pd.to_numeric(minutes["race_5k_s"], errors="coerce") / 60
         figure = tz.timeseries(minutes, "day", {"5 km (min)": "5 km"}, end_labels=True, decimals=1)
         if figure is not None:
-            figure.update_layout(height=bento.chart_height(2, caption=True) - 150)
+            figure.update_layout(height=bento.chart_height(1))
             st.plotly_chart(figure, width="stretch", key="pred_5k", config={"displayModeBar": False})
 
 
