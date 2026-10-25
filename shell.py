@@ -41,11 +41,13 @@ _STYLE = """
   /* ---- widgets (bento.py): wgt_ = chart tile, kpi_ = number, pnl_ = form */
   [class*="st-key-wgt_"], [class*="st-key-kpi_"], [class*="st-key-pnl_"] {
       background: @WIDGET@; border: 1px solid @LINE@ !important; border-radius: 16px;
-      box-shadow: @SHADOW@; padding: 0.2rem 0.3rem 0.1rem 0.3rem;
+      box-shadow: @SHADOW@; padding: 1rem 1.25rem 0.9rem 1.25rem;
       transition: transform .25s cubic-bezier(.2,.75,.25,1), box-shadow .25s ease;
       animation: wgt-rise .55s cubic-bezier(.2,.75,.25,1) both;
       animation-delay: calc(var(--row-delay, 0ms) + var(--col-delay, 0ms));}
   [class*="st-key-wgt_"]:hover, [class*="st-key-kpi_"]:hover {transform: translateY(-2px); box-shadow: @RAISED@;}
+  /* Numbers need less air than charts. */
+  [class*="st-key-kpi_"] {padding: 0.85rem 1.15rem 0.8rem 1.15rem;}
 
   /* Rows line up without fixed heights: columns of a widget row stretch to the
      tallest, and widgets grow to fill their column -- nothing is clipped and
