@@ -475,6 +475,21 @@ Pułapki:
 - `data/coach/` to stan wpisany ręcznie — nie da się go odbudować z `raw/`.
   Przy przenoszeniu na serwer kopiuj razem z resztą `data/`.
 
+Treningi na zegarek:
+
+- Każda sesja planu ma `steps` (rozgrzewka / odcinki / przerwy / schłodzenie,
+  `km` albo `s`, `pace: [szybciej, wolniej]`, `repeat` jeden poziom) — generowane
+  z tych samych liczb co tekst `main`, walidowane przez `store.validate_steps`.
+- `running/garmin_workout.py` zamienia sesję na JSON workoutu Garmina (cel tempa
+  jako `pace.zone` w m/s, wolniejsze tempo = `targetValueOne`) i liczy
+  `sync_actions`: upload / replace / remove. `pydantic` nie jest zależnością,
+  więc nie używamy typowanych modeli z `garminconnect.workout`.
+- `python -m etl.push_plan [id] [--days 7] [--dry-run]` albo przycisk na stronie
+  Plan (tylko gdy są tokeny). Wysłane treningi są zapisane w `plan["garmin"]`
+  (klucz: id sesji) — rejestr jest na poziomie planu, bo `replan` nadaje
+  sesjom nowe id; dzięki niemu następna wysyłka usuwa stare workouty zamiast
+  zostawiać duplikaty. Przeszłych dat nie rusza.
+
 Współpraca z asystentem: nie ma tu API modelu i żadnego nie dodajemy.
 `python -m running.coach [--json]` drukuje brief (prognoza z wejściami, biegi,
 obciążenie, regeneracja, plan i realizacja, `data_gaps`), `--validate <id>`

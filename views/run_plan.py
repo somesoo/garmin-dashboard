@@ -10,7 +10,8 @@ import streamlit as st
 import routing
 import shell
 import theme as tz
-from running import coach, plan as planning, store, units
+import config
+from running import coach, garmin_workout as gw, plan as planning, store, units
 from views import run_common as rc
 
 STATUS_LABELS = {
@@ -360,9 +361,42 @@ def _actions(active: dict, frame: pd.DataFrame, result: dict) -> None:
             store.delete_plan(active["id"])
             st.session_state.pop("plan_choice", None)
             st.rerun()
+    _garmin(active)
     history = active.get("history", [])
     if history:
         st.caption("Historia zmian: " + " · ".join(f"{h['at'][:16].replace('T', ' ')} {h['action']}" for h in history[-5:]))
+
+
+def _garmin(active: dict) -> None:
+    """Push the next week to the Garmin calendar. Local only: it needs the
+    tokens etl/fetch.py uses, which a server without them does not have."""
+    from pathlib import Path
+
+    if not (Path(config.TOKENSTORE).expanduser() / "garmin_tokens.json").exists():
+        return
+    today = dt.date.today()
+    actions = gw.sync_actions(active, today, 7)
+    pushed = active.get("garmin") or {}
+    label = (f"Wyślij najbliższy tydzień na zegarek ({len(actions)} zmian)" if actions
+             else "Kalendarz Garmin aktualny na 7 dni")
+    if st.button(label, key="plan_push", disabled=not actions, icon=":material/watch:",
+                 help="Treningi trafiają do kalendarza Garmin Connect z tempem docelowym na każdym kroku; "
+                      "po synchronizacji są na zegarku. Zmienione sesje są podmieniane, pominięte usuwane."):
+        from etl import push_plan
+        from etl.fetch import connect
+
+        with st.status("Wysyłam do Garmin Connect…", expanded=True) as status:
+            try:
+                push_plan.push(active, connect(), today, 7, log=st.write)
+            except Exception as error:  # noqa: BLE001 - network / auth: show it, keep the page
+                status.update(label=f"Przerwane: {error}", state="error")
+                return
+            status.update(label="Wysłane — zsynchronizuj zegarek.", state="complete")
+        st.rerun()
+    if pushed:
+        upcoming = sorted(e["date"] for e in pushed.values() if e.get("date", "") >= today.isoformat())
+        if upcoming:
+            st.caption(f"Na zegarku: {len(upcoming)} treningów od {upcoming[0][8:10]}.{upcoming[0][5:7]}.")
 
 
 def _assistant(active: dict) -> None:

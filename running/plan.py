@@ -753,6 +753,10 @@ def replan(
     fresh["id"] = plan["id"]
     fresh["created"] = plan.get("created", fresh["created"])
     fresh["request"]["start"] = plan["request"].get("start", fresh["request"]["start"])
+    # What was pushed to Garmin outlives the session ids; the next push uses
+    # it to remove workouts of sessions this rebuild replaced.
+    if plan.get("garmin"):
+        fresh["garmin"] = dict(plan["garmin"])
     fresh["history"] = list(plan.get("history", [])) + [
         {"at": dt.datetime.now().isoformat(timespec="seconds"), "action": "replan",
          "vdot": fresh["forecast"]["vdot"]}
