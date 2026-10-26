@@ -15,6 +15,10 @@ WorkingDirectory=/opt/garmin-dashboard
 Environment=HOME=/home/garmin
 Environment=GARMIN_TOKENSTORE=/home/garmin/.garminconnect
 ExecStart=/opt/garmin-dashboard/.venv/bin/python etl/run.py --days 14
+# Liczniki zasobow: `systemctl status` pokazuje wtedy Memory (biezaca i szczyt)
+# i CPU, a `systemd-cgtop` na zywo - patrz DEPLOY.md, sekcja 8.
+MemoryAccounting=yes
+CPUAccounting=yes
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

@@ -151,3 +151,63 @@ i wchodzisz na `http://localhost:8501`.
 i przepuszczaniem WebSocketa (bez tego Streamlit wisi na "Connecting...").
 Podmien `garmin.twojadomena.pl`, zaloz haslo przez `htpasswd` i puszcz
 `certbot --nginx`.
+
+## 8. Rozmiar serwera i monitoring zasobow
+
+### Ile to zuzywa (pomiar 2026-10-26, `tools/resources.py`)
+
+| co | RAM (szczyt) | czas / CPU |
+|---|---|---|
+| serwer Streamlit bezczynny | ~150 MB | ~0 |
+| serwer po otwarciu wszystkich 19 stron | ~330 MB | strona 0,05-0,3 s, ponowny render 0,01-0,15 s |
+| `etl/load.py` (przebudowa tabel) | ~200 MB | 2 s |
+| `analytics.py` (tabele pochodne) | ~250 MB | 6 s CPU |
+| dysk: `.venv` | | ~0,6-1 GB (stale) |
+| dysk: `data/` | | ~75 MB, rosnie ~20-25 MB/rok |
+
+Wnioski:
+
+- **CPU praktycznie nie gra roli** - render strony to ulamki sekundy, ETL raz
+  dziennie kilka sekund. 1 vCPU wystarcza, 2 to zapas na instalacje paczek.
+- **RAM decyduje.** Najgorszy moment to timer ETL o 7:30 w trakcie, gdy ktos
+  ma otwarty dashboard: ~330 MB (serwer) + ~250 MB (analytics) + system
+  (~150-250 MB na Ubuntu) = **~0,7-0,8 GB**. Do tego `pip install` przy
+  instalacji potrafi chwilowo wziac kilkaset MB.
+- **Rekomendacja: 2 GB RAM, 1-2 vCPU, 20 GB dysku.** To najmniejszy rozmiar
+  z realnym zapasem.
+- **Minimum: 1 GB RAM + 1-2 GB swapu.** Dziala, ale bez swapu ETL w trakcie
+  uzywania dashboardu moze dostac OOM. Na kontenerach LXC (np. mikr.us) swapu
+  zwykle nie da sie wlaczyc - tam bierz 2 GB.
+- Liczba uzytkownikow nie zmienia rachunku: Streamlit trzyma jeden proces,
+  sesje dziela cache tabel, kazda dodatkowa otwarta karta to kilkanascie MB.
+
+### Pomiar na docelowej maszynie
+
+```bash
+cd /opt/garmin-dashboard
+sudo -u garmin .venv/bin/python tools/resources.py            # z przebudowa tabel
+sudo -u garmin .venv/bin/python tools/resources.py --skip-etl # bez przebudowy
+```
+
+Drukuje dysk, szczyt RAM i czas ETL, czas renderu kazdej strony i szczyt
+pamieci procesu, ktory je wszystkie wyrenderowal. Uruchom raz po wdrozeniu -
+liczby z Linuksa beda nieco inne niz z macOS.
+
+### Monitoring na biezaco (bez instalowania niczego)
+
+Obie uslugi maja `MemoryAccounting`/`CPUAccounting`, wiec:
+
+```bash
+systemctl status garmin-dashboard       # Memory: biezaca + (peak: ...), CPU: suma
+systemctl status garmin-etl             # to samo dla ostatniego przebiegu ETL
+systemd-cgtop                           # na zywo: CPU, RAM, I/O per usluga
+journalctl -u garmin-etl --since today  # czy ETL dzis przeszedl
+free -h && df -h /opt                   # RAM/swap i dysk calej maszyny
+```
+
+Jesli `peak` serwera po kilku dniach zbliza sie do limitu maszyny, mozna mu
+postawic twarda granice w `deploy/garmin-dashboard.service` (np.
+`MemoryMax=700M`) - systemd zrestartuje go zamiast pozwolic OOM-killerowi
+ubic cokolwiek innego. Wykresy CPU/RAM/dysku z ostatnich dni daje zwykle za
+darmo panel dostawcy VPS; ciezkie stosy (Prometheus, Grafana, netdata) zjadlyby
+wiecej RAM niz sam dashboard.

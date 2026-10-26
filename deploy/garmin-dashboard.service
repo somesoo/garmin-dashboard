@@ -23,6 +23,10 @@ ExecStart=/opt/garmin-dashboard/.venv/bin/python -m streamlit run app.py \
 # always, nie on-failure: podnies proces nawet gdy sam sie zamknal czysto.
 Restart=always
 RestartSec=5
+# Liczniki zasobow: `systemctl status` pokazuje wtedy Memory (biezaca i szczyt)
+# i CPU, a `systemd-cgtop` na zywo - patrz DEPLOY.md, sekcja 8.
+MemoryAccounting=yes
+CPUAccounting=yes
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
