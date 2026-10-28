@@ -13,6 +13,11 @@ Fence syntax::
     ```
 
 ``chart`` accepts line, area, bar, scatter, table or metric (default: table).
+
+Languages: ``name.md`` is the Polish note, ``name.en.md`` next to it the
+English one (same SQL, English prose and column aliases). The page shows the
+one for the interface language and falls back to Polish when the translation
+is missing; ``tests/test_i18n.py`` fails on an insight without one.
 """
 
 from __future__ import annotations
@@ -24,6 +29,9 @@ from pathlib import Path
 from typing import Any
 
 import config
+import i18n
+
+TRANSLATED = ".en.md"
 
 FENCE = re.compile(r"```sql(?P<opts>[^\n]*)\n(?P<sql>.*?)```", re.DOTALL)
 FRONTMATTER = re.compile(r"\A---\n(?P<yaml>.*?)\n---\n", re.DOTALL)
@@ -45,7 +53,8 @@ class Insight:
 
     @property
     def slug(self) -> str:
-        return self.path.stem
+        """The same for both language versions of a note."""
+        return self.path.name.removesuffix(TRANSLATED).removesuffix(".md")
 
     @property
     def created(self) -> str:
@@ -126,16 +135,26 @@ def parse(path: Path) -> Insight:
     return Insight(path=path, title=title, meta=meta, blocks=blocks)
 
 
-def load_all() -> list[Insight]:
-    """Every insight file, pinned ones first, then newest by filename."""
+def originals() -> list[Path]:
+    """The Polish note of every insight (templates and translations left out)."""
     if not config.INSIGHTS.is_dir():
         return []
+    return [path for path in sorted(config.INSIGHTS.glob("*.md"))
+            if not path.name.startswith("_") and path.name.upper() != "README.MD"
+            and not path.name.endswith(TRANSLATED)]
+
+
+def translation(path: Path) -> Path:
+    return path.with_name(path.name.removesuffix(".md") + TRANSLATED)
+
+
+def load_all() -> list[Insight]:
+    """Every insight in the interface language, pinned ones first, then newest by filename."""
     found = []
-    for path in sorted(config.INSIGHTS.glob("*.md")):
-        if path.name.startswith("_") or path.name.upper() == "README.MD":
-            continue
+    for path in originals():
+        english = translation(path)
         try:
-            found.append(parse(path))
+            found.append(parse(english if i18n.lang() == "en" and english.exists() else path))
         except OSError:
             continue
     found.sort(key=lambda i: (not bool(i.meta.get("pinned")), i.path.name), reverse=False)

@@ -16,7 +16,8 @@
       kody (`text`), zdania składa `running/text.py`; stare plany migrowane przy
       pierwszym odczycie. `kind_reason`, `source`, powód Banistera jako kody.
       Coach, prognoza, walidacja i CLI (`--lang`) przez `tr`.
-- [ ] **Etap 4** (opcjonalnie) — insighty (`insights/*.en.md`).
+- [x] **Etap 4** — insighty: `insights/<nazwa>.en.md` obok polskiego pliku,
+      strona bierze wersję w języku interfejsu (brak tłumaczenia → polska).
 
 ## Czeka na zgodę
 

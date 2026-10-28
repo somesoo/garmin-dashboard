@@ -167,8 +167,10 @@ osie wykresów przez `scatter(pace_y=True)` / panel `"pace": True` /
 
 ## Konwencje
 
-- Nowy wniosek = nowy plik w `insights/` (patrz `/garmin-insight`). Nie dotykaj
-  `app.py`, żeby dodać panel.
+- Nowy wniosek = nowy plik w `insights/` (patrz `/garmin-insight`) **i obok
+  `<nazwa>.en.md`** z tym samym SQL-em, angielską prozą i aliasami kolumn
+  (wzór: `_template.en.md`; test pilnuje pary). Nie dotykaj `app.py`, żeby
+  dodać panel.
 - Nowe pole z API: dodaj metrykę w `config.DAILY_METRICS`, zmapuj w `etl/load.py`,
   opisz tutaj w tabeli kolumn.
 - To jest własne, prywatne repo aplikacji. Kod commituj normalnie; `data/`

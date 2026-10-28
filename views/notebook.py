@@ -97,15 +97,17 @@ def sql() -> None:
         "FROM pmc p LEFT JOIN daily d USING (day)\n"
         "ORDER BY p.day DESC\nLIMIT 50"
     )
-    left, right = st.columns([3, 1], gap="small")
-    with left, bento.panel(i18n.tr(pl="Zapytanie", en="Query"), key="sql_query"):
+    with bento.panel(i18n.tr(pl="Zapytanie", en="Query"), key="sql_query"):
         query = st.text_area("SQL", default, height=180, label_visibility="collapsed")
         run = st.button(i18n.tr(pl="Wykonaj", en="Run"), type="primary")
-    with right, bento.panel(i18n.tr(pl="Tabele", en="Tables"), key="sql_tables",
-                            caption=i18n.tr(pl="Rozwiń, żeby zobaczyć kolumny.", en="Expand to see the columns.")):
-        for name, columns in schema.items():
-            with st.expander(f"{name} ({len(columns)})"):
-                st.code(", ".join(columns))
+    with bento.panel(i18n.tr(pl="Tabele", en="Tables"), key="sql_tables",
+                     caption=i18n.tr(pl="Rozwiń, żeby zobaczyć kolumny.", en="Expand to see the columns.")):
+        # Full width, three expanders per row: a narrow side column squeezed the
+        # column lists into one scrolling line.
+        grid = st.columns(3, gap="small")
+        for index, (name, columns) in enumerate(schema.items()):
+            with grid[index % 3], st.expander(f"{name} ({len(columns)})"):
+                st.code(", ".join(columns), language=None, wrap_lines=True)
     if run:
         with bento.panel(i18n.tr(pl="Wynik", en="Result"), key="sql_result"):
             try:

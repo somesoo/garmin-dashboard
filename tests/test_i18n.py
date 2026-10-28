@@ -78,6 +78,19 @@ class Bilingual(unittest.TestCase):
             self.assertEqual(bool(item.read), bool(read), key)
             self.assertIsNone(POLISH.search(" ".join((name, what, why, read))), key)
 
+    def test_every_insight_has_an_english_twin(self):
+        import insights
+
+        self.assertTrue(insights.originals())
+        for path in insights.originals():
+            english = insights.translation(path)
+            self.assertTrue(english.exists(), path.name)
+            pl, en = insights.parse(path), insights.parse(english)
+            charts = lambda note: [b.options.get("chart", "table") for b in note.blocks if b.kind == "sql"]
+            self.assertEqual(charts(pl), charts(en), path.name)
+            self.assertIsNone(POLISH.search(en.title + " ".join(b.body for b in en.blocks if b.kind == "text")),
+                              english.name)
+
     def test_every_page_has_a_title(self):
         source = (ROOT / "app.py").read_text(encoding="utf-8")
         paths = re.findall(r'_page\([\w.]+, "([^"]+)"', source)
