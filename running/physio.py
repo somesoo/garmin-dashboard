@@ -175,3 +175,73 @@ HR_FRACTIONS = {
     "I": (0.95, 1.00),
     "R": (None, None),
 }
+
+
+# --------------------------------------------------------------------------
+# zones from the lactate-threshold heart rate
+#
+# Percentages of HRmax put everyone's threshold at the same fraction of the
+# maximum, while it really sits anywhere from ~85 to ~95%. Anchoring the zones
+# on the threshold heart rate (LTHR) removes that error. LTHR is the average
+# heart rate of a ~20-60 min near-maximal continuous effort (Friel's field test:
+# the last 20 minutes of a 30-minute solo time trial); the zones are Friel's
+# running zones as fractions of it: Z1 < 85%, Z2 85-89%, Z3 90-94%, Z4 95-99%,
+# Z5 >= 100%. Daniels' E spans Z1-Z2, M is Z3, T is Z4 up to LTHR, I is Z5.
+
+LTHR_FRACTIONS = {
+    "E": (0.78, 0.89),
+    "recovery": (0.70, 0.84),
+    "M": (0.90, 0.94),
+    "T": (0.95, 1.00),
+    "I": (1.00, 1.06),
+}
+LTHR_MINUTES = (18.0, 60.0)
+LTHR_DAYS = 120
+
+
+def threshold_hr(efforts: pd.DataFrame | None, anchor: pd.Timestamp | None = None,
+                 days: int = LTHR_DAYS) -> dict[str, Any] | None:
+    """LTHR from the hardest near-maximal effort of 18-60 minutes in ``days``.
+
+    ``efforts`` is ``run_efforts`` (``near_max``, ``minutes``, ``avg_hr``). None
+    when no such effort exists -- the zones then fall back to % of HRmax.
+    """
+    if efforts is None or efforts.empty or not {"near_max", "minutes", "avg_hr", "day"} <= set(efforts.columns):
+        return None
+    frame = efforts.copy()
+    frame["day"] = pd.to_datetime(frame["day"])
+    anchor = pd.Timestamp(anchor) if anchor is not None else frame["day"].max()
+    low, high = LTHR_MINUTES
+    frame = frame[frame["near_max"].fillna(False).astype(bool) & frame["minutes"].between(low, high)
+                  & frame["avg_hr"].notna() & (frame["day"] <= anchor)
+                  & (frame["day"] > anchor - pd.Timedelta(days=days))]
+    if frame.empty:
+        return None
+    best = frame.loc[frame["avg_hr"].idxmax()]
+    return {"bpm": round(float(best["avg_hr"])), "day": str(best["day"].date()),
+            "minutes": round(float(best["minutes"]), 1), "effort": str(best.get("effort", ""))}
+
+
+def hr_zones(hr_max: float | None, lthr: float | None) -> dict[str, tuple[int, int] | None]:
+    """Heart-rate band (bpm) per intensity: from LTHR when known, else Daniels' % of HRmax."""
+    out: dict[str, tuple[int, int] | None] = {}
+    for name in ("E", "recovery", "M", "T", "I"):
+        if lthr:
+            low, high = LTHR_FRACTIONS[name]
+            top = high * lthr if not hr_max else min(high * lthr, hr_max)
+            out[name] = (round(low * lthr), round(top))
+        elif hr_max:
+            low, high = HR_FRACTIONS.get(name) or (0.6, 0.72)
+            out[name] = (round(low * hr_max), round(high * hr_max))
+        else:
+            out[name] = None
+    out["basis"] = "lthr" if lthr else "hr_max" if hr_max else None  # type: ignore[assignment]
+    return out
+
+
+def zone_text(zones: dict[str, Any] | None, name: str) -> str:
+    band = (zones or {}).get(name)
+    if band:
+        return f"{band[0]}–{band[1]} bpm"
+    low, high = LTHR_FRACTIONS.get(name, (0.6, 0.72))
+    return f"{low:.0%}–{high:.0%} LTHR"

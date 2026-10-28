@@ -85,7 +85,7 @@ class Generator(unittest.TestCase):
             plan = self.make(distance=distance, race=dt.date(2026, 8, 30))
             easy = plan["paces"]["E"]
             for session in plan["sessions"]:
-                if session["type"] == "rest":
+                if session["type"] in ("rest", "strength"):
                     continue
                 self.assertTrue(session.get("steps"), session["title"])
                 covered = planning.steps_km(session["steps"], easy_pace=sum(easy) / 2)
@@ -114,13 +114,30 @@ class Generator(unittest.TestCase):
         weekdays = {dt.date.fromisoformat(s["date"]).weekday() for s in plan["sessions"] if s["type"] != "race"}
         self.assertTrue(weekdays <= {1, 3, 6})
 
-    def test_volume_respects_the_acute_chronic_guard(self):
-        plan = self.make(distance="m", race=dt.date(2026, 9, 27))
-        volumes = plan["baseline"]["history_km"][-planning.GUARD_WEEKS:] + [w["volume_km"] for w in plan["weeks"]]
-        floor = 3.0 * 4
-        for index in range(planning.GUARD_WEEKS, len(volumes)):
-            chronic = sum(volumes[index - planning.GUARD_WEEKS:index]) / planning.GUARD_WEEKS
-            self.assertLessEqual(volumes[index], max(planning.GUARD * chronic, floor) + 0.11, index)
+    def test_no_run_is_a_spike_over_the_last_30_days(self):
+        for distance, race in (("m", dt.date(2026, 9, 27)), ("hm", dt.date(2026, 6, 14)), ("10k", dt.date(2026, 4, 26))):
+            plan = self.make(distance=distance, race=race)
+            history = planning.run_history(self.runs, dt.date(2026, 3, 2))
+            for session in sorted(plan["sessions"], key=lambda s: s["date"]):
+                if session["type"] not in planning.RUN_TYPES:
+                    continue
+                date = dt.date.fromisoformat(session["date"])
+                longest, cap = planning.spike_cap(history, date)
+                if session["type"] != "race":
+                    self.assertLessEqual(session["distance_km"], cap + 0.06, (distance, session["date"], longest))
+                history.append((date, session["distance_km"]))
+
+    def test_spike_is_cut_and_explained(self):
+        runs = self.runs[self.runs["day"] >= pd.Timestamp("2026-02-20")]  # only short runs in the last 30 days
+        request = planning.PlanRequest("hm", dt.date(2026, 6, 14), run_days=[1, 3, 5, 6], long_day=6,
+                                       start=dt.date(2026, 3, 2))
+        plan = planning.generate(request, runs, self.result, anchor=pd.Timestamp("2026-03-01"))
+        cut = [s for s in plan["sessions"] if any(w["key"] == "spike" for w in s.get("why") or [])]
+        self.assertTrue(cut)
+        first = cut[0]
+        self.assertLessEqual(first["distance_km"], first["why"][-1]["cap"] + 0.06)
+        self.assertIn("30", text.why(first)[-1])
+        self.assertEqual(store.validate_plan(plan), [])
 
     def test_recovery_weeks_taper_and_growth(self):
         plan = self.make(distance="m", race=dt.date(2026, 9, 27))
@@ -230,7 +247,28 @@ class Goals(unittest.TestCase):
         self.assertEqual(planning.quality_count(4, build), 1)
         self.assertEqual(planning.quality_count(5, {**build, "volume_km": 40.0}), 2)
         self.assertEqual(planning.quality_count(5, {**build, "volume_km": 40.0, "recovery": True}), 1)
-        self.assertEqual(planning.quality_count(6, {"phase": "race", "volume_km": 40.0}), 0)
+        self.assertEqual(planning.quality_count(6, {"phase": "race", "volume_km": 40.0}), 1)  # the sharpener
+
+    def test_two_a_races_close_together_are_flagged(self):
+        a_races = [r for r in self.races if r.get("priority", "A") == "A"]
+        gaps = [(dt.date.fromisoformat(b["date"]) - dt.date.fromisoformat(a["date"])).days / 7
+                for a, b in zip(a_races, a_races[1:])]
+        flagged = [w for w in self.plan["warnings"] if w.get("key") == "close_a_races"]
+        self.assertEqual(len(flagged), sum(g < planning.A_RACE_GAP_WEEKS for g in gaps))
+        for item in flagged:
+            self.assertIn("B", text.warning(item))
+
+    def test_race_week_keeps_a_short_race_pace_session(self):
+        for race in self.races:
+            day = dt.date.fromisoformat(race["date"])
+            sharp = [s for s in self.plan["sessions"] if (s.get("text") or {}).get("sharpen")
+                     and 0 < (day - dt.date.fromisoformat(s["date"])).days <= 7]
+            if not sharp:
+                continue  # no running day 4-6 days out, or the days after an earlier race
+            gap = (day - dt.date.fromisoformat(sharp[0]["date"])).days
+            self.assertTrue(4 <= gap <= 6, (race["date"], gap))
+            self.assertLessEqual(sharp[0]["distance_km"], 8.0)
+        self.assertTrue(any((s.get("text") or {}).get("sharpen") for s in self.plan["sessions"]))
 
     def test_targets_differ_per_race(self):
         item = self.result["distances"]["hm"]
@@ -268,6 +306,7 @@ class Tracking(unittest.TestCase):
 
     def test_match_same_day_then_neighbour(self):
         matched = planning.match(self.plan, self.runs, today=dt.date(2026, 3, 1))
+        matched = matched[matched["type"] != "strength"]
         past = matched[matched["date"] < dt.date(2026, 3, 1)]
         self.assertTrue(past["activity_id"].notna().all())  # the block runs Tue/Thu/Sat/Sun
         self.assertEqual(past["activity_id"].nunique(), len(past))  # no run used twice
@@ -276,11 +315,15 @@ class Tracking(unittest.TestCase):
 
     def test_missing_run_is_missed_and_manual_status_wins(self):
         runs = self.runs[self.runs["day"] != pd.Timestamp("2026-02-03")]
-        matched = planning.match(self.plan, runs, today=dt.date(2026, 3, 1)).set_index("date")
+
+        def by_date(frame):
+            return frame[frame["type"] != "strength"].set_index("date")
+
+        matched = by_date(planning.match(self.plan, runs, today=dt.date(2026, 3, 1)))
         self.assertEqual(matched.loc[dt.date(2026, 2, 3), "effective"], "missed")
-        session = next(s for s in self.plan["sessions"] if s["date"] == "2026-02-03")
+        session = next(s for s in self.plan["sessions"] if s["date"] == "2026-02-03" and s["type"] != "strength")
         planning.set_status(self.plan, session["id"], "skipped", note="choroba")
-        matched = planning.match(self.plan, runs, today=dt.date(2026, 3, 1)).set_index("date")
+        matched = by_date(planning.match(self.plan, runs, today=dt.date(2026, 3, 1)))
         self.assertEqual(matched.loc[dt.date(2026, 2, 3), "effective"], "skipped")
         summary = planning.compliance(planning.match(self.plan, runs, today=dt.date(2026, 3, 1)))
         self.assertGreaterEqual(summary["skipped"], 1)

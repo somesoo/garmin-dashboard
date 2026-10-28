@@ -124,7 +124,8 @@ def _ratio(frame: pd.DataFrame) -> None:
     with bento.tile(
         tr(pl="Tempo przyrostu (km 7 d / 28 d)", en="Rate of increase (km 7 d / 28 d)"), key="load_ratio",
         terms=["run_ratio"],
-        caption=tr(pl="Pas 0,8–1,3 to stopniowy przyrost.", en="The 0.8–1.3 band is a gradual increase."),
+        caption=tr(pl="Pas 0,8–1,3 to stopniowy przyrost — opis, nie granica bezpieczeństwa.",
+                   en="The 0.8–1.3 band is a gradual increase — a description, not a safety limit."),
         how=tr(pl="Przy średniej z 28 dni poniżej 5 km/tydz. iloraz nie jest liczony — po przerwie każdy bieg "
                   "dawałby „skok”. Obciążenie wszystkich sportów jest na stronie Forma.",
                en="With a 28-day average below 5 km/week the ratio is not computed — after a break every run "

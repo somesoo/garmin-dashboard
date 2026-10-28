@@ -101,7 +101,7 @@ class Sync(TempStore):
 
     def test_push_is_idempotent(self):
         api = FakeGarmin()
-        expected = len([s for s in self.plan["sessions"] if s["type"] != "rest"
+        expected = len([s for s in self.plan["sessions"] if gw.to_garmin(s) is not None
                         and self.today <= dt.date.fromisoformat(s["date"]) < self.today + dt.timedelta(days=7)])
         self.push(api)
         self.assertEqual(sum(1 for c in api.calls if c[0] == "upload"), expected)

@@ -35,11 +35,13 @@ def render() -> None:
     bento.header(
         i18n.page("plan"),
         tr(pl="Jeden plan przez wszystkie starty ze strony Zawody. Startuje od tego, co faktycznie biegasz, rośnie do "
-              "szczytu dystansu (≤ 1,3× średniej z 4 tygodni), co 3.–4. tydzień odpuszcza i przed każdym startem "
-              "schodzi z objętości. Tempa z aktualnej formy, nie z celu.",
+              "szczytu dystansu (żaden bieg > 1,1× najdłuższego z 30 dni), akcenty z tygodnia na tydzień trudniejsze, "
+              "siłownia 1–2× w tygodniu, przed każdym startem schodzi z objętości. Tempa z aktualnej formy, nie z "
+              "celu.",
            en="One plan through every race on the Races page. It starts from what you actually run, grows to the "
-              "distance's peak (≤ 1.3× the 4-week average), backs off every 3rd–4th week and eases off before each "
-              "race. Paces from your current form, not from the goal."),
+              "distance's peak (no run > 1.1× the longest of 30 days), quality sessions get harder week by week, "
+              "strength 1–2× a week, and it eases off before each race. Paces from your current form, not from the "
+              "goal."),
     )
     frame = rc.guard()
     if frame is None:
@@ -57,7 +59,7 @@ def render() -> None:
                  + " ".join(errors[:3]))
         return
 
-    matched = planning.match(active, frame, laps=shell.table("run_laps"))
+    matched = planning.match(active, frame, laps=shell.table("run_laps"), activities=shell.table("activities"))
     _header(active, result, matched)
     _explain(active, result)
     left, right = bento.row(2, 2)
@@ -127,6 +129,13 @@ def _create(frame: pd.DataFrame, result: dict, active: dict | None) -> None:
                                       max_value=200, value=int(request.get("max_weekly_km") or 0), step=5,
                                       help=tr(pl="Górna granica wynikająca z czasu, zdrowia, doświadczenia.",
                                               en="An upper limit set by time, health, experience."))
+        strength = st.toggle(tr(pl="Trening siłowy w planie", en="Strength training in the plan"),
+                             value=bool(request.get("strength", True)),
+                             help=tr(pl="2× w tygodniu w bazie i budowie, 1× w szczycie i taperze; najpierw 6 sesji "
+                                        "adaptacji, potem ciężko. Liczą się treningi siłowe zapisane przez zegarek.",
+                                     en="2× a week in base and build, 1× in the peak and taper; 6 adaptation "
+                                        "sessions first, then heavy. Strength sessions recorded by the watch "
+                                        "count."))
         submitted = st.form_submit_button(
             tr(pl="Przebuduj plan z tymi ustawieniami", en="Rebuild the plan with these settings") if active
             else tr(pl="Wygeneruj plan", en="Generate the plan"))
@@ -146,15 +155,16 @@ def _create(frame: pd.DataFrame, result: dict, active: dict | None) -> None:
         return
     tomorrow = dt.date.today() + dt.timedelta(days=1)
     settings = planning.PlanSettings(run_days=sorted(days), long_day=long_day, start=tomorrow,
-                                     max_weekly_km=cap or None)
+                                     max_weekly_km=cap or None, strength=strength)
     goals = [planning.goal_of(r) for r in races]
     try:
         if active:
             active = {**active, "request": {**active["request"], "run_days": sorted(days), "long_day": long_day,
-                                            "max_weekly_km": cap or None}}
-            payload = planning.replan(active, frame, result, today=tomorrow, goals=goals)
+                                            "max_weekly_km": cap or None, "strength": strength}}
+            payload = planning.replan(active, frame, result, today=tomorrow, goals=goals,
+                                      strength_history=rc.strength_done())
         else:
-            payload = planning.generate_goals(settings, goals, frame, result)
+            payload = planning.generate_goals(settings, goals, frame, result, strength_history=rc.strength_done())
         store.save_only_plan(payload)
     except ValueError as error:
         st.error(str(error))
@@ -220,15 +230,75 @@ def _explain(active: dict, result: dict) -> None:
     first, peak = built[0], max(built, key=lambda w: w["volume_km"])
     longest = max(w["long_km"] for w in weeks)
     two = [w["week"] for w in weeks if planning.quality_count(days, w) == 2]
+    cut = sum(1 for s in active.get("sessions", []) if any(w.get("key") == "spike" for w in s.get("why") or []))
+    spikes = tr(pl=f" W tym planie skrócone: {cut} " + i18n.plural(cut, pl=("bieg", "biegi", "biegów"), en=("run", "runs"))
+                   + " (powód przy sesji).",
+                en=f" Cut in this plan: {cut} " + i18n.plural(cut, pl=("bieg", "biegi", "biegów"), en=("run", "runs"))
+                   + " (the reason is on the session).") if cut else ""
+    zones = active.get("zones") or {}
+    lthr = zones.get("lthr") or {}
+    if zones.get("basis") == "lthr" and zones.get("E"):
+        e, t, when = f"{zones['E'][0]}–{zones['E'][1]}", f"{zones['T'][0]}–{zones['T'][1]}", lthr.get("day", "")
+        zone_line = tr(
+            pl=f"**Tętno od Twojego progu** ({lthr.get('bpm')} bpm — średnie tętno {lthr.get('minutes'):g}-minutowego "
+               f"wysiłku bliskiego maksymalnego z {when}), nie od % HRmax: spokojnie {e}, próg {t} bpm (strefy Friela). "
+               "Biegi spokojne i długie zegarek prowadzi po tętnie, nie po tempie — tempo z krótkich odcinków wyprzedza "
+               "wytrzymałość tlenową, a spokojnie ma być spokojnie.",
+            en=f"**Heart rate from your threshold** ({lthr.get('bpm')} bpm — the average heart rate of a "
+               f"{lthr.get('minutes'):g}-minute near-maximal effort on {when}), not from % of HRmax: easy {e}, "
+               f"threshold {t} bpm (Friel's zones). The watch steers easy and long runs by heart rate, not pace — "
+               "pace from short reps runs ahead of aerobic endurance, and easy has to be easy.")
+    elif "zones" not in active:
+        zone_line = tr(pl="**Tętno jako % HRmax** — plan powstał przed strefami od tętna progowego; „Przebuduj od "
+                          "jutra” je przeliczy.",
+                       en="**Heart rate as % of HRmax** — the plan predates zones from the threshold heart rate; "
+                          "“Rebuild from tomorrow” will compute them.")
+    else:
+        zone_line = tr(
+            pl="**Tętno jako % HRmax** — brak ciągłego wysiłku 18–60 min bliskiego maksymalnego w 120 dniach, więc "
+               "nie da się wyznaczyć tętna progowego. Test: 30 min równo i mocno w pojedynkę; strefy przeliczą się "
+               "same.",
+            en="**Heart rate as % of HRmax** — no continuous near-maximal effort of 18–60 min in 120 days, so the "
+               "threshold heart rate cannot be found. A test: 30 min even and hard on your own; the zones will "
+               "update themselves.")
+    done = rc.strength_done()
+    strength_line = tr(pl=f"(zegarek: {done} w ostatnich 120 dniach)", en=f"(watch: {done} in the last 120 days)")
     lines = [
         tr(pl=f"**Start od Twojej realnej objętości.** Pierwszy tydzień budowy: {first['volume_km']:.0f} km; średnia "
               f"z Twoich ostatnich 4 tygodni: {base.get('weekly_km_4w', 0):.0f} km. Szczyt {peak['volume_km']:.0f} km "
-              f"w tygodniu {peak['week']}; żaden tydzień nie przekracza 1,3× średniej z 4 poprzednich (ACWR — powyżej "
-              "rośnie ryzyko kontuzji), co 3.–4. tydzień jest lżejszy.",
+              f"w tygodniu {peak['week']}, tydzień rośnie najwyżej o {planning.MAX_STEP_KM:.0f} km, co 3.–4. tydzień "
+              "jest lżejszy.",
            en=f"**It starts from your real volume.** First build week: {first['volume_km']:.0f} km; your average over "
               f"the last 4 weeks: {base.get('weekly_km_4w', 0):.0f} km. Peak {peak['volume_km']:.0f} km in week "
-              f"{peak['week']}; no week exceeds 1.3× the average of the 4 before it (ACWR — above that the injury risk "
-              "rises), every 3rd–4th week is lighter."),
+              f"{peak['week']}, a week grows by at most {planning.MAX_STEP_KM:.0f} km, every 3rd–4th week is "
+              "lighter."),
+        tr(pl=f"**Żaden bieg nie jest dłuższy niż 1,1× najdłuższego z ostatnich 30 dni** — liczą się Twoje realne "
+              f"biegi i plan.{spikes} W badaniu Garmin-RUNSAFE (BJSM 2025) to pojedynczy za długi bieg zwiększał "
+              "ryzyko kontuzji przeciążeniowej, a iloraz tydzień do tygodnia (ACWR) nie miał z nim związku — dlatego "
+              "plan pilnuje każdego biegu, a nie tylko sumy tygodnia.",
+           en=f"**No run is longer than 1.1× the longest of the last 30 days** — your real runs and the plan both "
+              f"count.{spikes} In the Garmin-RUNSAFE study (BJSM 2025) it was a single run that was too long that "
+              "raised the risk of an overuse injury, while the week-to-week ratio (ACWR) showed no link — so the "
+              "plan checks every run, not only the weekly total."),
+        tr(pl="**Akcenty idą po drabinkach.** Próg: odcinki wydłużają się (5×4 min → 3×10 min → 20 min ciągiem), "
+              "razem do ~10% tygodnia (Daniels, min. 20 min). Interwały 2–5 min do ~8% tygodnia. Podbiegi w bazie, "
+              "tempo startowe w szczycie — z tygodnia na tydzień dłużej. Przy jednym akcencie w tygodniu typy się "
+              "zmieniają; tydzień lżejszy powtarza szczebel niżej, taper — obecny, skrócony.",
+           en="**Quality follows ladders.** Threshold: the reps get longer (5×4 min → 3×10 min → 20 min continuous), "
+              "up to ~10% of the week in total (Daniels, min. 20 min). Intervals of 2–5 min up to ~8% of the week. "
+              "Hills in the base, race pace in the peak — longer week by week. With one quality day a week the kinds "
+              "rotate; a lighter week repeats the rung below, the taper the current one, shortened."),
+        (tr(pl=f"**Siłownia {strength_line}.** 2× w tygodniu w bazie i budowie, 1× w szczycie i taperze. Najpierw 6 "
+               "sesji adaptacji, potem ciężko (4×4–6) z plyometrią — poprawia ekonomię biegu (Blagrove 2018, "
+               "Llanos-Lagos 2024). W dniu akcentu po biegu albo w dzień spokojny, nigdy w przeddzień mocnego dnia; "
+               "przed startem A tydzień bez.",
+            en=f"**Strength {strength_line}.** 2× a week in base and build, 1× in the peak and taper. 6 adaptation "
+               "sessions first, then heavy (4×4–6) with plyometrics — it improves running economy (Blagrove 2018, "
+               "Llanos-Lagos 2024). On the quality day after the run or on an easy day, never the day before a hard "
+               "day; none in the week before an A race.")
+         if request.get("strength", True) else
+         tr(pl="**Bez siłowni** — wyłączona w ustawieniach planu.",
+            en="**No strength training** — switched off in the plan settings.")),
         tr(pl=f"**Jeden akcent + długi bieg w tygodniu.** Długi bieg to też mocny dzień (u Danielsa jeden z akcentów "
               f"tygodnia). Drugi akcent dopiero przy 5+ dniach biegowych i {planning.QUALITY_ROOM_KM:.0f}+ km — "
               f"biegasz {days} dni, więc inaczej 3 z {days} dni byłyby mocne"
@@ -250,7 +320,9 @@ def _explain(active: dict, result: dict) -> None:
            en=f"**The long run** grows from {base.get('long_km_6w', 0):.0f} to {longest:.0f} km by 1–2 km a week, "
               "max. ~2.5 h."),
         tr(pl=f"**Wokół startów.** Długi bieg najpóźniej {planning.LONG_GAP_DAYS + 1} dni przed startem, akcent "
-              f"najpóźniej {planning.QUALITY_GAP_DAYS + 1} dni przed. Dzień przed startem: "
+              f"najpóźniej {planning.QUALITY_GAP_DAYS + 1} dni przed — w tygodniu startu jeden krótki (kilka odcinków "
+              "w tempie startowym 4–6 dni przed), bo taper tnie kilometry, nie intensywność; spokojne biegi tego "
+              "tygodnia mają najwyżej ok. ⅓ dystansu startu. Dzień przed startem: "
               + (f"rozruch, jeśli to Twój dzień biegowy (biegasz {days} dni w tygodniu, wolne zmieniłoby rytm), "
                  "inaczej wolne." if days >= planning.SHAKEOUT_MIN_DAYS else
                  f"wolne — biegasz {days} dni w tygodniu, więc dzień przerwy przed startem to Twój zwykły rytm "
@@ -258,13 +330,16 @@ def _explain(active: dict, result: dict) -> None:
               + " Po starcie krótkie biegi regeneracyjne, a akcent i długi bieg dopiero po jednym spokojnym dniu na "
               "każde 3 km startu. A: pełny taper dystansu i tydzień regeneracji po; B/C: lżejszy tydzień startu.",
            en=f"**Around races.** The long run at least {planning.LONG_GAP_DAYS + 1} days before a race, quality at "
-              f"least {planning.QUALITY_GAP_DAYS + 1} days before. The day before: "
+              f"least {planning.QUALITY_GAP_DAYS + 1} days before — in race week one short session (a few reps at race "
+              "pace 4–6 days out), because a taper cuts kilometres, not intensity; that week's easy runs are at most "
+              "about ⅓ of the race distance. The day before: "
               + (f"a shakeout if it is one of your running days (you run {days} days a week, a day off would break "
                  "the rhythm), otherwise rest." if days >= planning.SHAKEOUT_MIN_DAYS else
                  f"rest — you run {days} days a week, so a day off before the race is your usual rhythm (a shakeout "
                  f"only with {planning.SHAKEOUT_MIN_DAYS}+ days).")
               + " After the race short recovery runs, and quality and the long run only after one easy day per 3 km "
               "raced. A: the distance's full taper and a recovery week after; B/C: a lighter race week."),
+        zone_line,
         tr(pl=f"**Tempa z dzisiejszej formy** (VDOT {active.get('forecast', {}).get('vdot')}), nie z celu. "
               "„Przebuduj od jutra” przelicza je z nowych danych; samopoczucie dnia ocenia rano decyzja na stronie "
               "Dziś (HRV, sen, tętno spoczynkowe).",
@@ -388,7 +463,9 @@ def _calendar(active: dict, matched: pd.DataFrame) -> None:
     for row in matched.itertuples(index=False):
         icon = STATUS_ICONS.get(row.effective, "·")
         cell = f"{icon} {row.title}"
-        grid.setdefault(row.week, {})[names[row.date.weekday()]] = cell
+        day = names[row.date.weekday()]
+        week_cells = grid.setdefault(row.week, {})
+        week_cells[day] = f"{week_cells[day]} + {cell}" if day in week_cells else cell
     rows = []
     for number in sorted(weeks):
         week = weeks[number]
@@ -510,7 +587,8 @@ def _actions_body(active: dict, frame: pd.DataFrame, result: dict) -> None:
                                  en="After skipped sessions, after a test, after a change in form.")):
         try:
             fresh = planning.replan(active, frame, result, today=dt.date.today() + dt.timedelta(days=1),
-                                    goals=[planning.goal_of(r) for r in rc.upcoming_races()])
+                                    goals=[planning.goal_of(r) for r in rc.upcoming_races()],
+                                    strength_history=rc.strength_done())
             store.save_only_plan(fresh)
         except ValueError as error:
             st.error(str(error))

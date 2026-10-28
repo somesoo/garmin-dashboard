@@ -293,6 +293,11 @@ def download_brief(prefix: str) -> None:
 STATUS_ICONS = {"planned": "·", "done": "✓", "modified": "≈", "skipped": "✗", "missed": "✗"}
 
 
+def strength_done() -> int:
+    """Strength sessions the watch recorded recently (when heavy work may start)."""
+    return planning.strength_done(shell.table("activities"))
+
+
 def active_plan(today: dt.date | None = None) -> dict[str, Any] | None:
     """The plan, rebuilt from tomorrow when the races ahead are no longer its goals."""
     today = today or dt.date.today()
@@ -305,7 +310,8 @@ def active_plan(today: dt.date | None = None) -> dict[str, Any] | None:
         try:
             plan = store.save_only_plan(planning.replan(plan, frame, current_forecast(),
                                                         today=today + dt.timedelta(days=1),
-                                                        goals=[planning.goal_of(r) for r in races]))
+                                                        goals=[planning.goal_of(r) for r in races],
+                                                        strength_history=strength_done()))
         except ValueError as error:
             st.warning(i18n.tr(pl=f"Nie udało się dopasować planu do nowych celów: {error}",
                                en=f"Could not fit the plan to the new goals: {error}"))

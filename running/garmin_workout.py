@@ -84,6 +84,12 @@ def _executable(step: dict[str, Any], order: _Order, child: int | None) -> dict[
             targetValueOne=mps(pace[1]),
             targetValueTwo=mps(pace[0]),
         )
+    elif step.get("hr"):
+        out.update(
+            targetType={"workoutTargetTypeId": 4, "workoutTargetTypeKey": "heart.rate.zone", "displayOrder": 4},
+            targetValueOne=float(step["hr"][0]),
+            targetValueTwo=float(step["hr"][1]),
+        )
     else:
         out["targetType"] = {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target", "displayOrder": 1}
     if child is not None:

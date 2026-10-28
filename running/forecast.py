@@ -496,6 +496,8 @@ def forecast(
         "calibration": calibration,
         "garmin": garmin,
         "hr_max": hr_max,
+        # The threshold heart rate the plan's zones hang on (physio.threshold_hr).
+        "lthr": physio.threshold_hr(efforts, anchor),
         "lower_bound": lower_bound,
         "notes": notes,
         "distances": distances,

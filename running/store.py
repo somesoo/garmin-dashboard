@@ -31,7 +31,7 @@ PLANS = ROOT / "plans"
 SEGMENTS = ROOT / "segments.json"
 
 DISTANCES = ("5k", "10k", "hm", "m")
-SESSION_TYPES = ("rest", "recovery", "easy", "long", "tempo", "threshold", "intervals", "race")
+SESSION_TYPES = ("rest", "recovery", "easy", "long", "tempo", "threshold", "intervals", "race", "strength")
 STATUSES = ("planned", "done", "skipped", "modified")
 PRIORITIES = ("A", "B", "C")
 
@@ -168,8 +168,8 @@ def validate_plan(plan: dict[str, Any]) -> list[str]:
 
 
 # Session text codes (running/text.py writes the sentences from them).
-TEXT_KEYS = ("easy", "recovery", "long", "threshold", "intervals", "tempo", "race", "sick", "adjusted", "softened",
-             "custom")
+TEXT_KEYS = ("easy", "recovery", "long", "threshold", "intervals", "tempo", "race", "hills", "race_pace", "strength",
+             "sick", "rest_strength", "adjusted", "softened", "custom")
 PROSE = ("title", "warmup", "main", "cooldown", "purpose")
 
 
@@ -207,6 +207,15 @@ def validate_steps(steps: Any, nested: bool = False) -> list[str]:
             errors.append(tr(pl=f"{where}: `km` {km!r} poza 0–60.", en=f"{where}: `km` {km!r} outside 0–60."))
         elif seconds is not None and (not isinstance(seconds, (int, float)) or not 0 < seconds <= 6 * 3600):
             errors.append(tr(pl=f"{where}: `s` {seconds!r} poza 0–21600.", en=f"{where}: `s` {seconds!r} outside 0–21600."))
+        hr = step.get("hr")
+        if hr is not None and not (
+            isinstance(hr, list) and len(hr) == 2 and all(isinstance(v, int) for v in hr) and 60 <= hr[0] <= hr[1] <= 230
+        ):
+            errors.append(tr(pl=f"{where}: `hr` {hr!r} — oczekiwane [od, do] w bpm, 60–230.",
+                             en=f"{where}: `hr` {hr!r} — expected [from, to] in bpm, 60–230."))
+        if hr is not None and step.get("pace") is not None:
+            errors.append(tr(pl=f"{where}: krok ma jeden cel — `pace` albo `hr`.",
+                             en=f"{where}: a step has one target — `pace` or `hr`."))
         pace = step.get("pace")
         if pace is not None and not (
             isinstance(pace, list) and len(pace) == 2 and all(isinstance(v, (int, float)) for v in pace)

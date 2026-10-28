@@ -21,14 +21,28 @@ def make_plan(distance="hm", goal_s=None):
     return planning.generate(request, runs, result, anchor=pd.Timestamp("2026-03-01"))
 
 
+LEGACY_KEYS = {"easy", "recovery", "long", "threshold", "intervals", "tempo", "race", "sick", "adjusted", "softened"}
+
+
+def legacy(spec):
+    """True for a code the generator wrote before the workout library (no ladder rung, no strength)."""
+    if spec.get("key") not in LEGACY_KEYS or "level" in spec:
+        return False
+    return legacy(spec["before"]) if spec.get("key") == "softened" else True
+
+
 def old_format(plan):
-    """The same plan as the generator wrote it before codes: Polish sentences, no ``text``."""
+    """The same plan as the generator wrote it before codes: Polish sentences, no ``text``.
+
+    Sessions of kinds that did not exist then (strength, ladder rungs) keep their code: an old
+    file never held them, so there is nothing to read back."""
     old = copy.deepcopy(plan)
     i18n.force("pl")
     text.fill(old)
     old["warnings"] = text.warnings(old)
     for session in old["sessions"]:
-        session.pop("text")
+        if legacy(session["text"]):
+            session.pop("text")
     return old
 
 
@@ -90,10 +104,21 @@ class Migration(unittest.TestCase):
             self.assertEqual(old["warnings"], plan["warnings"], distance)
             self.assertFalse(text.migrate_plan(old))
 
+    def test_legacy_quality_session(self):
+        session = {"type": "threshold", "title": "Próg 4×1,6 km", "main": "4×1,6 km w tempie 5:00–5:10/km",
+                   "steps": [{"kind": "warmup", "km": 2.0},
+                             {"kind": "repeat", "reps": 4, "steps": [{"kind": "run", "km": 1.6},
+                                                                     {"kind": "recovery", "s": 60}]},
+                             {"kind": "cooldown", "km": 1.5}]}
+        spec = text.infer(session)
+        self.assertEqual(spec, {"key": "threshold", "reps": 4, "rep": 1.6})
+        self.assertIn("przerwa 1 min truchtu", text.session_text({**session, "text": spec})["main"])
+
     def test_softened_and_adjusted_sessions(self):
         plan = make_plan()
         today = dt.date(2026, 3, 2)
-        hard = next(s for s in plan["sessions"] if s["type"] in ("threshold", "intervals"))
+        # Past the 7 days adjust() rewrites, so the softened session stays softened.
+        hard = next(s for s in plan["sessions"] if s["type"] in ("threshold", "intervals") and s["date"] >= "2026-03-09")
         planning.soften(plan, hard["id"], today=today)
         planning.adjust(plan, "fatigue", today=today)
         old = old_format(plan)

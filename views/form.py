@@ -69,7 +69,8 @@ def render() -> None:
     with right:
         with bento.tile(
             tr(pl="ACWR: dwa wzory", en="ACWR: two formulas"), key="acwr", terms=["acwr"],
-            caption=tr(pl="Pas 0,8–1,3 to bezpieczny zakres.", en="The 0.8–1.3 band is the safe range."),
+            caption=tr(pl="Pas 0,8–1,3 to przyrost stopniowy — opis, nie granica bezpieczeństwa.",
+                       en="The 0.8–1.3 band is a gradual increase — a description, not a safety limit."),
             how=tr(pl="Kroczący (Gabbett) to suma 7 dni przez średnią z 28; wykładniczy (Williams) używa wag CTL/ATL. "
                       "Tygodnie, w których się rozjeżdżają, to te, gdzie wniosek „przetrenowanie” zależy od wzoru.",
                    en="Rolling (Gabbett) is the 7-day sum over the 28-day average; exponential (Williams) uses the "

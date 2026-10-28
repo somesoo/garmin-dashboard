@@ -214,8 +214,35 @@ def _band(session: dict[str, Any]) -> str:
     return f"{units.fmt_pace(lo, False)}–{units.fmt_pace(hi)}"
 
 
+def _hr_lead(session: dict[str, Any]) -> list[int] | None:
+    """The heart-rate band an easy run is steered by (its first step), if any."""
+    steps = session.get("steps") or []
+    return steps[0].get("hr") if steps and isinstance(steps[0], dict) else None
+
+
 def _km(value: Any) -> str:
     return f"{float(value or 0):.0f}"
+
+
+def _rest(seconds: Any) -> str:
+    seconds = int(seconds or 0)
+    return f"{seconds // 60} min" if seconds % 60 == 0 else f"{seconds} s"
+
+
+def _rep(value: Any) -> str:
+    return i18n.tr(pl=f"{float(value):g}".replace(".", ","), en=f"{float(value):g}")
+
+
+def _work(spec: dict[str, Any]) -> float:
+    """Tempo work in km: the old code stored ``work``, the library stores reps x rep."""
+    return float(spec.get("work") or spec.get("reps", 1) * spec.get("rep", 0))
+
+
+def strength_label(stage: Any) -> str:
+    tr = i18n.tr
+    return {"adapt": tr(pl="adaptacja", en="adaptation"), "strength": tr(pl="ciężko", en="heavy"),
+            "maintain": tr(pl="utrzymanie", en="maintenance"), "light": tr(pl="lekko", en="light")}.get(stage,
+                                                                                                    str(stage))
 
 
 def _title(spec: dict[str, Any], km: float) -> str:
@@ -229,16 +256,27 @@ def _title(spec: dict[str, Any], km: float) -> str:
     if key == "long":
         return tr(pl=f"Długie wybieganie {_km(km)} km", en=f"Long run {_km(km)} km")
     if key == "threshold":
-        return tr(pl=f"Próg {spec['reps']}×{spec['rep']:g} km", en=f"Threshold {spec['reps']}×{spec['rep']:g} km")
+        if spec.get("reps") == 1:
+            return tr(pl=f"Próg ciągły {_rep(spec['rep'])} km", en=f"Continuous threshold {_rep(spec['rep'])} km")
+        return tr(pl=f"Próg {spec['reps']}×{_rep(spec['rep'])} km", en=f"Threshold {spec['reps']}×{spec['rep']:g} km")
+    if key == "hills":
+        return tr(pl=f"Podbiegi {spec['reps']}×{spec['s']} s", en=f"Hill reps {spec['reps']}×{spec['s']} s")
+    if key == "race_pace":
+        reps = "" if spec.get("reps") == 1 else f"{spec['reps']}×"
+        return tr(pl=f"Tempo startowe {reps}{_rep(spec['rep'])} km", en=f"Race pace {reps}{_rep(spec['rep'])} km")
+    if key == "strength":
+        return tr(pl=f"Siła — {strength_label(spec.get('stage'))}", en=f"Strength — {strength_label(spec.get('stage'))}")
     if key == "intervals":
         return tr(pl=f"Interwały {spec['reps']}×{spec['rep'] * 1000:.0f} m",
                   en=f"Intervals {spec['reps']}×{spec['rep'] * 1000:.0f} m")
     if key == "tempo":
-        return f"Tempo {spec['work']:.0f} km"
+        return f"Tempo {_work(spec):.0f} km"
     if key == "race":
         return tr(pl="Start", en="Race")
     if key == "sick":
         return tr(pl="Odpoczynek (choroba)", en="Rest (illness)")
+    if key == "rest_strength":
+        return tr(pl="Bez siłowni (regeneracja)", en="No strength (recovery)")
     if key == "adjusted":
         return tr(pl=f"Spokojny {_km(km)} km (korekta)", en=f"Easy {_km(km)} km (adjusted)")
     if key == "softened":
@@ -259,9 +297,15 @@ def session_text(session: dict[str, Any]) -> dict[str, str]:
     band = _band(session)
     out = {"title": _title(spec, km), "warmup": "—", "cooldown": "—"}
     if key in ("easy", "recovery"):
-        strides = tr(pl=", na końcu 6×20 s przebieżek", en=", 6×20 s strides at the end") if spec.get("strides") else ""
-        out["main"] = tr(pl=f"{km:.1f} km ciągle w tempie {band}{strides}",
-                         en=f"{km:.1f} km continuous at {band}{strides}")
+        count = 4 if km < 5 else 6
+        strides = tr(pl=f", na końcu {count}×20 s przebieżek", en=f", {count}×20 s strides at the end") \
+            if spec.get("strides") else ""
+        hr = _hr_lead(session)
+        out["main"] = tr(pl=f"{km:.1f} km na tętnie {hr[0]}–{hr[1]} bpm (tempo wychodzi samo, zwykle ok. {band})"
+                            f"{strides}",
+                         en=f"{km:.1f} km at a heart rate of {hr[0]}–{hr[1]} bpm (the pace follows, usually about "
+                            f"{band}){strides}") if hr else \
+            tr(pl=f"{km:.1f} km ciągle w tempie {band}{strides}", en=f"{km:.1f} km continuous at {band}{strides}")
         out["purpose"] = (tr(pl="Objętość tlenowa: buduje sieć naczyń włosowatych i ekonomię bez kosztu regeneracji. "
                                 "Za szybko = zmęczenie bez dodatkowego bodźca.",
                              en="Aerobic volume: builds the capillary network and economy without a recovery cost. "
@@ -279,7 +323,10 @@ def session_text(session: dict[str, Any]) -> dict[str, str]:
                          en=f"; the last {part:.0f} km at race pace {race_pace}")
         out.update(
             warmup=tr(pl="pierwsze 2 km wolniej", en="the first 2 km slower"),
-            main=tr(pl=f"{km:.1f} km w tempie {band}{segment}", en=f"{km:.1f} km at {band}{segment}"),
+            main=(tr(pl=f"{km:.1f} km na tętnie {_hr_lead(session)[0]}–{_hr_lead(session)[1]} bpm{segment}",
+                     en=f"{km:.1f} km at a heart rate of {_hr_lead(session)[0]}–{_hr_lead(session)[1]} bpm{segment}")
+                  if _hr_lead(session) else
+                  tr(pl=f"{km:.1f} km w tempie {band}{segment}", en=f"{km:.1f} km at {band}{segment}")),
             cooldown=tr(pl="ostatni km trucht", en="the last km a jog"),
             purpose=tr(pl="Wytrzymałość specyficzna: glikogen, mięśnie i ścięgna przyzwyczajone do czasu na nogach. ",
                        en="Specific endurance: glycogen, muscles and tendons used to time on feet. ")
@@ -288,10 +335,13 @@ def session_text(session: dict[str, Any]) -> dict[str, str]:
                tr(pl="Tempo spokojne — liczy się czas, nie prędkość.", en="An easy pace — time counts, not speed.")),
         )
     elif key == "threshold":
+        rest = _rest(spec.get("rest", 60))
         out.update(
             warmup=tr(pl="2 km spokojnie + 4 przebieżki", en="2 km easy + 4 strides"),
-            main=tr(pl=f"{spec['reps']}×{spec['rep']:g} km w tempie {band}, przerwa 1 min truchtu",
-                    en=f"{spec['reps']}×{spec['rep']:g} km at {band}, 1 min jog recovery"),
+            main=tr(pl=f"{_rep(spec['rep'])} km ciągle w tempie {band}", en=f"{spec['rep']:g} km continuous at {band}")
+            if spec.get("reps") == 1 else
+            tr(pl=f"{spec['reps']}×{spec['rep']:g} km w tempie {band}, przerwa {rest} truchtu",
+               en=f"{spec['reps']}×{spec['rep']:g} km at {band}, {rest} jog recovery"),
             cooldown=tr(pl="1,5 km spokojnie", en="1.5 km easy"),
             purpose=tr(pl="Próg mleczanowy: najszybsze tempo, które utrzymasz ok. godziny. Podnosi tempo dla 10 km i "
                           "półmaratonu; 'komfortowo ciężko', nie na maksa.",
@@ -302,8 +352,11 @@ def session_text(session: dict[str, Any]) -> dict[str, str]:
         metres = f"{spec['rep'] * 1000:.0f}"
         out.update(
             warmup=tr(pl="2 km spokojnie + 4–6 przebieżek", en="2 km easy + 4–6 strides"),
-            main=tr(pl=f"{spec['reps']}×{metres} m w tempie {band}, przerwa trucht równy czasowi odcinka",
-                    en=f"{spec['reps']}×{metres} m at {band}, jog recovery as long as the rep"),
+            main=tr(pl=f"{spec['reps']}×{metres} m w tempie {band}, przerwa {_rest(spec['rest'])} truchtu",
+                    en=f"{spec['reps']}×{metres} m at {band}, {_rest(spec['rest'])} jog recovery")
+            if spec.get("rest") else
+            tr(pl=f"{spec['reps']}×{metres} m w tempie {band}, przerwa trucht równy czasowi odcinka",
+               en=f"{spec['reps']}×{metres} m at {band}, jog recovery as long as the rep"),
             cooldown=tr(pl="1,5 km spokojnie", en="1.5 km easy"),
             purpose=tr(pl="VO₂max: kilka minut łącznie blisko maksymalnego poboru tlenu. Największy bodziec dla 5 i "
                           "10 km; tempo równe na wszystkich powtórzeniach ważniejsze niż szybkie pierwsze.",
@@ -313,7 +366,7 @@ def session_text(session: dict[str, Any]) -> dict[str, str]:
     elif key == "tempo":
         out.update(
             warmup=tr(pl="2 km spokojnie", en="2 km easy"),
-            main=tr(pl=f"{spec['work']:.0f} km ciągle w tempie {band}", en=f"{spec['work']:.0f} km continuous at {band}"),
+            main=tr(pl=f"{_work(spec):.0f} km ciągle w tempie {band}", en=f"{_work(spec):.0f} km continuous at {band}"),
             cooldown=tr(pl="1,5 km spokojnie", en="1.5 km easy"),
             purpose=(tr(pl="Wytrzymałość tempowa: długi, równy wysiłek poniżej progu. W fazie specyfiki — w tempie "
                            "startowym, żeby je zautomatyzować.",
@@ -323,6 +376,45 @@ def session_text(session: dict[str, Any]) -> dict[str, str]:
                      tr(pl="Wprowadzenie do pracy tempowej: równy, kontrolowany wysiłek przed cięższymi sesjami.",
                         en="An introduction to tempo work: an even, controlled effort before harder sessions.")),
         )
+    elif key == "hills":
+        out.update(
+            warmup=tr(pl="2 km spokojnie do podbiegu", en="2 km easy to the hill"),
+            main=tr(pl=f"{spec['reps']}×{spec['s']} s pod górę (nachylenie 4–8%, wiadukt albo schody też się "
+                       "nadają) z wysiłkiem jak na 5 km, w dół truchtem",
+                    en=f"{spec['reps']}×{spec['s']} s uphill (a 4–8% grade; a bridge ramp or stairs will do) at 5 km "
+                       "effort, jog back down"),
+            cooldown=tr(pl="1,5 km spokojnie", en="1.5 km easy"),
+            purpose=tr(pl="Siła biegowa w fazie bazy: duży bodziec dla mięśni i ekonomii przy małym obciążeniu "
+                          "stawów. Na zboczu tempo nic nie mówi — liczy się wysiłek i postawa: wysoko biodra, krótki "
+                          "krok.",
+                       en="Running strength in the base phase: a big stimulus for the muscles and economy at a low "
+                          "load on the joints. On a slope pace means nothing — effort and posture count: hips high, "
+                          "short steps."),
+        )
+    elif key == "race_pace":
+        race = race_label(spec.get("distance"))
+        main = tr(pl=f"{_rep(spec['rep'])} km ciągle w tempie startowym {band}",
+                  en=f"{spec['rep']:g} km continuous at race pace {band}") if spec.get("reps") == 1 else \
+            tr(pl=f"{spec['reps']}×{_rep(spec['rep'])} km w tempie startowym {band}, przerwa "
+                  f"{_rest(spec.get('rest'))} truchtu",
+               en=f"{spec['reps']}×{spec['rep']:g} km at race pace {band}, {_rest(spec.get('rest'))} jog recovery")
+        out.update(
+            warmup=tr(pl="2 km spokojnie + 4 przebieżki", en="2 km easy + 4 strides"),
+            main=main,
+            cooldown=tr(pl="1,5 km spokojnie", en="1.5 km easy"),
+            purpose=tr(pl="Ostatni bodziec przed startem: kilka krótkich odcinków w tempie startowym, żeby nogi "
+                          "pamiętały rytm. Objętość mała, więc świeżość zostaje — w taperze tnie się kilometry, nie "
+                          "intensywność (Bosquet 2007).",
+                       en="The last stimulus before the race: a few short reps at race pace so the legs remember the "
+                          "rhythm. The volume is small, so freshness stays — a taper cuts kilometres, not intensity "
+                          "(Bosquet 2007).") if spec.get("sharpen") else
+            tr(pl=f"Blok specyficzny ({race}): z tygodnia na tydzień więcej kilometrów w tempie startowym, aż "
+                  "staje się ono rytmem, a nie wysiłkiem.",
+               en=f"The specific block ({race}): more kilometres at race pace week after week, until it is a "
+                  "rhythm rather than an effort."),
+        )
+    elif key == "strength":
+        out.update(_strength_text(spec.get("stage")))
     elif key == "race":
         short = spec.get("distance") in ("5k", "10k")
         out.update(
@@ -337,6 +429,11 @@ def session_text(session: dict[str, Any]) -> dict[str, str]:
         out.update(main=tr(pl="bez biegania", en="no running"),
                    purpose=tr(pl="Przy infekcji bieganie wydłuża chorobę i nie buduje formy.",
                               en="With an infection running prolongs the illness and builds no form."))
+    elif key == "rest_strength":
+        out.update(main="—", purpose=tr(pl="Przy zmęczeniu siłownia dokłada obciążenie bez zysku; wraca, gdy wróci "
+                                           "świeżość.",
+                                        en="When tired, strength work adds load with no gain; it returns with "
+                                           "freshness."))
     elif key == "adjusted":
         out.update(main=tr(pl=f"{km:.1f} km spokojnie", en=f"{km:.1f} km easy"),
                    purpose=tr(pl="Korekta planu: najpierw regeneracja, jakość wraca, gdy wróci świeżość.",
@@ -350,6 +447,57 @@ def session_text(session: dict[str, Any]) -> dict[str, str]:
     else:
         out.update(main="—", purpose="—")
     return out
+
+
+def _strength_text(stage: Any) -> dict[str, str]:
+    tr = i18n.tr
+    warmup = tr(pl="5–10 min: trucht albo rower, wymachy nóg, przysiady i wykroki bez obciążenia",
+                en="5–10 min: a jog or a bike, leg swings, unloaded squats and lunges")
+    when = tr(pl=" Najlepiej po biegu tego samego dnia (albo ≥ 6 h później), żeby dni spokojne zostały spokojne.",
+              en=" Best after the run on the same day (or ≥ 6 h later), so easy days stay easy.")
+    content = {
+        "adapt": (
+            tr(pl="3×10–12: przysiad goblet, martwy ciąg rumuński z hantlami, wykrok w tył, hip thrust; 3×15 "
+                  "wspięcia na palce (noga prosta i zgięta); deska 3×40 s, deska bokiem 2×30 s. Ciężar, przy którym "
+                  "zostają 3–4 powtórzenia zapasu.",
+               en="3×10–12: goblet squat, dumbbell Romanian deadlift, reverse lunge, hip thrust; 3×15 calf raises "
+                  "(straight and bent knee); plank 3×40 s, side plank 2×30 s. A load that leaves 3–4 reps in "
+                  "reserve."),
+            tr(pl="Adaptacja: ścięgna i technika przed ciężarami. Pierwsze 6 sesji umiarkowanie — potem ciężko.",
+               en="Adaptation: tendons and technique before heavy loads. The first 6 sessions are moderate — then "
+                  "heavy."),
+        ),
+        "strength": (
+            tr(pl="4×4–6 ciężko (2–3 powtórzenia zapasu): przysiad ze sztangą albo martwy ciąg trap bar, przysiad "
+                  "bułgarski, wspięcia na palce z obciążeniem; plyometria 3×10 skoków pogo i 3×5 wyskoków na "
+                  "skrzynię; deska 2×45 s.",
+               en="4×4–6 heavy (2–3 reps in reserve): back squat or trap-bar deadlift, Bulgarian split squat, loaded "
+                  "calf raises; plyometrics 3×10 pogo jumps and 3×5 box jumps; plank 2×45 s."),
+            tr(pl="Ciężka siła i plyometria poprawiają ekonomię biegu — mniej tlenu na to samo tempo — i "
+                  "wytrzymałość ścięgien (Blagrove 2018, Llanos-Lagos 2024).",
+               en="Heavy strength and plyometrics improve running economy — less oxygen for the same pace — and "
+                  "tendon resilience (Blagrove 2018, Llanos-Lagos 2024)."),
+        ),
+        "maintain": (
+            tr(pl="2–3×3–5 ciężko: przysiad albo martwy ciąg, przysiad bułgarski; 2×10 pogo, 2×5 wyskoków; "
+                  "wspięcia na palce 2×10.",
+               en="2–3×3–5 heavy: squat or deadlift, Bulgarian split squat; 2×10 pogo jumps, 2×5 jumps; calf raises "
+                  "2×10."),
+            tr(pl="Utrzymanie: siła zostaje przy połowie objętości, bez zmęczenia przed akcentami szczytu.",
+               en="Maintenance: strength holds at half the volume, without fatigue before the peak's key "
+                  "sessions."),
+        ),
+        "light": (
+            tr(pl="2×5 przy połowie zwykłego ciężaru: przysiad, martwy ciąg rumuński, wspięcia na palce; bez "
+                  "plyometrii.",
+               en="2×5 at half the usual load: squat, Romanian deadlift, calf raises; no plyometrics."),
+            tr(pl="Lekko: podtrzymanie bodźca w tygodniu lżejszym albo przed startem — bez zakwasów.",
+               en="Light: keeping the stimulus in a lighter week or before a race — without soreness."),
+        ),
+    }
+    main, purpose = content.get(stage, content["adapt"])
+    return {"warmup": warmup, "main": main, "cooldown": tr(pl="rozciąganie 5 min", en="5 min of stretching"),
+            "purpose": purpose + when}
 
 
 def fill(plan: dict[str, Any]) -> dict[str, Any]:
@@ -394,6 +542,15 @@ def warning(item: Any) -> str:
                      "ostrożnie. Pierwsze 2 tygodnie traktuj jako sprawdzian tolerancji.",
                   en="There was almost no running in the last 4 weeks — the plan starts from the minimum and grows "
                      "carefully. Treat the first 2 weeks as a tolerance test.")
+    if key == "close_a_races":
+        first, second, weeks = item.get("first"), item.get("second"), f"{item.get('weeks', 0):g}".replace(".", ",")
+        return tr(pl=f"„{first}” i „{second}” to oba starty A, {weeks} tyg. od siebie. Na dwa szczyty to za mało: "
+                     "drugi blok to tylko regeneracja, tydzień budowy i taper. Zmień jeden z nich na B na stronie "
+                     "Zawody — wtedy plan buduje przez niego do głównego celu (B: tylko lżejszy tydzień startu).",
+                  en=f"“{first}” and “{second}” are both A races, {item.get('weeks', 0):g} weeks apart. That is too "
+                     "little for two peaks: the second block is only recovery, a build week and a taper. Make one of "
+                     "them B on the Races page — the plan then builds through it to the main goal (B: only a lighter "
+                     "race week).")
     if key == "custom":
         return str(item.get(i18n.lang()) or item.get("pl") or "")
     return str(item)
@@ -447,6 +604,13 @@ def why_line(item: dict[str, Any]) -> str:
                      "niż mówi samopoczucie.",
                   en=f"Day {days} after the race ({race}): no quality and no long run for {need} days — Daniels' "
                      "rule, one easy day per 3 km raced. Muscles recover from a race longer than it feels.")
+    if key == "spike":
+        return tr(pl=f"Skrócone z {item['from_km']:g} do {item['cap']:g} km: najdłuższy bieg z ostatnich 30 dni to "
+                     f"{item['longest']:g} km, a pojedynczy bieg dłuższy o ponad 10% od niego wyraźnie zwiększa "
+                     "ryzyko przeciążenia (Garmin-RUNSAFE, BJSM 2025).",
+                  en=f"Cut from {item['from_km']:g} to {item['cap']:g} km: the longest run of the last 30 days is "
+                     f"{item['longest']:g} km, and a single run more than 10% longer than that clearly raises the "
+                     "risk of an overuse injury (Garmin-RUNSAFE, BJSM 2025).")
     if key == "post_race":
         days = item.get("days")
         return tr(pl=f"{days} dni po starcie: krótko i bardzo spokojnie, nogi się odbudowują.",

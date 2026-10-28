@@ -32,7 +32,8 @@ garmin-dashboard/
   views/             po jednym module na stronę (atlas, routes, form, ...);
                      run_*.py to grupa „Bieganie”
   running/           logika modułu biegowego (bez Streamlita): klasyfikacja,
-                     prognoza, plan, magazyn celów, brief dla asystenta
+                     prognoza, plan, biblioteka treningów (`library.py`),
+                     magazyn celów, brief dla asystenta
   tests/             unittest: `.venv/bin/python -m unittest discover -s tests -t .`
   insights/*.md      wnioski: proza + bloki SQL liczone na żywo
   data/raw/          źródło prawdy (nie usuwać — odbudowa tabel bez API)
@@ -694,6 +695,50 @@ Plan i cele:
   sesji kod `why` (`text.why`) — strona Plan pokazuje go jako „Dlaczego tu”,
   a panel „Jak działa ten plan” wypisuje reguły z liczbami biegacza.
   `planned_km` tygodnia liczy też start.
+- **Reguła pojedynczego biegu** (`plan._cap_spikes`, `SPIKE = 1.1`): żaden bieg
+  planu nie jest dłuższy niż 1,1× najdłuższego z 30 dni przed nim — realne biegi
+  sprzed startu planu + plan od startu; start się nie skraca, tylko liczy dalej.
+  Źródło: Garmin-RUNSAFE (Frandsen i in., BJSM 2025) — skok pojedynczego biegu
+  > 10% podnosił ryzyko kontuzji przeciążeniowej, iloraz tydzień/tydzień nie.
+  **ACWR (1,3× średniej z 4 tyg.) nie jest już regułą ani sygnałem decyzji
+  dnia** — zostaje jako liczba do oglądania (Forma, Obciążenie, słownik).
+  Skrócona sesja ma `why: {"key": "spike"}`; `coach.spike_check` skraca poranną
+  sesję, gdy realna historia jest krótsza, niż plan zakładał; `--validate`
+  odrzuca ręcznie wpisany skok (`plan.spikes`).
+- **Akcenty z biblioteki** (`running/library.py`, docstring ma źródła): rodzina
+  (`threshold`, `intervals`, `hills`, `race_pace`, `tempo`) to drabinka
+  szczebli, sufit pracy z objętości tygodnia (próg ≤ 10%, min. 20 min; interwały
+  ≤ 8%, min. 12 min; tempo startowe HM/M ≤ 20%). Za szeroki szczebel traci
+  powtórzenia, potem schodzi szczebel niżej. Licznik rodziny (`_progress`) idzie
+  przez cały plan i przez `replan` (sesje z przeszłości); tydzień lżejszy =
+  szczebel niżej, taper = obecny × 0,6. Przy jednym akcencie tygodnia typy
+  rotują (`ROTATION`: slot A, slot B przy dwóch). `type` sesji to dalej
+  `threshold`/`intervals`/`tempo` (dopasowanie do klasyfikacji biegów), rodzina
+  siedzi w `text.key`. Przebieżki są krokami zegarka w obrębie dystansu biegu.
+- **Siła** (`type: strength`, `distance_km: 0`, bez `steps` — na zegarek nie
+  idzie): 2×/tydz. w bazie i budowie, 1× w szczycie, taperze i tygodniu lżejszym,
+  0 w tygodniu startu; pierwsze 6 sesji `adapt`, potem `strength`/`maintain`/
+  `light`. Licznik startuje od treningów `strength_training` z 120 dni
+  (`plan.strength_done`). Najpierw dzień akcentu (po biegu), potem dzień
+  spokojny, potem wolny; nigdy w przeddzień mocnego dnia, w dzień długiego
+  i startu, ≤ 8 dni przed A (4 przed B/C), w dniach spokojnych po starcie.
+  `postpone` przesuwa siłę razem z biegiem tego dnia, `soften` ją odwołuje
+  (`rest_strength`), `match(..., activities=)` dopasowuje ją do aktywności
+  siłowej z zegarka. Przełącznik w ustawieniach planu (`request.strength`).
+- **Tydzień startu** (Bosquet 2007, Mujika): jeden krótki akcent 4–6 dni przed
+  startem (`library.SHARPENER`, `text.sharpen`), spokojne biegi tego tygodnia
+  ≤ 0,35× dystansu startu (4–8 km) — objętość przed startem ~40–60% szczytu.
+- **Strefy tętna od progu** (`physio.threshold_hr`, `hr_zones`): LTHR = średnie
+  tętno najmocniejszego wysiłku bliskiego maksymalnego 18–60 min z 120 dni
+  (`run_efforts`; prognoza zwraca je jako `lthr`), strefy Friela jako % LTHR;
+  bez takiego wysiłku — % HRmax jak dawniej. Plan zapisuje je w `plan["zones"]`.
+  Przy LTHR kroki biegów spokojnych, regeneracyjnych i długich mają cel
+  `"hr": [od, do]` zamiast `pace` (`garmin_workout`: `heart.rate.zone`), opis
+  podaje tętno, tempo tylko orientacyjnie. **Prędkość krytyczna nie koryguje
+  temp**: `critical_speed` liczy się z najlepszych odcinków Garmina *wewnątrz*
+  treningów (w interwałach z przerwami), więc wychodzi zaniżona.
+- **Dwa starty A < 8 tyg. od siebie** (`A_RACE_GAP_WEEKS`): ostrzeżenie
+  `close_a_races` — plan nie wybiera sam, prosi o zmianę jednego na B.
 - **Zmiana startów przebudowuje plan od jutra**: `rc.active_plan` porównuje
   cele planu z `races.json` (`plan.stale`) i woła `replan(..., goals=...)`
   (historia: `goals`). Strony wołają `rc.active_plan()` przed prognozą.

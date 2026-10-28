@@ -126,14 +126,18 @@ TERMS: dict[str, Term] = {
         "acwr": (
             "ACWR (iloraz obciążenia ostrego do przewlekłego)",
             "Obciążenie ostatniego tygodnia podzielone przez średnie z ostatnich 4 tygodni.",
-            "Wykrywa nagłe skoki treningu, które ciało nie zdążyło przyjąć.",
-            "0,8–1,3 — przyrost stopniowy. Powyżej 1,5 — skok. Poniżej 0,8 — roztrenowywanie się.",
+            "Pokazuje, czy ostatni tydzień był większy niż zwykle. Jako przewidywanie kontuzji nie działa: w badaniu "
+            "Garmin-RUNSAFE (BJSM 2025) iloraz tydzień do tygodnia nie miał związku z kontuzjami, a „bezpieczny "
+            "pas” 0,8–1,3 krytykowano też za sprzężenie matematyczne (ten sam tydzień w liczniku i mianowniku).",
+            "0,8–1,3 — przyrost stopniowy; powyżej 1,5 — wyraźnie więcej niż zwykle. To opis, nie granica: o "
+            "ryzyku mówi raczej pojedynczy bieg dłuższy niż 1,1× najdłuższego z 30 dni.",
         ),
         "run_ratio": (
             "Kilometry 7 d / średnia 28 d",
             "Ten sam pomysł co ACWR, ale liczony tylko z kilometrów biegowych.",
             "Ścięgna i kości reagują na kilometry biegu, nie na rower czy siłownię.",
-            "0,8–1,3 — spokojny przyrost; powyżej 1,5 — gwałtownie więcej niż zwykle.",
+            "0,8–1,3 — spokojny przyrost; powyżej 1,5 — gwałtownie więcej niż zwykle. Opis tempa przyrostu, nie "
+            "próg bezpieczeństwa — plan pilnuje długości pojedynczego biegu (1,1× najdłuższego z 30 dni).",
         ),
         "monotony": (
             "Monotonia (Foster)",

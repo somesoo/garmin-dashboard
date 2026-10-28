@@ -78,6 +78,27 @@ def recovery_signals(daily: pd.DataFrame, today: dt.date) -> dict[str, Any]:
     return out
 
 
+def spike_check(session: dict[str, Any], runs: pd.DataFrame, today: dt.date) -> dict[str, Any] | None:
+    """When the plan assumed runs that did not happen, its next run can be a
+    spike against the real record: the cap and a sentence saying so."""
+    if session["type"] in ("race", "strength", "rest") or not session.get("distance_km"):
+        return None
+    date = dt.date.fromisoformat(session["date"])
+    history = planning.run_history(runs, min(date, today + dt.timedelta(days=1)))
+    longest, cap = planning.spike_cap(history, date)
+    if session["distance_km"] <= cap + 0.05:
+        return None
+    tr = i18n.tr
+    km, top, limit = f"{session['distance_km']:.1f}", f"{longest:.1f}", f"{cap:.1f}"
+    return {"longest_km": round(longest, 1), "cap_km": round(cap, 1), "reason": tr(
+        pl=f"Skróć do {limit} km (plan: {km} km): najdłuższy bieg z ostatnich 30 dni to {top} km, a pojedynczy bieg "
+           "dłuższy o ponad 10% zwiększa ryzyko przeciążenia. Plan zakładał biegi, których nie było — "
+           "„Przebuduj od jutra” dopasuje resztę.",
+        en=f"Cut it to {limit} km (plan: {km} km): the longest run of the last 30 days is {top} km, and a single run "
+           "more than 10% longer raises the risk of an overuse injury. The plan assumed runs that did not happen — "
+           "“Rebuild from tomorrow” will fit the rest.")}
+
+
 def load_signals(runs: pd.DataFrame, today: dt.date) -> dict[str, Any]:
     end = pd.Timestamp(today)
     if runs is None or runs.empty:
@@ -87,6 +108,8 @@ def load_signals(runs: pd.DataFrame, today: dt.date) -> dict[str, Any]:
     chronic = float(last28["distance_km"].sum()) / 4
     hard = runs[runs["kind"].isin(sessions.HARD_KINDS) & (runs["day"] <= end)] if "kind" in runs else runs.iloc[0:0]
     longs = runs[(runs["kind"] == "long") & (runs["day"] <= end)] if "kind" in runs else runs.iloc[0:0]
+    tomorrow = today + dt.timedelta(days=1)
+    longest, cap = planning.spike_cap(planning.run_history(runs, tomorrow), tomorrow)
     return {
         "km_7d": round(float(last7["distance_km"].sum()), 1),
         "km_28d_weekly": round(chronic, 1),
@@ -95,6 +118,9 @@ def load_signals(runs: pd.DataFrame, today: dt.date) -> dict[str, Any]:
         "days_since_hard": int((end - hard["day"].max()).days) if not hard.empty else None,
         "days_since_long": int((end - longs["day"].max()).days) if not longs.empty else None,
         "days_since_run": int((end - runs[runs["day"] <= end]["day"].max()).days) if (runs["day"] <= end).any() else None,
+        # The rule the plan keeps (Garmin-RUNSAFE): tomorrow's run at most 1.1x the longest of 30 days.
+        "longest_30d_km": round(longest, 1),
+        "next_run_cap_km": round(cap, 1),
     }
 
 
@@ -111,16 +137,20 @@ def next_session(
     recovery = recovery_signals(daily, today)
     load = load_signals(runs, today)
     reasons: list[str] = []
+    # The 7:28-day ratio is not a recovery signal: in Garmin-RUNSAFE (BJSM 2025) it did not predict
+    # injury, a single run over 1.1x the longest of 30 days did -- spike_check handles that.
     flags = list(recovery.get("flags", [])) if recovery.get("stale_days", 99) <= 1 else []
-    if load.get("ratio") is not None and load["ratio"] > 1.5 and load["km_28d_weekly"] >= 10:
-        flags.append(tr(pl=f"ostatnie 7 dni to {load['ratio']:.1f}× średniej tygodniowej z 28 dni",
-                        en=f"the last 7 days are {load['ratio']:.1f}× the weekly average of 28 days"))
 
     session = None
+    strength = None
     if active_plan:
         upcoming = [s for s in active_plan.get("sessions", [])
-                    if s["date"] >= today.isoformat() and s.get("status") == "planned" and s["type"] != "rest"]
+                    if s["date"] >= today.isoformat() and s.get("status") == "planned"
+                    and s["type"] not in ("rest", "strength")]
         session = upcoming[0] if upcoming else None
+        if session is not None:
+            strength = next((s for s in active_plan.get("sessions", []) if s["type"] == "strength"
+                             and s["date"] == session["date"] and s.get("status") == "planned"), None)
 
     if session is not None:
         hard = session["type"] in ("tempo", "threshold", "intervals", "long")
@@ -162,9 +192,20 @@ def next_session(
             action = "jak w planie"
             reasons.append(tr(pl="Brak sygnałów przeciw: regeneracja i obciążenie w normie.",
                               en="No signals against: recovery and load are normal."))
+        spike = spike_check(session, runs, today)
+        if spike:
+            reasons.append(spike["reason"])
+        if strength is not None:
+            if action in ("zamień na spokojny", "przesuń"):  # i18n: key
+                reasons.append(tr(pl="Siłownia z tego dnia też odpada — wraca z następnym akcentem.",
+                                  en="That day's strength session goes too — it returns with the next quality day."))
+            else:
+                reasons.append(tr(pl=f"Po biegu: {strength.get('title')} (ok. {strength.get('duration_min')} min).",
+                                  en=f"After the run: {strength.get('title')} (about {strength.get('duration_min')} "
+                                     "min)."))
         reasons = text.why(session) + reasons
         return {"source": "plan", "session": session, "today": session["date"] == today.isoformat(),
-                "action": action, "reasons": reasons, "flags": flags,
+                "action": action, "reasons": reasons, "flags": flags, "strength": strength, "spike": spike,
                 "recovery": recovery, "load": load}
 
     # No plan: a suggestion from the record alone.
@@ -242,12 +283,15 @@ def observations(runs: pd.DataFrame, history: pd.DataFrame, today: dt.date) -> l
                           en=f"{empty} of 8 weeks without running — breaks cost more than single weaker sessions."))
     load = load_signals(runs, today)
     if load.get("ratio") is not None:
-        verdict = (tr(pl="powyżej 1,3 — szybki przyrost", en="above 1.3 — a fast increase") if load["ratio"] > 1.3
-                   else tr(pl="poniżej 0,8 — luźniejszy okres", en="below 0.8 — a lighter period")
-                   if load["ratio"] < 0.8 else tr(pl="w paśmie 0,8–1,3", en="within the 0.8–1.3 band"))
         km7, km28, ratio = f"{load['km_7d']:.0f}", f"{load['km_28d_weekly']:.0f}", f"{load['ratio']:.2f}"
-        out.append(tr(pl=f"Obciążenie: {km7} km w 7 dni wobec {km28} km/tydz. z 28 dni (iloraz {ratio}, {verdict}).",
-                      en=f"Load: {km7} km in 7 days against {km28} km/week over 28 days (ratio {ratio}, {verdict})."))
+        out.append(tr(pl=f"Obciążenie: {km7} km w 7 dni wobec {km28} km/tydz. z 28 dni (iloraz {ratio} — informacyjnie, "
+                         "nie przewiduje kontuzji).",
+                      en=f"Load: {km7} km in 7 days against {km28} km/week over 28 days (ratio {ratio} — for "
+                         "information, it does not predict injury)."))
+    if load.get("longest_30d_km"):
+        longest, cap = f"{load['longest_30d_km']:.1f}", f"{load['next_run_cap_km']:.1f}"
+        out.append(tr(pl=f"Najdłuższy bieg z 30 dni: {longest} km — kolejny bieg najwyżej {cap} km (reguła 1,1×).",
+                      en=f"Longest run of 30 days: {longest} km — the next run at most {cap} km (the 1.1× rule)."))
     recent = runs[runs["day"] > end - pd.Timedelta(days=28)]
     if len(recent) >= 4 and "kind" in recent:
         hard_km = float(recent.loc[recent["kind"].isin(sessions.HARD_KINDS), "distance_km"].sum())
@@ -548,6 +592,13 @@ def main(argv: list[str] | None = None) -> int:
             print(tr(pl=f"Nie ma planu {args.validate} w {store.PLANS}", en=f"No plan {args.validate} in {store.PLANS}"))
             return 1
         errors = store.validate_plan(payload)
+        if not errors:
+            runs, _, _ = load_warehouse()
+            errors = [tr(pl=f"{item['date']}: {item['km']:g} km > {item['cap']:g} km (1,1× najdłuższego z 30 dni: "
+                            f"{item['longest']:g} km) — skróć albo wydłuż wcześniejsze biegi.",
+                         en=f"{item['date']}: {item['km']:g} km > {item['cap']:g} km (1.1× the longest of 30 days: "
+                            f"{item['longest']:g} km) — shorten it or lengthen the runs before.")
+                      for item in planning.spikes(payload, runs)]
         print("OK" if not errors else "\n".join(errors))
         return 0 if not errors else 1
     runs, efforts, daily = load_warehouse()

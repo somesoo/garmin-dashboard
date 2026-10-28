@@ -112,14 +112,18 @@ TERMS: dict[str, tuple[str, str, str, str]] = {
     "acwr": (
         "ACWR (acute to chronic workload ratio)",
         "Last week's load divided by the average of the last 4 weeks.",
-        "Catches sudden jumps in training the body has not had time to absorb.",
-        "0.8–1.3 — gradual increase. Above 1.5 — a spike. Below 0.8 — detraining.",
+        "Shows whether the last week was bigger than usual. As an injury predictor it does not work: in the "
+        "Garmin-RUNSAFE study (BJSM 2025) the week-to-week ratio showed no link with injuries, and the 0.8–1.3 "
+        "“safe band” was also criticised for mathematical coupling (the same week in numerator and denominator).",
+        "0.8–1.3 — gradual increase; above 1.5 — clearly more than usual. A description, not a limit: the risk shows "
+        "rather in a single run longer than 1.1× the longest of 30 days.",
     ),
     "run_ratio": (
         "Km 7 d / 28-day average",
         "The same idea as ACWR, counted from running kilometres only.",
         "Tendons and bones respond to running kilometres, not to cycling or the gym.",
-        "0.8–1.3 — a steady increase; above 1.5 — sharply more than usual.",
+        "0.8–1.3 — a steady increase; above 1.5 — sharply more than usual. It describes the rate of increase, it is "
+        "not a safety threshold — the plan watches the length of a single run (1.1× the longest of 30 days).",
     ),
     "monotony": (
         "Monotony (Foster)",

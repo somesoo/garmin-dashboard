@@ -19,6 +19,74 @@
 - [x] **Etap 4** — insighty: `insights/<nazwa>.en.md` obok polskiego pliku,
       strona bierze wersję w języku interfejsu (brak tłumaczenia → polska).
 
+### Jakość planowania (audyt 2026-10-28)
+
+Cel: plan zgodny z aktualnymi badaniami, nie tylko wygodny dla aplikacji.
+Po każdej większej zmianie: przejrzeć wcześniejsze punkty i to, co już
+zrobione — czy nowa reguła czegoś nie unieważnia (wpis „Przegląd wstecz”).
+
+- [x] **1. Reguła pojedynczego biegu (Garmin-RUNSAFE, BJSM 2025)** — żaden bieg
+      planu > 1,1× najdłuższego z 30 dni (realne + zaplanowane); ACWR 1,3 przestaje
+      być bezpiecznikiem (iloraz tydzień/tydzień nie przewidywał kontuzji).
+      Decyzja dnia skraca sesję, gdy realna historia jest krótsza niż plan zakładał.
+- [x] **2. Biblioteka treningów z progresją** — drabinki dla progu (Daniels:
+      odcinki → ciągły, ≤ 10% tygodnia, min. 20 min), interwałów (≤ 8%, min.
+      12 min), podbiegów, tempa startowego (≤ 20%); rotacja typów przy jednym
+      akcencie w tygodniu; tydzień lżejszy = szczebel niżej; przebieżki w krokach
+      zegarka.
+- [x] **3. Trening siłowy w planie** (Blagrove 2018, Llanos-Lagos 2024) —
+      adaptacja → siła ciężka + plyometria → utrzymanie → lekko w taperze; w dniu
+      akcentu po biegu, nie w przeddzień mocnego dnia; dopasowanie do aktywności
+      `strength_training` z Garmina; przełącznik w ustawieniach.
+- [x] **4. Akcent w tygodniu startu** (Bosquet 2007, Mujika) — krótkie odcinki
+      w tempie startowym 4–6 dni przed startem zamiast samych spokojnych.
+- [x] **5. Dwa starty A blisko siebie** — przy < 8 tyg. między startami A plan
+      pyta, który jest główny (drugi blok to dziś regeneracja + 1 tydzień + taper).
+- [x] **6. Strefy od progu** — tętno progowe z wysiłku 18–60 min bliskiego
+      maksymalnego, strefy Friela; biegi spokojne na zegarku po tętnie.
+      Prędkość krytyczna **odłożona**: dzisiejsze `critical_speed` bierze najlepsze
+      odcinki Garmina z treningów (z przerwami) i wychodzi wolniej niż próg z
+      VDOT (5:14 vs 5:03–5:10) — patrz 6b.
+- [ ] **6b. Prędkość krytyczna z czystych wysiłków** — dopasowanie CS tylko do
+      `run_efforts` z `near_max` (bez odcinków z przerwami); dopiero wtedy jako
+      kontrola tempa progowego (T nie szybciej niż CS).
+- [ ] **7. Progresja z wykonania** — szczebel drabinki z tego, co faktycznie
+      zrobione (okrążenia `run_laps`: odcinki w tempie, tętno na odcinkach),
+      nie z liczby zaplanowanych sesji.
+- [ ] **8. Adaptacja tygodnia z reakcji** — trend HRV (7 d vs baza 60 d i SWC),
+      EF przy stałym tętnie, realizacja planu decydują: rośnie / stoi / lżej,
+      zamiast sztywnego „co 3.–4. tydzień”.
+- [ ] **9. Odporność na zmęczenie (durability)** — w długich biegach fazy
+      szczytu progresja odcinka w tempie startowym i kontrola dryfu tętna.
+- [ ] **10. Sprawdzenie wstecz planu** — symulacja generatora na historii:
+      ile reguł złamanych, jak plan nadążał za realnym wykonaniem.
+- [ ] **11. Stałe bez źródła** (`PEAK_KM`, `LONG_TARGET_KM`, udział długiego,
+      granice faz, `QUALITY_ROOM_KM`, `keep_one`) — każdą uzasadnić źródłem albo
+      wyprowadzić z danych biegacza; opisać w docstringu.
+- [ ] **12. Siła na zegarek** — trening siłowy jako workout Garmina
+      (`sportType` strength), dziś wysyłane są tylko biegi.
+- [ ] **13. Brief dla asystenta** — szczebel drabinki i lista skoków z realnej
+      historii w `running.coach` (najdłuższy bieg z 30 dni i limit następnego
+      biegu już są w `load_signals`).
+- [ ] **14. Skoki w realnej historii na stronie Obciążenie biegowe** — kafel:
+      każdy bieg vs 1,1× najdłuższego z 30 dni (u Ciebie 04.10 i 18.10 to skoki
+      +66% i +40%), zamiast pasa ACWR jako głównego sygnału.
+
+**Przegląd wstecz po 1–3 (2026-10-28):** ACWR wycofany jako reguła także poza
+planem — decyzja dnia nie traktuje już ilorazu > 1,5 jako sygnału regeneracji,
+brief nie ocenia go pasmem 0,8–1,3, słownik (`acwr`, `run_ratio`) i podpisy
+Forma/Obciążenie mówią „opis, nie granica”; `/trener` dostał nowe reguły
+i kody sesji; `--validate` sprawdza regułę 30 dni. Punkt 4 (akcent w tygodniu
+startu) wpasuje się w `library.rotation("race")` — dziś tydzień startu ma 0
+akcentów (`quality_count`).
+
+**Przegląd wstecz po 6 (2026-10-28):** klasyfikacja biegów (`sessions.py`) ocenia
+tętno jako % HRmax, ale etykietę jakości daje tylko przy tempie bliskim M — bieg
+spokojny na górze nowej strefy (≤ 159 bpm) zostaje „easy”, więc dopasowanie
+planu się nie psuje; bez zmian. Odcinki podbiegów pokazują pasmo strefy I, którego
+60–90 s nie osiągnie — opis i tak mówi „po wysiłku”. Przy punkcie 7 strefy od
+LTHR mogą być miarą wykonania (tętno odcinków vs pasmo T).
+
 ## Czeka na zgodę
 
 Języki inne niż polski i angielski. Nic nie jest implementowane, dopóki

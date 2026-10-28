@@ -29,18 +29,28 @@ hurtowni — nie wymyślasz liczb, których nie ma w briefie.
      (`running/text.py`). Standardowe: `{"key": "easy", "strides": bool}`,
      `{"key": "recovery"}`, `{"key": "long"}` (opcjonalnie `"part": km`,
      `"race_pace": min/km`), `{"key": "threshold", "reps": n, "rep": km}`,
-     `{"key": "intervals", "reps": n, "rep": km}`,
+     `{"key": "intervals", "reps": n, "rep": km}` (oba opcjonalnie `"rest": s`;
+     `reps: 1` przy progu = próg ciągły), `{"key": "hills", "reps": n, "s": s}`,
+     `{"key": "race_pace", "reps": n, "rep": km, "rest": s, "distance": ...}`,
      `{"key": "tempo", "work": km, "distance": "5k"|"10k"|"hm"|"m"}`,
+     `{"key": "strength", "stage": "adapt"|"strength"|"maintain"|"light", "n": nr}`
+     (typ `strength`, `distance_km: 0`, `"steps": []`, `duration_min`),
      `{"key": "race", "distance": ...}`. Sesja, której nie da się tak opisać:
      `{"key": "custom", "pl": {"title", "warmup", "main", "cooldown", "purpose"},
      "en": {...}}` — **zawsze w obu językach**. Nie dopisuj pól `title`/`main`
      do pliku: przy zapisie i tak znikają.
    - Zasady: nie stawiaj dwóch mocnych dni (tempo/próg/interwały/długi) obok
-     siebie; tydzień nie większy niż 1,3× średniej z 4 poprzednich; po
-     pominiętej jakości nie dokładaj jej podwójnie.
+     siebie; **żaden bieg nie dłuższy niż 1,1× najdłuższego z 30 dni** (realne
+     biegi + plan; Garmin-RUNSAFE) — iloraz tydzień/tydzień nie jest regułą;
+     akcenty po drabinkach z `running/library.py` (nie powtarzaj tego samego
+     treningu tydzień w tydzień); siłownia nie w przeddzień mocnego dnia i nie
+     w tygodniu przed startem A; po pominiętej jakości nie dokładaj jej
+     podwójnie.
    - Każda sesja ma też `steps` — strukturę, którą `etl.push_plan` wysyła na
      zegarek: `{"kind": "warmup"|"run"|"recovery"|"cooldown", "km": x}` albo
-     `"s": sekundy`, opcjonalnie `"pace": [szybciej, wolniej]`, oraz
+     `"s": sekundy`, opcjonalnie jeden cel: `"pace": [szybciej, wolniej]` albo
+     `"hr": [od, do]` w bpm (biegi spokojne/długie przy znanym tętnie progowym —
+     strefy w `plan["zones"]`), oraz
      `{"kind": "repeat", "reps": n, "steps": [...]}` (jeden poziom). Zmieniając
      dystans, typ albo tempo, **przepisz `steps` (i `text`) tak, żeby się zgadzały**;
      sesja `rest` ma `"steps": []`.
