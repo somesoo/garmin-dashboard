@@ -522,7 +522,7 @@ def _session(
     elif kind == "race":
         session.update(
             text={"key": "race", "distance": distance},
-            distance_km=units.RACES[distance],
+            distance_km=None,  # set from the steps below: the race plus the warm-up jog
             pace_lo=race_pace * 0.99 if race_pace else None,
             pace_hi=race_pace * 1.01 if race_pace else None,
             hr="—",
@@ -530,6 +530,8 @@ def _session(
                    _step("run", km=units.RACES[distance],
                          pace=(race_pace * 0.99, race_pace * 1.01) if race_pace else None)],
         )
+    if kind == "race":
+        session["distance_km"] = round(steps_km(session["steps"], easy_mid), 1)
     if kind != "strength":
         session["duration_min"] = round(steps_minutes(session["steps"], easy_mid)) if session.get("distance_km") \
             else None

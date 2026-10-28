@@ -256,45 +256,47 @@ def strides(paces: dict[str, tuple[float, float]], reps: int | None = None) -> d
 
 STAGES = ("adapt", "strength", "maintain", "light")
 ADAPT_SESSIONS = 6  # sessions of moderate loads before heavy work
-DURATION_MIN = {"adapt": 35, "strength": 45, "maintain": 30, "light": 25}
 PER_WEEK = {"base": 2, "build": 2, "peak": 1, "taper": 1, "race": 0}
 # No strength this many days before a race (heavy legs for 2-3 days after).
 BEFORE_RACE_DAYS = {"A": 8, "B": 4, "C": 4}
 
 
-# What each stage contains on the watch: (exercise as named in Garmin's catalogue
-# -- garminconnect.exercises -- , sets, reps or None, seconds or None, rest s, note).
-# The same content as text._strength_text writes out.
-STRENGTH_PROGRAMMES: dict[str, list[tuple[str, int, int | None, int | None, int, str | None]]] = {
+# What each stage contains, on the watch and in the description (text._strength_text
+# writes it out from here): (exercise as named in Garmin's catalogue --
+# garminconnect.exercises -- , sets, reps or None, seconds or None, rest s). The cue
+# for each exercise lives in text.EXERCISES.
+# Reps of one-sided exercises are per leg / side. Plyometrics come first, fresh,
+# right after the warm-up: jumps on tired legs lose the speed they train.
+STRENGTH_PROGRAMMES: dict[str, list[tuple[str, int, int | None, int | None, int]]] = {
     "adapt": [
-        ("Goblet Squat", 3, 12, None, 60, None),
-        ("Romanian Deadlift", 3, 10, None, 60, None),
-        ("Dumbbell Reverse Lunge", 3, 10, None, 60, None),
-        ("Barbell Hip Thrust on Floor", 3, 12, None, 60, None),
-        ("Standing Calf Raise", 3, 15, None, 45, None),
-        ("Single-leg Bent-knee Calf Raise", 3, 15, None, 45, None),
-        ("Plank", 3, None, 40, 30, None),
-        ("Side Plank", 2, None, 30, 30, None),
+        ("Goblet Squat", 3, 12, None, 60),
+        ("Romanian Deadlift", 3, 10, None, 60),
+        ("Dumbbell Reverse Lunge", 2, 10, None, 45),
+        ("Barbell Hip Thrust on Floor", 3, 12, None, 60),
+        ("Standing Calf Raise", 2, 15, None, 45),
+        ("Single-leg Bent-knee Calf Raise", 2, 15, None, 30),
+        ("Plank", 2, None, 40, 30),
+        ("Side Plank", 2, None, 30, 20),
     ],
     "strength": [
-        ("Barbell Back Squat", 4, 5, None, 150, "2-3 reps in reserve"),
-        ("Dumbbell Bulgarian Split Squat", 4, 6, None, 120, "2-3 reps in reserve"),
-        ("Weighted Standing Calf Raise", 4, 6, None, 90, None),
-        ("Plyo", 3, 10, None, 60, "pogo jumps"),
-        ("Box Jump", 3, 5, None, 90, None),
-        ("Plank", 2, None, 45, 30, None),
+        ("Plyo", 3, 10, None, 60),
+        ("Box Jump", 3, 5, None, 90),
+        ("Barbell Back Squat", 4, 5, None, 150),
+        ("Dumbbell Bulgarian Split Squat", 4, 6, None, 120),
+        ("Weighted Standing Calf Raise", 4, 6, None, 90),
+        ("Plank", 2, None, 45, 30),
     ],
     "maintain": [
-        ("Barbell Back Squat", 3, 4, None, 150, "heavy, 2-3 reps in reserve"),
-        ("Dumbbell Bulgarian Split Squat", 2, 5, None, 120, None),
-        ("Plyo", 2, 10, None, 60, "pogo jumps"),
-        ("Box Jump", 2, 5, None, 90, None),
-        ("Standing Calf Raise", 2, 10, None, 45, None),
+        ("Plyo", 2, 10, None, 60),
+        ("Box Jump", 2, 5, None, 90),
+        ("Barbell Back Squat", 3, 4, None, 150),
+        ("Dumbbell Bulgarian Split Squat", 2, 5, None, 120),
+        ("Standing Calf Raise", 2, 10, None, 45),
     ],
     "light": [
-        ("Barbell Back Squat", 2, 5, None, 90, "half the usual load"),
-        ("Romanian Deadlift", 2, 5, None, 90, "half the usual load"),
-        ("Standing Calf Raise", 2, 10, None, 45, None),
+        ("Barbell Back Squat", 2, 5, None, 90),
+        ("Romanian Deadlift", 2, 5, None, 90),
+        ("Standing Calf Raise", 2, 10, None, 45),
     ],
 }
 
@@ -307,9 +309,24 @@ def strength_stage(phase: str, done: int, recovery: bool) -> str:
     return "maintain" if phase == "peak" else "strength"
 
 
+# Session time: warm-up and cool-down, ~4 s a rep, the rests, a minute to change exercise.
+WARMUP_MIN, COOLDOWN_MIN, REP_S, CHANGE_S = 8, 5, 4, 60
+ONE_SIDED = ("Dumbbell Reverse Lunge", "Single-leg Bent-knee Calf Raise", "Side Plank",
+             "Dumbbell Bulgarian Split Squat")
+
+
+def strength_minutes(stage: str) -> int:
+    """How long a stage's session takes, from its programme."""
+    seconds = 0.0
+    for name, sets, reps, hold, rest in STRENGTH_PROGRAMMES[stage]:
+        sides = 2 if name in ONE_SIDED else 1
+        seconds += sets * sides * (reps * REP_S if reps else hold) + (sets - 1) * rest + CHANGE_S
+    return int(round(WARMUP_MIN + COOLDOWN_MIN + seconds / 60))
+
+
 def strength(stage: str, number: int) -> dict[str, Any]:
     return {"type": "strength", "text": {"key": "strength", "stage": stage, "n": int(number)},
-            "duration_min": DURATION_MIN[stage]}
+            "duration_min": strength_minutes(stage)}
 
 
 # --------------------------------------------------------------------------

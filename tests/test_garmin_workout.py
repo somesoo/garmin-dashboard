@@ -145,7 +145,7 @@ class StrengthWorkout(unittest.TestCase):
 
         for stage, blocks in library.STRENGTH_PROGRAMMES.items():
             self.assertIn(stage, library.STAGES)
-            for name, sets, reps, seconds, rest, _ in blocks:
+            for name, sets, reps, seconds, rest in blocks:
                 self.assertIsNotNone(exercises.resolve(name), name)
                 self.assertTrue((reps is None) != (seconds is None), name)
                 self.assertGreater(sets, 0)

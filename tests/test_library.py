@@ -446,3 +446,43 @@ class Efficiency(unittest.TestCase):
         self.assertEqual(planning.response(None, today, efficiency=up)["decision"], "grow")  # never pushes faster
         outside = planning.efficiency_signal(*self.frames(0.95, recent_hr=170.0), zones, today)
         self.assertIsNone(outside)  # runs outside the E zone are not the same effort
+
+
+class Descriptions(unittest.TestCase):
+    """The description and the table give the same distance; strength is written exercise by exercise."""
+
+    def test_structured_runs_state_their_kilometres(self):
+        from running import text
+
+        plan, _, _ = make()
+        for session in plan["sessions"]:
+            key = session["text"].get("key")
+            if key in text.QUALITY_KEYS or key == "race" or (key == "long" and session["text"].get("part")):
+                self.assertIn(text.km(session["distance_km"]).replace(" km", ""), session["main"], session["title"])
+            if key in text.QUALITY_KEYS or key == "race":
+                self.assertIn(text.km(session["distance_km"]), text.table_title(session))
+
+    def test_race_counts_the_warm_up(self):
+        from running import units
+
+        plan, _, _ = make()
+        race = next(s for s in plan["sessions"] if s["type"] == "race")
+        self.assertGreater(race["distance_km"], units.RACES["hm"])
+        self.assertAlmostEqual(race["distance_km"], planning.steps_km(race["steps"], sum(plan["paces"]["E"]) / 2),
+                               delta=0.06)
+
+    def test_strength_lists_every_exercise_of_its_programme(self):
+        import i18n
+        from running import text
+
+        for lang in ("pl", "en"):
+            i18n.force(lang)
+            try:
+                for stage, blocks in library.STRENGTH_PROGRAMMES.items():
+                    main = text.session_text({"text": {"key": "strength", "stage": stage}, "steps": []})["main"]
+                    self.assertEqual(len([line for line in main.split("\n") if line[:1].isdigit()]), len(blocks))
+                    for name, sets, reps, hold, rest in blocks:
+                        self.assertIn(f"{sets}×{reps or hold}", main)
+                self.assertTrue(text.exercise_cue("Goblet Squat")[0].isupper())
+            finally:
+                i18n.force("pl")

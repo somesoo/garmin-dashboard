@@ -549,7 +549,8 @@ def markdown(data: dict[str, Any]) -> str:
         lines += ["", f"## Plan: {plan['name']} ({plan['id']})",
                   tr(pl="- realizacja: ", en="- completion: ") + json.dumps(plan["compliance"], ensure_ascii=False)]
         for session in plan["upcoming"]:
-            lines.append(f"- {session['date']} {session['type']}: {session['title']} — {session['main']}")
+            main = str(session.get("main") or "").replace("**", "").replace("\n", " ")
+            lines.append(f"- {session['date']} {session['type']}: {session['title']} — {main}")
     if data["plan"]:
         plan = data["plan"]
         if plan.get("response"):

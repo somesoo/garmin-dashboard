@@ -516,9 +516,10 @@ def _calendar(active: dict, matched: pd.DataFrame) -> None:
     names = i18n.weekdays()
     weeks = {w["week"]: w for w in active.get("weeks", [])}
     grid: dict[int, dict[str, str]] = {}
+    sessions = {x["id"]: x for x in active.get("sessions", [])}
     for row in matched.itertuples(index=False):
         icon = STATUS_ICONS.get(row.effective, "·")
-        cell = f"{icon} {row.title}"
+        cell = f"{icon} {text.table_title(sessions.get(row.id, {'title': row.title}))}"
         day = names[row.date.weekday()]
         week_cells = grid.setdefault(row.week, {})
         week_cells[day] = f"{week_cells[day]} + {cell}" if day in week_cells else cell
@@ -553,10 +554,13 @@ def _week(active: dict, matched: pd.DataFrame) -> None:
     for row in week.itertuples(index=False):
         session = sessions_by_id[row.id]
         icon = STATUS_ICONS.get(row.effective, "·")
-        with st.expander(f"{icon} {i18n.weekdays(long=True)[row.date.weekday()]} {row.date:%d.%m} — {row.title}"):
+        with st.expander(f"{icon} {i18n.weekdays(long=True)[row.date.weekday()]} {row.date:%d.%m} — "
+                         f"{text.table_title(session)}"):
             warmup, main, cooldown = (session.get(k, "—") for k in ("warmup", "main", "cooldown"))
-            st.markdown(tr(pl=f"**Rozgrzewka:** {warmup}  \n**Część główna:** {main}  \n**Schłodzenie:** {cooldown}",
-                           en=f"**Warm-up:** {warmup}  \n**Main set:** {main}  \n**Cool-down:** {cooldown}"))
+            # A strength session's main set is a numbered list, one exercise a line.
+            main = f"\n\n{main}\n\n" if "\n" in main else f"{main}  \n"
+            st.markdown(tr(pl=f"**Rozgrzewka:** {warmup}  \n**Część główna:** {main}**Schłodzenie:** {cooldown}",
+                           en=f"**Warm-up:** {warmup}  \n**Main set:** {main}**Cool-down:** {cooldown}"))
             if session.get("pace_lo"):
                 band = f"{units.fmt_pace(session['pace_lo'], False)}–{units.fmt_pace(session['pace_hi'])}"
                 hr, minutes = session.get("hr", "—"), session.get("duration_min") or "—"

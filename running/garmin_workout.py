@@ -20,6 +20,7 @@ import json
 from typing import Any
 
 import i18n
+from running import text
 
 
 RUNNING = {"sportTypeId": 1, "sportTypeKey": "running", "displayOrder": 1}
@@ -142,7 +143,7 @@ def _strength_steps(stage: str) -> list[dict[str, Any]]:
 
     order = _Order()
     out = []
-    for name, sets, reps, seconds, rest, note in library.STRENGTH_PROGRAMMES[stage]:
+    for name, sets, reps, seconds, rest in library.STRENGTH_PROGRAMMES[stage]:
         entry = exercises.resolve(name)
         order.child += 1
         group = {
@@ -159,8 +160,7 @@ def _strength_steps(stage: str) -> list[dict[str, Any]]:
             "targetType": {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target", "displayOrder": 1},
             "category": entry["category"], "exerciseName": entry["exercise"], "childStepId": order.child,
         }
-        if note:
-            exercise["description"] = note
+        exercise["description"] = text.exercise_cue(name)[:512]
         pause = {
             "type": "ExecutableStepDTO", "stepOrder": order.next(),
             "stepType": {"stepTypeId": 5, "stepTypeKey": "rest", "displayOrder": 5},
@@ -181,7 +181,9 @@ def to_garmin(session: dict[str, Any]) -> dict[str, Any] | None:
         date = dt.date.fromisoformat(session["date"])
         return {
             "workoutName": f"{NAME_PREFIX}{session.get('title', 'strength')} ({date:%d.%m})"[:80],
-            "description": " ".join(filter(None, [session.get("main"), session.get("purpose")]))[:1000],
+            # Connect shows plain text: the description's markdown bold goes.
+            "description": " ".join(filter(None, [session.get("main"), session.get("purpose")]))
+            .replace("**", "")[:1000],
             "sportType": STRENGTH,
             "estimatedDurationInSecs": int((session.get("duration_min") or 30) * 60),
             "workoutSegments": [{"segmentOrder": 1, "sportType": STRENGTH,
