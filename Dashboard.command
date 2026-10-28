@@ -1,7 +1,8 @@
 #!/bin/bash
-# Shortcut entry point on macOS: update data, then make sure the local site is up.
-# Double-click in Finder (opens Terminal) or run from a shell; extra arguments
-# go to etl/run.py, e.g. ./Dashboard.command --backfill
+# Shortcut entry point on macOS: make sure the local site is up and open it.
+# Data is pulled from the sidebar button or by the server on its own once the
+# last pull is GARMIN_AUTO_FETCH_H hours old (sync.py). Arguments run etl/run.py
+# in this window first, e.g. ./Dashboard.command --backfill
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PY="$HERE/.venv/bin/python"
@@ -11,6 +12,7 @@ LOG="$HERE/data/streamlit.log"
 # The server stops itself this many minutes after the last tab is closed
 # (lifecycle.py); the next double-click starts it again.
 export GARMIN_IDLE_EXIT_MIN="${GARMIN_IDLE_EXIT_MIN:-5}"
+export GARMIN_AUTO_FETCH_H="${GARMIN_AUTO_FETCH_H:-6}"
 
 if [ ! -x "$PY" ]; then
     echo "Nie znaleziono $PY"
@@ -20,14 +22,16 @@ if [ ! -x "$PY" ]; then
     exit 1
 fi
 
-echo "== Aktualizacja danych z Garmin Connect =="
-"$PY" "$HERE/etl/run.py" "$@"
-if [ $? -eq 2 ]; then
-    echo
-    echo "Token Garmin wygasl - zaloguj sie raz haslem:"
-    echo "   \"$PY\" \"$HERE/etl/login.py\""
-    read -r -p "Enter, aby zamknac..."
-    exit 2
+if [ $# -gt 0 ]; then
+    echo "== Aktualizacja danych z Garmin Connect =="
+    "$PY" "$HERE/etl/run.py" "$@"
+    if [ $? -eq 2 ]; then
+        echo
+        echo "Token Garmin wygasl - zaloguj sie raz haslem:"
+        echo "   \"$PY\" \"$HERE/etl/login.py\""
+        read -r -p "Enter, aby zamknac..."
+        exit 2
+    fi
 fi
 
 # A server left running across a code change keeps old modules loaded;

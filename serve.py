@@ -2,8 +2,9 @@
 
 Same as ``streamlit run app.py``, plus the idle watchdog from lifecycle.py,
 started with the process -- so a server nobody ever opened stops too, not
-only one whose last tab was closed. The launchers use this; the systemd unit
-keeps plain ``streamlit run`` and stays up.
+only one whose last tab was closed -- and the Garmin pull timer from sync.py.
+The launchers use this; the systemd unit keeps plain ``streamlit run`` and
+stays up.
 
 ``python serve.py --stop-if-stale`` stops a running server that was started
 from older code. Streamlit re-runs a changed ``app.py`` but keeps modules it
@@ -18,10 +19,11 @@ from __future__ import annotations
 import json
 import os
 import signal
-import subprocess
 import sys
 import time
 from pathlib import Path
+
+import sync
 
 ROOT = Path(__file__).resolve().parent
 RECORD = ROOT / "data" / "server.json"
@@ -42,31 +44,18 @@ def code_stamp() -> float:
     return newest
 
 
-def _alive(pid: int) -> bool:
-    if os.name == "nt":
-        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True).stdout
-        return str(pid) in out
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    # Guard against a recycled pid: it must still be this server.
-    command = subprocess.run(["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True).stdout
-    return "serve.py" in command
-
-
 def stop_if_stale() -> int:
     try:
         record = json.loads(RECORD.read_text(encoding="utf-8"))
         pid, stamp = int(record["pid"]), float(record["stamp"])
     except (OSError, ValueError, KeyError, TypeError):
         return 0
-    if not _alive(pid) or code_stamp() <= stamp:
+    if not sync.alive(pid, "serve.py") or code_stamp() <= stamp:
         return 0
     print(f"== Kod zmienił się od startu serwera (pid {pid}) — restart ==", flush=True)
     os.kill(pid, signal.SIGTERM)
     for _ in range(40):
-        if not _alive(pid):
+        if not sync.alive(pid, "serve.py"):
             break
         time.sleep(0.25)
     RECORD.unlink(missing_ok=True)
@@ -83,6 +72,7 @@ if __name__ == "__main__":
     RECORD.parent.mkdir(parents=True, exist_ok=True)
     RECORD.write_text(json.dumps({"pid": os.getpid(), "stamp": code_stamp()}), encoding="utf-8")
     lifecycle.idle_exit()
+    sync.auto()
     theme = [] if any(arg.startswith("--theme.") for arg in sys.argv[1:]) else THEME
     sys.argv = ["streamlit", "run", str(ROOT / "app.py"), *theme, *sys.argv[1:]]
     sys.exit(cli.main())

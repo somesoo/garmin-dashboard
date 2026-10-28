@@ -14,6 +14,7 @@ garmin-dashboard/
   etl/login.py       odświeżenie tokenów hasłem (raz na rok / po zmianie hasła)
   serve.py           start serwera z launcherów: streamlit run app.py + lifecycle
   lifecycle.py       lokalnie serwer gaśnie N min po zamknięciu ostatniej karty
+  sync.py            pobieranie w tle: przycisk w szynie + automat co N h
   analytics.py       modele fizjologiczne i statystyka -> tabele pochodne
   db.py              DuckDB in-memory z widokami na parquet
   theme.py           system wykresów: paleta, buildery, mapy, glob
@@ -62,7 +63,17 @@ na nie** — `garminconnect` daje więcej:
 
 ## Uruchamianie lokalne
 
-`Dashboard.command` / `Dashboard.cmd`: ETL → `serve.py` w tle → przeglądarka.
+`Dashboard.command` / `Dashboard.cmd`: `serve.py` w tle → przeglądarka. **Launcher
+nie pobiera danych** (chyba że dostanie argumenty, np. `--backfill` — wtedy
+`etl/run.py` w oknie przed startem). Pobieranie to `sync.py`: przycisk „Pobierz
+z Garmina” w szynie (`shell.footer`) i wątek startowany przez `serve.py`, który co
+10 min sprawdza, czy ostatnia próba jest starsza niż `GARMIN_AUTO_FETCH_H` h
+(launchery: 6; nieudana sieciowo — po 30 min; wygasły token — po pełnym odstępie).
+Oba odpalają `etl/run.py` jako osobny, odłączony proces (log `data/fetch.log`),
+więc przeżywa idle-exit serwera. `etl/run.py` bierze `data/fetch.lock` (O_EXCL, pid)
+i zapisuje próbę w `data/fetch.json` (`started_at`, `finished_at`, `code`); fragment
+w szynie odpytuje blokadę co 3 s w trakcie i co 60 s poza nim, a po końcu robi
+pełny rerun — nowy build sam unieważnia cache.
 Serwer **nie chodzi w nieskończoność**: `lifecycle.py` liczy aktywne sesje
 Streamlita i po `GARMIN_IDLE_EXIT_MIN` minutach (domyślnie 5) bez żadnej
 otwartej karty wysyła sobie SIGTERM. Licznik startuje z procesem, więc serwer,

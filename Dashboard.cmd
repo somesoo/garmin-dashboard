@@ -2,8 +2,10 @@
 setlocal
 title Garmin Dashboard
 
-rem Shortcut entry point: update data, then make sure the local site is up.
-rem Put a shortcut to this file anywhere; double-clicking it does everything.
+rem Shortcut entry point: make sure the local site is up and open it.
+rem Data is pulled from the sidebar button or by the server on its own once the
+rem last pull is GARMIN_AUTO_FETCH_H hours old (sync.py). Arguments run
+rem etl\run.py in this window first, e.g. Dashboard.cmd --backfill
 
 set "HERE=%~dp0"
 set "PY=%HERE%.venv\Scripts\python.exe"
@@ -13,12 +15,16 @@ set "URL=http://localhost:%PORT%"
 rem The server stops itself this many minutes after the last tab is closed
 rem (lifecycle.py); the next double-click starts it again.
 if not defined GARMIN_IDLE_EXIT_MIN set "GARMIN_IDLE_EXIT_MIN=5"
+if not defined GARMIN_AUTO_FETCH_H set "GARMIN_AUTO_FETCH_H=6"
 
 if not exist "%PY%" goto :no_venv
 
+if "%~1"=="" goto :serve
 echo == Aktualizacja danych z Garmin Connect ==
 "%PY%" "%HERE%etl\run.py" %*
 if errorlevel 2 goto :token_expired
+
+:serve
 
 rem A server left running across a code change keeps old modules loaded;
 rem stop it so the check below starts a fresh one.

@@ -3,7 +3,7 @@
 ``Dashboard.command`` / ``Dashboard.cmd`` set ``GARMIN_IDLE_EXIT_MIN``; once
 no tab has been connected for that many minutes the server stops itself, so
 nothing keeps running on the laptop after the page is closed. The next
-double-click on the launcher starts it again (and fetches new data first).
+double-click on the launcher starts it again.
 
 Without the variable this does nothing -- the server deployment (systemd with
 ``Restart=always``) is meant to stay up.

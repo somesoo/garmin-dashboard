@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,7 @@ import config
 import db
 import glossary
 import routing
+import sync
 
 # Plain ground, cards on top: black in dark mode, a flat neutral in light.
 # Each mode: canvas, sidebar, widget, edge, inner highlight, resting shadow,
@@ -287,9 +289,46 @@ def footer() -> None:
         f"{info.get('first_day')} → {info.get('last_day')}\n\n"
         f"zbudowano: {info.get('built_at', '—')}"
     )
-    if st.sidebar.button("Odśwież dane", width="stretch"):
-        st.cache_data.clear()
+    busy = sync.running()
+    with st.sidebar:
+        # Polls the lock file: every few seconds while a pull runs (to reload
+        # the page when it ends), once a minute otherwise (to notice the
+        # timer starting one).
+        st.fragment(run_every=3 if busy else 60)(_pull)(busy)
+
+
+def _stamp(value: str | None) -> str:
+    try:
+        return f"{dt.datetime.fromisoformat(value):%d.%m %H:%M}"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _pull(was_busy: bool) -> None:
+    """The Garmin pull button and the state of the last pull (sync.py)."""
+    busy = sync.running()
+    if busy != was_busy:
+        # Started by the timer, or just finished: the full run picks the new
+        # build and swaps the polling rate.
         st.rerun()
+    record = sync.last()
+    if busy:
+        st.button("Pobieranie z Garmina…", icon=":material/sync:", width="stretch", disabled=True)
+        st.caption(f"od {_stamp(record.get('started_at'))} · strona odświeży się sama")
+        return
+    if st.button("Pobierz z Garmina", icon=":material/cloud_download:", width="stretch"):
+        sync.start()
+        st.rerun()
+    if record.get("code") == 2:
+        st.caption(":orange[Token Garmina wygasł] — zaloguj się raz hasłem: `.venv/bin/python etl/login.py`")
+    elif record and record.get("code") != 0:
+        st.caption(":orange[Ostatnie pobranie nie powiodło się] — log w `data/fetch.log`")
+    hours = os.environ.get("GARMIN_AUTO_FETCH_H", "").strip()
+    note = f"pobrano: {_stamp(record.get('finished_at'))}"
+    upcoming = sync.next_due(float(hours)) if hours else None
+    if upcoming is not None:
+        note += f" · automatycznie co {hours} h (następne ~{upcoming:%H:%M})"
+    st.caption(note)
 
 
 def lead(title: str, note: str | None = None, *, terms: tuple | list = (), how: str | None = None) -> None:

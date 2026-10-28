@@ -7,8 +7,13 @@ na `http://localhost:8501`. Nic nie wychodzi na zewnątrz.
 
 **macOS:** dwuklik na **`Dashboard.command`** (otwiera się w Terminalu) albo
 `./Dashboard.command` z terminala. **Windows:** dwuklik na **`Dashboard.cmd`**.
-Oba aktualizują dane od ostatniego pobrania, przebudowują tabele, podnoszą
-serwer (jeśli nie działa) i otwierają przeglądarkę. Serwer działa w tle także
+Oba tylko podnoszą serwer (jeśli nie działa) i otwierają przeglądarkę —
+**nie pobierają danych**. Dane zaciąga przycisk **„Pobierz z Garmina”** w szynie
+bocznej, a serwer robi to sam, gdy ostatnie pobranie jest starsze niż 6 h
+(`GARMIN_AUTO_FETCH_H=12 ./Dashboard.command` zmienia odstęp). Pobieranie idzie
+w tle (`data/fetch.log`), strona przeładowuje się po jego końcu. Argumenty
+launchera uruchamiają pobieranie w oknie przed startem, np.
+`./Dashboard.command --backfill`. Serwer działa w tle także
 po zamknięciu okna Terminala (log: `data/streamlit.log`), ale **sam się
 wyłącza 5 minut po zamknięciu ostatniej karty** z dashboardem — kolejny
 dwuklik uruchamia go od nowa. Inny czas: `GARMIN_IDLE_EXIT_MIN=15 ./Dashboard.command`;
@@ -126,6 +131,9 @@ Logowanie idzie z `~/.garminconnect/garmin_tokens.json`. Gdy token wygaśnie
 Plik z tokenami ma wartość hasła — trzymaj go poza repo i backupami.
 
 ## Automatyczna aktualizacja (opcjonalnie)
+
+Lokalny serwer pobiera sam co 6 h, ale tylko gdy działa (czyli gdy jest
+otwarta karta). Pobieranie także przy zamkniętym dashboardzie:
 
 macOS — wpis w `crontab -e` (Mac musi wtedy nie spać):
 
