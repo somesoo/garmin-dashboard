@@ -10,7 +10,7 @@ import i18n
 import routing
 import shell
 import theme as tz
-from running import sessions
+from running import plan as planning, sessions
 from views import run_common as rc
 
 
@@ -49,7 +49,7 @@ def render() -> None:
     with left:
         _volume(weeks)
     with right:
-        _ratio(frame)
+        _spikes(frame)
         _intensity(weeks)
 
     left, right = bento.row(2, 2)
@@ -57,6 +57,10 @@ def render() -> None:
         _recovery()
     with right:
         _breaks(frame, edge)
+
+    (wide,) = bento.row(4)
+    with wide:
+        _ratio(frame)
 
 
 def _volume(weeks: pd.DataFrame) -> None:
@@ -116,6 +120,33 @@ def _intensity(weeks: pd.DataFrame) -> None:
         if figure is not None:
             tz.band(figure, 75, 80)
         t.chart(figure, table=weeks[["iso_week", "hard", "easy_km_pct"]].sort_values("iso_week", ascending=False))
+
+
+def _spikes(frame: pd.DataFrame) -> None:
+    """Each run against 1.1x the longest of the 30 days before it (Garmin-RUNSAFE)."""
+    table = shell.clip(planning.spike_table(frame))
+    tr = i18n.tr
+    count = int(table["spike"].sum()) if not table.empty else 0
+    runs_word = i18n.plural(count, pl=("bieg", "biegi", "biegów"), en=("run", "runs"))
+    with bento.tile(
+        tr(pl="Skoki pojedynczego biegu", en="Single-run spikes"), key="load_spikes", terms=["spike_rule"],
+        caption=tr(pl=f"w zakresie: <b>{count}</b> {runs_word} ponad 1,1× najdłuższego z 30 dni",
+                   en=f"in the range: <b>{count}</b> {runs_word} over 1.1× the longest of 30 days"),
+        how=tr(pl="Kropki: każdy bieg; linia: limit 1,1× najdłuższego biegu z 30 dni przed nim. Kropka nad linią to "
+                  "skok — w badaniu Garmin-RUNSAFE (BJSM 2025) to on, a nie iloraz tygodni, wiązał się z kontuzjami "
+                  "przeciążeniowymi. Plan nigdy go nie planuje.",
+               en="Dots: every run; line: the limit of 1.1× the longest run of the 30 days before it. A dot above the "
+                  "line is a spike — in the Garmin-RUNSAFE study (BJSM 2025) it was this, not the weekly ratio, that "
+                  "went with overuse injuries. The plan never schedules one."),
+    ) as t:
+        km, limit = tr(pl="bieg", en="run"), tr(pl="limit 1,1×", en="1.1× limit")
+        figure = tz.timeseries(table, "day", {km: "km", limit: "limit_km"}, markers=True, emphasis=km,
+                               y_title="km", decimals=1)
+        t.chart(figure, table=table.sort_values("day", ascending=False)
+                .rename(columns={"day": tr(pl="dzień", en="day"), "km": "km",
+                                 "longest_30d_km": tr(pl="najdłuższy z 30 d", en="longest of 30 d"),
+                                 "limit_km": tr(pl="limit", en="limit"), "over_pct": "%",
+                                 "spike": tr(pl="skok", en="spike")}))
 
 
 def _ratio(frame: pd.DataFrame) -> None:

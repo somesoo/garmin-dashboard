@@ -132,6 +132,15 @@ TERMS: dict[str, Term] = {
             "0,8–1,3 — przyrost stopniowy; powyżej 1,5 — wyraźnie więcej niż zwykle. To opis, nie granica: o "
             "ryzyku mówi raczej pojedynczy bieg dłuższy niż 1,1× najdłuższego z 30 dni.",
         ),
+        "spike_rule": (
+            "Skok pojedynczego biegu",
+            "Bieg dłuższy niż 1,1× najdłuższego biegu z 30 dni przed nim.",
+            "W badaniu Garmin-RUNSAFE (BJSM 2025, dane z zegarków Garmina) przekroczenie o 10–30% podnosiło ryzyko "
+            "kontuzji przeciążeniowej o ~64%, o ponad 100% — ponad dwukrotnie; iloraz tydzień do tygodnia nie miał "
+            "z nim związku.",
+            "Kolejny bieg najwyżej 1,1× najdłuższego z 30 dni. Plan pilnuje tego dla każdej sesji, decyzja dnia "
+            "skraca bieg, gdy realna historia jest krótsza niż plan zakładał.",
+        ),
         "run_ratio": (
             "Kilometry 7 d / średnia 28 d",
             "Ten sam pomysł co ACWR, ale liczony tylko z kilometrów biegowych.",

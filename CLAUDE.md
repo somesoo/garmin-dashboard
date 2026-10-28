@@ -765,6 +765,10 @@ Plan i cele:
   generatora) i realność: km pierwszych 4 tygodni vs to, co potem przebiegnięto.
   Na danych z 2026-10: 9 planów, 0 złamań, mediana realności 26% — przerwy
   w bieganiu, nie przeszacowany plan.
+- **Skoki w realnej historii**: `plan.spike_table` (każdy bieg, najdłuższy z 30 dni,
+  limit 1,1×) — kafel „Skoki pojedynczego biegu” na stronie Obciążenie biegowe
+  (hasło `spike_rule`), `plan.real_spikes` w briefie. Iloraz 7/28 d zszedł do
+  osobnego rzędu na dole strony.
 - **Prędkość krytyczna w planie** (`physio.critical_speed`, prognoza: `cs`) jest
   liczona tylko z czystych wysiłków bliskich maksymalnego 2–20 min (`block`,
   `whole`, start) z 90 dni, min. 2 o długości różnej ≥ 2×; `cap_threshold`

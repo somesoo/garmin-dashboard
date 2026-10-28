@@ -68,7 +68,7 @@ zrobione — czy nowa reguła czegoś nie unieważnia (wpis „Przegląd wstecz�
 - [x] **13. Brief dla asystenta** — szczebel drabinki i lista skoków z realnej
       historii w `running.coach` (najdłuższy bieg z 30 dni i limit następnego
       biegu już są w `load_signals`).
-- [ ] **14. Skoki w realnej historii na stronie Obciążenie biegowe** — kafel:
+- [x] **14. Skoki w realnej historii na stronie Obciążenie biegowe** — kafel:
       każdy bieg vs 1,1× najdłuższego z 30 dni (u Ciebie 04.10 i 18.10 to skoki
       +66% i +40%), zamiast pasa ACWR jako głównego sygnału.
 

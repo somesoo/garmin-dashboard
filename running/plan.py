@@ -1117,6 +1117,24 @@ def strength_done(activities: pd.DataFrame | None, before: dt.date | None = None
     return int(mask.sum())
 
 
+def spike_table(runs: pd.DataFrame | None) -> pd.DataFrame:
+    """Every run next to the longest of the 30 days before it and the 1.1x limit that gave."""
+    columns = ["day", "km", "longest_30d_km", "limit_km", "over_pct", "spike"]
+    if runs is None or runs.empty:
+        return pd.DataFrame(columns=columns)
+    frame = runs.sort_values("day")
+    history = [(pd.Timestamp(d).date(), float(km)) for d, km in zip(frame["day"], frame["distance_km"])]
+    rows = []
+    for date, km in history:
+        longest = longest_before(history, date)
+        limit = SPIKE * longest if longest else None
+        rows.append({"day": pd.Timestamp(date), "km": round(km, 1), "longest_30d_km": round(longest, 1) or None,
+                     "limit_km": round(limit, 1) if limit else None,
+                     "over_pct": round((km / longest - 1) * 100) if longest else None,
+                     "spike": bool(limit and km > limit + 0.05)})
+    return pd.DataFrame(rows, columns=columns)
+
+
 def real_spikes(runs: pd.DataFrame | None, today: dt.date, days: int = 60) -> list[dict[str, Any]]:
     """Real runs of the last ``days`` that were over 1.1x the longest of the 30 days before them."""
     if runs is None or runs.empty:

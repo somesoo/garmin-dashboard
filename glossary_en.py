@@ -118,6 +118,14 @@ TERMS: dict[str, tuple[str, str, str, str]] = {
         "0.8–1.3 — gradual increase; above 1.5 — clearly more than usual. A description, not a limit: the risk shows "
         "rather in a single run longer than 1.1× the longest of 30 days.",
     ),
+    "spike_rule": (
+        "Single-run spike",
+        "A run longer than 1.1× the longest run of the 30 days before it.",
+        "In the Garmin-RUNSAFE study (BJSM 2025, data from Garmin watches) going 10–30% over raised the risk of an "
+        "overuse injury by ~64%, more than 100% over — more than double; the week-to-week ratio showed no link.",
+        "The next run at most 1.1× the longest of 30 days. The plan keeps to it for every session, the morning "
+        "decision shortens a run when the real record is shorter than the plan assumed.",
+    ),
     "run_ratio": (
         "Km 7 d / 28-day average",
         "The same idea as ACWR, counted from running kilometres only.",
