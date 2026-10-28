@@ -293,6 +293,19 @@ def download_brief(prefix: str) -> None:
 STATUS_ICONS = {"planned": "·", "done": "✓", "modified": "≈", "skipped": "✗", "missed": "✗"}
 
 
+@st.cache_data(show_spinner=False)
+def _plan_check(build: str) -> dict[str, Any]:
+    from running import plan_check
+
+    frame = runs()
+    return plan_check.summary(plan_check.backtest(frame, efforts(), shell.daily(), hr_max=hr_max(frame)))
+
+
+def plan_check() -> dict[str, Any]:
+    """The generator run on this runner's history (``running.plan_check``), once per build."""
+    return _plan_check(shell.build_id())
+
+
 def strength_done() -> int:
     """Strength sessions the watch recorded recently (when heavy work may start)."""
     return planning.strength_done(shell.table("activities"))

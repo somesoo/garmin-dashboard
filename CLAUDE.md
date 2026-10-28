@@ -758,6 +758,13 @@ Plan i cele:
   drabince (HM 3 → 8 km, M 6 → 14 km, ≤ 40% biegu). Szczebel rośnie, gdy bieg
   się odbył, a dryf tempo:tętno spokojnej części (`library.drift` z okrążeń,
   bez 1. km i bez finiszu) ≤ 5%; inaczej `rung_hold` z powodem `drift`.
+- **Sprawdzenie planu wstecz** (`running/plan_check.py`, `python -m
+  running.plan_check`, panel „Jak działa ten plan” przez `rc.plan_check`):
+  generator w dniach co 4 tyg. z ostatnich 2 lat, z danych sprzed dnia, plan do
+  półmaratonu za 12 tyg. Liczy złamane reguły (`RULES` — każda > 0 to błąd
+  generatora) i realność: km pierwszych 4 tygodni vs to, co potem przebiegnięto.
+  Na danych z 2026-10: 9 planów, 0 złamań, mediana realności 26% — przerwy
+  w bieganiu, nie przeszacowany plan.
 - **Prędkość krytyczna w planie** (`physio.critical_speed`, prognoza: `cs`) jest
   liczona tylko z czystych wysiłków bliskich maksymalnego 2–20 min (`block`,
   `whole`, start) z 90 dni, min. 2 o długości różnej ≥ 2×; `cap_threshold`

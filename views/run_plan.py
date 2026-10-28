@@ -407,6 +407,19 @@ def _explain(active: dict, result: dict) -> None:
         lines.append(tr(pl="**Co daje plan** (prognoza na dzień startu): ", en="**What the plan adds** (race-day "
                                                                                "forecast): ") + " · ".join(gains)
                      + ".")
+    check = rc.plan_check()
+    if check.get("plans"):
+        broken = sum(check["broken"].values())
+        share = f"{check['ratio_median']:.0%}" if check.get("ratio_median") is not None else "—"
+        lines.append(tr(
+            pl=f"**Sprawdzone wstecz** na Twojej historii: {check['plans']} planów zbudowanych z danych sprzed danego "
+               f"dnia, złamanych reguł: {broken}. W pierwszym miesiącu takiego planu przebiegłeś potem mediana "
+               f"{share} zaplanowanych km ({check['over_planned']} z {check['plans']} razy < 70%) — to głównie "
+               "przerwy w bieganiu, nie za ambitny plan: największe ryzyko w Twoich danych to nieregularność.",
+            en=f"**Checked backwards** on your history: {check['plans']} plans built from the data before each day, "
+               f"rules broken: {broken}. In the first month of such a plan you then ran a median {share} of the "
+               f"planned km ({check['over_planned']} of {check['plans']} times < 70%) — mostly breaks in running, not "
+               "an overambitious plan: the biggest risk in your data is irregularity."))
     with bento.panel(tr(pl="Jak działa ten plan", en="How this plan works"), key="plan_explain",
                      caption=tr(pl="Reguły z Twoimi liczbami — jeśli któraś nie pasuje, zmień ustawienia albo "
                                    "powiedz asystentowi (/trener).",

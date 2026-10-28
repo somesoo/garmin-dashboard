@@ -58,7 +58,7 @@ zrobione — czy nowa reguła czegoś nie unieważnia (wpis „Przegląd wstecz�
       zamiast sztywnego „co 3.–4. tydzień”.
 - [x] **9. Odporność na zmęczenie (durability)** — w długich biegach fazy
       szczytu progresja odcinka w tempie startowym i kontrola dryfu tętna.
-- [ ] **10. Sprawdzenie wstecz planu** — symulacja generatora na historii:
+- [x] **10. Sprawdzenie wstecz planu** — symulacja generatora na historii:
       ile reguł złamanych, jak plan nadążał za realnym wykonaniem.
 - [ ] **11. Stałe bez źródła** (`PEAK_KM`, `LONG_TARGET_KM`, udział długiego,
       granice faz, `QUALITY_ROOM_KM`, `keep_one`) — każdą uzasadnić źródłem albo
@@ -108,6 +108,11 @@ po zmianie startów też ocenia reakcję.
 długich biegach −5…+6% (18.10: +0,8%), więc próg 5% rozróżnia realne przypadki.
 Długość samego długiego biegu dalej rośnie z `_volumes` niezależnie od dryfu —
 wstrzymanie długości przy dryfie to kandydat do 8b (ten sam sygnał postępu co EF).
+
+**Przegląd wstecz po 10 (2026-10-28):** generator na 9 punktach Twojej historii
+nie łamie żadnej reguły (także po 1–9). Realność 26% mówi, że plan zakłada
+ciągłość, której w danych nie było — kandydat do 11: start planu po przerwie
+(dziś `no_running` tylko ostrzega) i/lub mniejszy pierwszy krok po przerwie.
 
 ## Czeka na zgodę
 

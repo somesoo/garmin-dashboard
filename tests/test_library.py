@@ -371,3 +371,18 @@ class Durability(unittest.TestCase):
         steady = planning.outcomes(plan, pd.concat([runs, run], ignore_index=True), date + dt.timedelta(days=1),
                                    laps=self.laps(145.0, km=int(long_run["distance_km"])))[long_run["id"]]
         self.assertTrue(steady["advance"])
+
+
+
+class PlanCheck(unittest.TestCase):
+    def test_backtest_finds_no_broken_rules(self):
+        from running import plan_check
+
+        runs, efforts, days, _ = fixture()
+        # The fixture's only measured effort is on 27.02, so the anchors are its last days.
+        table = plan_check.backtest(runs, efforts, days, hr_max=190, every_days=1, since_days=365, history_days=50,
+                                    follow_days=1)
+        self.assertFalse(table.empty)
+        summary = plan_check.summary(table)
+        self.assertEqual(summary["broken"], {rule: 0 for rule in plan_check.RULES})
+        self.assertEqual(summary["plans"], len(table))
