@@ -175,7 +175,8 @@ def _workout(frame: pd.DataFrame, run: pd.Series) -> None:
     table = workouts.reps(laps[laps["activity_id"] == activity_id]) if not laps.empty else pd.DataFrame()
     if len(table) < 2:
         return
-    _reps(table, workouts.summary(table))
+    ranked = rc.rep_efforts()
+    _reps(table, workouts.summary(table), ranked[ranked["activity_id"] == activity_id] if not ranked.empty else ranked)
     history, every = workouts.history(frame, laps)
     peers = workouts.peers(history, activity_id)
     if peers.empty:
@@ -323,10 +324,9 @@ def _faster_or_harder(run: pd.Series) -> None:
 
 def _best_efforts(run: pd.Series) -> None:
     """Strava's best efforts: this run's fastest 1 km ... marathon, ranked."""
-    efforts = rc.efforts()
+    efforts = rc.all_efforts()
     if efforts.empty:
         return
-    efforts = efforts[efforts["effort"].isin(sessions.EFFORT_DISTANCES)]
     mine = efforts[efforts["activity_id"] == run["activity_id"]]
     year = efforts[efforts["day"] > pd.Timestamp(run["day"]) - pd.Timedelta(days=365)]
     rows = []
@@ -362,17 +362,32 @@ def _best_efforts(run: pd.Series) -> None:
 
 
 def _segments(run: pd.Series) -> None:
-    """Saved segments this run passed, each against all its other passes."""
-    saved = {s["id"]: s for s in store.segments()}
-    if not saved:
-        return
-    efforts = rc.segment_efforts()
-    mine = efforts[efforts["activity_id"] == int(run["activity_id"])] if not efforts.empty else efforts
+    """Every segment this run matched -- saved, auto and workout reps --
+    each against all its other passes. A row opens the segment."""
+    from views.run_segments import open_key
+
+    activity_id = int(run["activity_id"])
+    reps = rc.rep_efforts()
+    known = {s["id"]: s for s in [*rc.all_segments(), *workouts.rep_segments(reps)]}
+    efforts = pd.concat([rc.segment_efforts(), reps.drop(columns="km")], ignore_index=True) \
+        if not reps.empty else rc.segment_efforts()
+    mine = efforts[(efforts["activity_id"] == activity_id) & efforts["segment_id"].isin(known)] \
+        if not efforts.empty else efforts
+    loop = rc.is_loop(activity_id)
+    notes = []
+    if loop:
+        notes.append("Bieżnia albo krótka pętla — segmenty GPS są tu pominięte (owal to jeden kłąb śladu); "
+                     "odcinki z okrążeń zegarka i najlepsze odcinki na dystansach liczą się normalnie.")
+    if mine.empty:
+        notes.append("Ten bieg nie pasuje do żadnego segmentu.")
+    elif not loop:
+        notes.append(f"{len(mine)} {'dopasowanie' if len(mine) == 1 else 'dopasowania' if len(mine) < 5 else 'dopasowań'}. "
+                     "Kliknij wiersz, żeby otworzyć segment.")
     with bento.tile(
-        "Segmenty w tym biegu", key="run_segments", terms=["segment"],
-        caption=None if not mine.empty else "Ten bieg nie przechodzi przez żaden zapisany segment.",
-        how="Twoje segmenty (zapisane niżej albo na stronie Segmenty). Miejsce liczy wszystkie przebiegi "
-            "segmentu ze wszystkich biegów; „poprzednio” to ostatni wcześniejszy przebieg.",
+        "Dopasowane segmenty", key="run_segments", terms=["segment"], caption=" ".join(notes),
+        how="Twoje segmenty, „auto” (trasy przebiegnięte co najmniej 4 razy) i odcinki z interwałów "
+            "(każde powtórzenie w rankingu swojej długości). Miejsce liczy wszystkie przebiegi segmentu; "
+            "„poprzednio” to ostatni wcześniejszy przebieg z innego biegu.",
     ) as t:
         with t.header:
             if st.button("", icon=":material/arrow_forward:", key="to_segments", type="tertiary",
@@ -381,14 +396,18 @@ def _segments(run: pd.Series) -> None:
         if mine.empty:
             return
         rows = []
-        for item in mine.itertuples():
+        for item in mine.sort_values(["at_km", "pass"]).rename(columns={"pass": "number"}).itertuples():
+            segment = known[item.segment_id]
             pool = efforts[efforts["segment_id"] == item.segment_id]
             before = pool[pool["start_local"] < item.start_local]
             best = pool["seconds"].min()
+            label = segment["name"] + (" · auto" if segment.get("auto") else "")
+            if segment.get("reps"):
+                label += f" · {int(item.number)}. powt."
             rows.append({
-                "segment": saved.get(item.segment_id, {}).get("name", "—"),
+                "segment_id": item.segment_id,
+                "segment": label,
                 "od km": item.at_km,
-                "długość": f"{saved.get(item.segment_id, {}).get('length_m', 0) / 1000:.2f} km",
                 "czas": units.fmt_time(item.seconds),
                 "tempo": units.fmt_pace(item.pace_min_km, False),
                 "tętno": item.hr,
@@ -397,14 +416,22 @@ def _segments(run: pd.Series) -> None:
                 "poprzednio": "—" if before.empty
                 else f"{item.seconds - before.iloc[-1]['seconds']:+.0f} s ({before.iloc[-1]['start_local']:%d.%m.%y})",
             })
-        t.table(pd.DataFrame(rows))
+        shown = pd.DataFrame(rows)
+        event = st.dataframe(
+            tz.readable_paces(shown.drop(columns="segment_id").assign(
+                tętno=pd.to_numeric(shown["tętno"], errors="coerce").round().astype("Int64"))),
+            hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
+            key=f"run_segments_{activity_id}", height=bento.table_height(len(shown)))
+        picked = getattr(getattr(event, "selection", None), "rows", None) or []
+        if picked:
+            routing.goto("segmenty", **{open_key(shown.iloc[picked[0]]["segment_id"]): True})
 
 
 @st.fragment
 def _new_segment(run: pd.Series, track: pd.DataFrame) -> None:
     """Cut a segment out of this run: a km range, a name, a look at the map."""
     total = float(pd.to_numeric(track["distance_km"], errors="coerce").max() or 0)
-    if total < 0.2:
+    if total < 0.2 or rc.is_loop(int(run["activity_id"])):
         return
     with bento.panel("Nowy segment z tego biegu", key="new_segment", terms=["segment"],
                      caption="Wybierz odcinek po kilometrach — każdy bieg, który przejdzie go od początku do "
@@ -436,7 +463,7 @@ def _lap_text(laps: list[tuple[float, float]]) -> str:
                       for km, pace in laps)
 
 
-def _reps(table: pd.DataFrame, shape: dict) -> None:
+def _reps(table: pd.DataFrame, shape: dict, ranked: pd.DataFrame) -> None:
     caption = (f"{shape['reps']} × {shape['rep_km']:.1f} km · śr. <b>{units.fmt_pace(shape['pace'])}</b>"
                + (f" przy {shape['hr']:.0f} bpm" if pd.notna(shape["hr"]) else "")
                + f" · ostatni <b>{shape['fade_s']:+.0f} s/km</b> wobec pierwszego"
@@ -445,13 +472,17 @@ def _reps(table: pd.DataFrame, shape: dict) -> None:
     with bento.tile(
         "Odcinki i splity", key="reps", caption=caption, terms=["rep_fade", "cadence"],
         how="Z okrążeń zegarka (dokładny czas stopera). Splity to kolejne okrążenia wewnątrz odcinka — "
-            "auto-lap co kilometr, niepełne z długością w nawiasie. Przerwa to trucht po odcinku.",
+            "auto-lap co kilometr, niepełne z długością w nawiasie. Przerwa to trucht po odcinku. Miejsce: "
+            "wśród wszystkich Twoich odcinków tej długości (±7%), gdziekolwiek biegniętych — także na bieżni.",
     ) as t:
+        places = {int(r.pass_): f"{r.rank}/{r.of}" + (" 🏆" if r.rank == 1 and r.of > 1 else "")
+                  for r in ranked.rename(columns={"pass": "pass_"}).itertuples()}
         t.table(pd.DataFrame({
             "#": table["rep"],
             "km": table["km"],
             "czas": table["seconds"].map(units.fmt_time),
             "tempo": table["pace"].map(lambda v: units.fmt_pace(v, False)),
+            "miejsce": table["rep"].map(lambda r: places.get(int(r), "—")),
             "splity": table["laps"].map(_lap_text),
             "tętno": table["hr"].round().astype("Int64"),
             "maks.": table["hr_max"].round().astype("Int64"),

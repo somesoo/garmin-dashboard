@@ -61,5 +61,27 @@ class History(unittest.TestCase):
         self.assertIsNone(workouts.hr_fit(every, 2, pd.Timestamp("2026-10-09")))
 
 
+class RepRecords(unittest.TestCase):
+    def test_reps_join_their_standard_length_and_rank_by_pace(self):
+        self.assertEqual(workouts.rep_length(1.03), 1000)
+        self.assertEqual(workouts.rep_length(0.79), 800)
+        self.assertIsNone(workouts.rep_length(1.3))
+        every = pd.DataFrame({
+            "activity_id": [1, 1, 2], "start_local": pd.to_datetime(["2026-10-01"] * 2 + ["2026-10-08"]),
+            "rep": [1, 2, 1], "at_km": [2.0, 3.2, 2.0], "km": [1.0, 1.0, 1.04], "pace": [4.5, 4.6, 4.4],
+            "hr": [175, 178, 176],
+        })
+        runs = pd.DataFrame({"activity_id": [1, 2], "kind": ["intervals", "intervals"]})
+        ranked = workouts.rep_efforts(every, runs)
+        self.assertEqual(set(ranked["segment_id"]), {"rep-1000"})
+        self.assertEqual(ranked.loc[ranked["rank"] == 1, "activity_id"].item(), 2)
+        self.assertAlmostEqual(ranked.loc[ranked["rank"] == 1, "seconds"].item(), 264, delta=0.5)
+        self.assertEqual([s["name"] for s in workouts.rep_segments(ranked)], ["Odcinek 1 km (interwały)"])
+
+    def test_reps_know_where_they_started(self):
+        table = workouts.reps(laps(1, TWO_BY_TWO))
+        self.assertEqual(table["at_km"].tolist(), [2.0, 4.25])
+
+
 if __name__ == "__main__":
     unittest.main()

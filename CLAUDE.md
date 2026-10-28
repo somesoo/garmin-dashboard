@@ -563,6 +563,33 @@ i *Segmenty*) — porównanie biegów bez okrążeń z zegarka, tylko z GPS:
   mierzony na obu tym samym `passes`, więc kierunek się liczy. Δ tempa, Δ tętna
   i Δ efektywności (m/uderzenie) idą do kwadrantu „Szybciej czy mocniej?”;
   wiersz da się zapisać jako stały segment.
+- **Segmenty auto** (`segments.frequent`, `rc.all_segments`): każdy punkt
+  śladu liczy inne biegi ≤ 35 m w tym samym kierunku (cKDTree co 30 m);
+  odcinki ≥ 500 m, gdzie nakłada się ≥ 4 biegów, są sprawdzane matcherem
+  segmentów (całość od startu do mety, inaczej połowy) i zostają raz na
+  korytarz, nigdy na zapisanym segmencie. Nie są zapisywane — liczą się po
+  każdym buildzie (~1 s, cache); id to sha1 końców, nazwa to miasto z nazwy
+  biegu + długość. „Zapisz jako mój” kopiuje go do `segments.json`.
+- **Bieżnia i krótkie pętle** (`segments.is_loop`: cały bieg w ≤ 400 m,
+  dystans ≥ 3× tyle) są wyłączone z każdego dopasowania GPS (`routable`):
+  owal to jeden kłąb śladu, start i meta segmentu się pokrywają. Porównuje się
+  je po dystansie zegarka — okrążenia i najlepsze odcinki.
+- **Odcinki z interwałów jako segmenty** (`workouts.rep_efforts`,
+  `rep_segments`, id `rep-<metry>`): każde powtórzenie workoutu trafia do
+  standardowej długości (200 m…5 km, ±7%), niezależnie od miejsca; ranking po
+  tempie, `seconds` = tempo × pełna długość. Tabela odcinków w *Treningu* ma
+  ich miejsce, *Segmenty* — rekordy i szczegóły (bez mapy).
+- **400 m / 800 m** (`sessions.SHORT_EFFORTS`, `short_efforts`) liczone w widoku
+  ze strumienia, tylko do rekordów — nie do `EFFORT_DISTANCES`, bo VDOT z 400 m
+  nic nie znaczy. `rc.all_efforts` = `run_efforts` + krótkie.
+- Strona *Segmenty*: najpierw klikalne **rekordy na dystansach** i **rekordy
+  odcinków z interwałów** (wiersz otwiera trening z rekordem), pod nimi lista
+  segmentów jako `st.expander` (własne → auto → odcinki), z rekordem w etykiecie.
+  Szczegóły (KPI, trend, ranking, mapa) rysują się tylko w rozwiniętym
+  (`expander.open`, `on_change="rerun"`) — 26 wykresów z mapą naraz to kilka
+  sekund. Klucz rozwinięcia to `run_segments.open_key(id)`: kafel
+  **Dopasowane segmenty** w *Treningu* (GPS + powtórzenia) ustawia go
+  i przełącza stronę, więc klik w wiersz otwiera ten segment.
 - **Najlepsze odcinki** (jak best efforts Stravy) to `run_efforts` z miejscem
   w historii i w 365 dniach — bez nowej tabeli.
 - Liczone w widoku, nie w ETL (`rc.paths` — ślady co 10 m raz na build,

@@ -16,7 +16,7 @@ import pandas as pd
 import streamlit as st
 
 import shell
-from running import coach, forecast, plan as planning, segments, store, units
+from running import coach, forecast, plan as planning, segments, sessions, store, units, workouts
 
 KIND_ORDER = ["recovery", "easy", "long", "tempo", "threshold", "intervals", "race"]
 CONFIDENCE_ICON = {"wysoka": "●●●", "średnia": "●●○", "niska": "●○○"}
@@ -112,6 +112,44 @@ def paths() -> dict[int, pd.DataFrame]:
 
 
 @st.cache_data(show_spinner=False)
+def _loops(_build: str) -> frozenset[int]:
+    return frozenset(a for a, p in paths().items() if segments.is_loop(p))
+
+
+def is_loop(activity_id: int) -> bool:
+    """A track session or tiny loop: no GPS segments, compare by distance."""
+    return int(activity_id) in _loops(shell.build_id())
+
+
+@st.cache_data(show_spinner=False)
+def _rep_efforts(_build: str) -> pd.DataFrame:
+    frame = runs()
+    _, every = workouts.history(frame, shell.table("run_laps"))
+    return workouts.rep_efforts(every, frame)
+
+
+def rep_efforts() -> pd.DataFrame:
+    """Every workout rep as a pass of its standard length (``rep-1000``...)."""
+    return _rep_efforts(shell.build_id())
+
+
+@st.cache_data(show_spinner=False)
+def _all_efforts(_build: str) -> pd.DataFrame:
+    standard = efforts()
+    short = sessions.short_efforts(paths(), runs())
+    if not short.empty:
+        short = short.assign(day=pd.to_datetime(short["day"]))
+    frame = pd.concat([standard, short], ignore_index=True) if not short.empty else standard
+    return frame[frame["effort"].isin([*sessions.SHORT_EFFORTS, *sessions.EFFORT_DISTANCES])] \
+        if not frame.empty else frame
+
+
+def all_efforts() -> pd.DataFrame:
+    """Best efforts per run: ``run_efforts`` plus 400 m / 800 m from the stream."""
+    return _all_efforts(shell.build_id())
+
+
+@st.cache_data(show_spinner=False)
 def _signatures(_build: str) -> dict[int, dict[str, Any]]:
     return segments.signatures(paths())
 
@@ -127,12 +165,22 @@ def same_route(activity_id: int) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def _auto_segments(_build: str, _stamp: str) -> list[dict[str, Any]]:
+    return segments.frequent(paths(), runs(), store.segments())
+
+
+def all_segments() -> list[dict[str, Any]]:
+    """Saved segments first, then the ones found on frequent routes (``auto``)."""
+    return store.segments() + _auto_segments(shell.build_id(), store.segments_stamp())
+
+
+@st.cache_data(show_spinner=False)
 def _segment_efforts(_build: str, _stamp: str) -> pd.DataFrame:
-    return segments.efforts(store.segments(), paths(), runs())
+    return segments.efforts(all_segments(), paths(), runs())
 
 
 def segment_efforts() -> pd.DataFrame:
-    """Every pass of every saved segment; recomputed after a rebuild or a save."""
+    """Every pass of every segment, saved or found; recomputed after a rebuild or a save."""
     return _segment_efforts(shell.build_id(), store.segments_stamp())
 
 

@@ -77,6 +77,43 @@ class Segments(unittest.TestCase):
         self.assertLess(found.at[4, "d_pace_s"], 0)  # run 1 (5:00/km) was faster than run 4 (5:30)
         self.assertGreater(found.at[2, "d_pace_s"], 0)
 
+    def test_frequent_routes_become_segments_once(self):
+        loop = ([0, 1200, 1200], [0, 0, 600])
+        routes = pd.concat([track(i, loop[0], [y + i * 3 for y in loop[1]], pace_s_km=280 + i) for i in range(1, 6)]
+                           + [track(9, *ELSEWHERE)])
+        runs = pd.DataFrame({"activity_id": [1, 2, 3, 4, 5, 9], "kind": "easy", "name": "Warsaw - Base",
+                             "start_local": pd.date_range("2026-09-01", periods=6, freq="7D")})
+        tracks = segments.paths(routes)
+        found = segments.frequent(tracks, runs)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["runs"], 5)
+        self.assertTrue(found[0]["name"].startswith("Warsaw · "))
+        self.assertGreater(found[0]["length_m"], 1500)
+        # The same corridor saved by hand is not found again.
+        self.assertEqual(segments.frequent(tracks, runs, saved=found), [])
+        # Two runs are not "frequent".
+        self.assertEqual(segments.frequent(tracks, runs, min_runs=6), [])
+
+    def test_track_sessions_stay_out_of_gps_matching(self):
+        # 12 laps of a ~400 m oval (100 x 60 m box): one knot of track.
+        angle = np.linspace(0, 2 * np.pi * 12, 12 * 60)
+        oval = track(7, 50 * np.cos(angle), 30 * np.sin(angle))
+        tracks = segments.paths(pd.concat([self.routes, oval]))
+        self.assertTrue(segments.is_loop(tracks[7]))
+        self.assertFalse(segments.is_loop(tracks[1]))
+        self.assertNotIn(7, segments.routable(tracks))
+        runs = pd.concat([self.runs, pd.DataFrame({"activity_id": [7], "kind": ["intervals"],
+                                                   "start_local": pd.to_datetime(["2026-10-11"])})])
+        self.assertTrue(segments.shared(7, tracks, runs).empty)
+
+    def test_short_best_efforts_come_from_watch_distance(self):
+        from running import sessions
+        runs = self.runs.assign(day=self.runs["start_local"])
+        best = sessions.short_efforts(segments.paths(self.routes), runs)
+        fastest = best[best["effort"] == "400m"].sort_values("seconds").iloc[0]
+        self.assertEqual(fastest["activity_id"], 2)
+        self.assertAlmostEqual(fastest["seconds"], 108, delta=1)
+
     def test_store_round_trip(self):
         with tempfile.TemporaryDirectory() as folder:
             original = store.SEGMENTS

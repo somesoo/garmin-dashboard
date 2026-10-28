@@ -22,6 +22,17 @@ has no workout steps:
   ad-hoc segment and timed on both runs with the same matcher (so direction
   counts). Saving one makes it a permanent segment.
 
+* **Frequent stretches** -- segments the data draws itself. Every track
+  point counts the other runs passing within 35 m the same way; stretches of
+  >= 500 m where >= 4 runs overlap become candidates, are checked with the
+  segment matcher (all of it, start to end -- else halved and tried again)
+  and kept once per corridor, never on top of a saved segment.
+
+Track sessions and tiny loops (the whole run inside ~400 m, at least three
+times longer than that) are left out of all GPS matching: a 400 m oval is
+one knot of track where a segment's start and end coincide. They are
+compared by distance instead -- watch laps and best efforts.
+
 Timing is on the sample stream, accurate to a few seconds like the km splits.
 The pace of a pass uses the segment's own length, so every pass of one
 segment is measured on the same distance.
@@ -29,6 +40,7 @@ segment is measured on the same distance.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 import numpy as np
@@ -42,6 +54,7 @@ ROUTE_COVER, ROUTE_LENGTH = 0.8, 0.15
 NEAR_M, PATH_M = 35.0, 40.0
 CHECKPOINT_M = 20.0
 SHARED_MIN_M = 400.0
+LOOP_EXTENT_M, LOOP_RATIO = 400.0, 3.0
 
 
 def path(track: pd.DataFrame) -> pd.DataFrame:
@@ -73,6 +86,22 @@ def path(track: pd.DataFrame) -> pd.DataFrame:
     hr = frame.dropna(subset=["hr"])
     out["hr"] = np.interp(grid, hr["m"], hr["hr"]) if len(hr) >= 2 else np.full(len(grid), np.nan)
     return pd.DataFrame(out)
+
+
+def is_loop(points: pd.DataFrame) -> bool:
+    """A track session or a tiny loop: the whole run fits in ~400 m."""
+    if points.empty:
+        return False
+    xy = _xy(points["lat"].to_numpy(), points["lon"].to_numpy(),
+             (float(points["lat"].iloc[0]), float(points["lon"].iloc[0])))
+    extent = float(np.ptp(xy, axis=0).max())
+    length = float(points["m"].iloc[-1] - points["m"].iloc[0])
+    return extent <= LOOP_EXTENT_M and length >= LOOP_RATIO * max(extent, 1.0)
+
+
+def routable(tracks: dict[int, pd.DataFrame]) -> dict[int, pd.DataFrame]:
+    """The tracks GPS matching makes sense on (no track sessions)."""
+    return {a: p for a, p in tracks.items() if not is_loop(p)}
 
 
 def _xy(lat: np.ndarray, lon: np.ndarray, origin: tuple[float, float]) -> np.ndarray:
@@ -213,7 +242,7 @@ def efforts(segment_list: list[dict[str, Any]], tracks: dict[int, pd.DataFrame],
     if not segment_list or not tracks or runs is None or runs.empty:
         return pd.DataFrame(columns=columns)
     meta = runs.set_index("activity_id")
-    tracks = {a: p for a, p in tracks.items() if a in meta.index}
+    tracks = {a: p for a, p in routable(tracks).items() if a in meta.index}
     rows = []
     for segment in segment_list:
         marks = np.asarray(segment.get("points") or [], dtype=float)
@@ -253,6 +282,7 @@ def shared(activity_id: int, tracks: dict[int, pd.DataFrame], runs: pd.DataFrame
     direction, >= 400 m), timed on both. ``d_pace_s`` < 0 = this run faster."""
     columns = ["other_id", "start_local", "kind", "km_from", "km_to", "length_m", "seconds", "seconds_other",
                "pace", "pace_other", "hr", "hr_other", "d_pace_s", "d_hr", "d_eff_pct", "segment"]
+    tracks = routable(tracks)
     me = tracks.get(int(activity_id))
     if me is None or me.empty or runs is None or runs.empty:
         return pd.DataFrame(columns=columns)
@@ -311,3 +341,122 @@ def shared(activity_id: int, tracks: dict[int, pd.DataFrame], runs: pd.DataFrame
         })
     frame = pd.DataFrame(rows, columns=columns)
     return frame.sort_values("length_m", ascending=False).reset_index(drop=True)
+
+
+# ------------------------------------------------------------ frequent routes
+
+
+def _headings(xy: np.ndarray) -> np.ndarray:
+    """Unit direction of travel at each point."""
+    step = np.gradient(xy, axis=0)
+    norm = np.hypot(step[:, 0], step[:, 1])
+    norm[norm == 0] = 1.0
+    return step / norm[:, None]
+
+
+def popularity(tracks: dict[int, pd.DataFrame], every: int = 3) -> dict[int, np.ndarray]:
+    """Per track point: how many *other* runs pass within 35 m going the same
+    way (headings within ~60 degrees). Counted on every ``every``-th point and
+    spread to its neighbours."""
+    if not tracks:
+        return {}
+    ids = list(tracks)
+    lat0 = float(np.mean([t["lat"].iloc[0] for t in tracks.values()]))
+    lon0 = float(np.mean([t["lon"].iloc[0] for t in tracks.values()]))
+    xy = {a: _xy(t["lat"].to_numpy(), t["lon"].to_numpy(), (lat0, lon0)) for a, t in tracks.items()}
+    heading = {a: _headings(v) for a, v in xy.items()}
+    owner = np.concatenate([np.full(len(xy[a]), a) for a in ids])
+    every_xy = np.concatenate([xy[a] for a in ids])
+    every_heading = np.concatenate([heading[a] for a in ids])
+    tree = cKDTree(every_xy)
+    out = {}
+    for a in ids:
+        picked = np.arange(0, len(xy[a]), every)
+        counts = np.zeros(len(picked), dtype=int)
+        for k, near in enumerate(tree.query_ball_point(xy[a][picked], NEAR_M)):
+            near = np.asarray(near)
+            same_way = every_heading[near] @ heading[a][picked[k]] > 0.5
+            others = owner[near[same_way]]
+            counts[k] = len(np.unique(others[others != a]))
+        out[a] = np.repeat(counts, every)[:len(xy[a])]
+    return out
+
+
+def _overlaps(segment: dict[str, Any], others: list[dict[str, Any]], share: float = 0.3) -> bool:
+    """True when a fair share of ``segment`` runs along one of ``others`` the same way."""
+    mine = np.asarray(segment["points"], dtype=float)
+    origin = (float(mine[0][0]), float(mine[0][1]))
+    a = _xy(mine[:, 0], mine[:, 1], origin)
+    for other in others:
+        theirs = np.asarray(other.get("points") or [], dtype=float)
+        if len(theirs) < 2:
+            continue
+        b = _xy(theirs[:, 0], theirs[:, 1], origin)
+        distance, index = cKDTree(b).query(a, distance_upper_bound=PATH_M)
+        hit = np.isfinite(distance)
+        if not hit.any():
+            continue
+        same_way = (_headings(a)[hit] * _headings(b)[index[hit]]).sum(axis=1) > 0.5
+        if same_way.sum() / len(a) >= share:
+            return True
+    return False
+
+
+def _place(name: Any) -> str:
+    """'Warsaw - Base' -> 'Warsaw': the watch names a run after its town."""
+    text = str(name or "").strip()
+    for cut in (" - ", " Running", " Bieganie", " Run"):
+        text = text.split(cut)[0]
+    return text.strip() or "Trasa"
+
+
+def frequent(tracks: dict[int, pd.DataFrame], runs: pd.DataFrame, saved: list[dict[str, Any]] = (),
+             min_runs: int = 4, min_m: float = 500.0, limit: int = 30) -> list[dict[str, Any]]:
+    """Segments nobody drew: stretches at least ``min_runs`` runs ran start to
+    end in the same direction, one per corridor, none on top of a saved one."""
+    meta = runs.set_index("activity_id") if runs is not None and not runs.empty else pd.DataFrame()
+    tracks = {a: t for a, t in routable(tracks).items() if a in meta.index}
+    counts = popularity(tracks)
+    candidates = []
+    for activity_id, popular in counts.items():
+        points = tracks[activity_id]
+        for group in _groups(popular >= min_runs - 1):
+            i, j = int(group[0]), int(group[-1])
+            if points["m"].iloc[j] - points["m"].iloc[i] >= min_m:
+                candidates.append((float(np.median(popular[i:j + 1])), activity_id, i, j))
+    accepted: list[dict[str, Any]] = []
+    queue = sorted(candidates, key=lambda c: (-c[0], -(c[3] - c[2])))
+    while queue and len(accepted) < limit:
+        score, activity_id, i, j = queue.pop(0)
+        points = tracks[activity_id]
+        segment = {"id": "probe", **stretch(points, i, j)}
+        if _overlaps(segment, [*saved, *accepted]):
+            continue
+        found = efforts([segment], tracks, runs)
+        if found["activity_id"].nunique() >= min_runs:
+            start, end = segment["points"][0], segment["points"][-1]
+            key = f"{start[0]:.4f},{start[1]:.4f},{end[0]:.4f},{end[1]:.4f}"
+            accepted.append({
+                **segment, "id": "auto-" + hashlib.sha1(key.encode()).hexdigest()[:8], "auto": True,
+                "name": f"{_place(meta.at[activity_id, 'name'] if 'name' in meta.columns else '')} · "
+                        f"{segment['length_m'] / 1000:.1f} km",
+                "activity_id": int(activity_id),
+                "km_from": round(float(points["m"].iloc[i] - points["m"].iloc[0]) / 1000, 2),
+                "km_to": round(float(points["m"].iloc[j] - points["m"].iloc[0]) / 1000, 2),
+                "runs": int(found["activity_id"].nunique()),
+            })
+            continue
+        # Too few runs cover all of it: try each half on its own.
+        middle = (i + j) // 2
+        for a, b in ((i, middle), (middle, j)):
+            if points["m"].iloc[b] - points["m"].iloc[a] >= min_m:
+                queue.append((score, activity_id, a, b))
+        queue.sort(key=lambda c: (-c[0], -(c[3] - c[2])))
+    accepted.sort(key=lambda item: (-item["runs"], -item["length_m"]))
+    # Same name for two corridors in one town: tell them apart.
+    seen: dict[str, int] = {}
+    for item in accepted:
+        seen[item["name"]] = seen.get(item["name"], 0) + 1
+        if seen[item["name"]] > 1:
+            item["name"] += f" ({seen[item['name']]})"
+    return accepted

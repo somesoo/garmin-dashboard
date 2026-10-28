@@ -61,6 +61,10 @@ EFFORT_LABELS = {
     "m": "maraton",
 }
 GARMIN_SPLITS = {"1k": "best_1k_s", "mile": "best_mile_s", "5k": "best_5k_s"}
+# Best efforts too short for the forecast (VDOT from 400 m means nothing),
+# shown with the records only.
+SHORT_EFFORTS: dict[str, float] = {"400m": 400.0, "800m": 800.0}
+EFFORT_LABELS.update({"400m": "400 m", "800m": "800 m"})
 
 
 def select_runs(activities: pd.DataFrame) -> pd.DataFrame:
@@ -349,6 +353,27 @@ def best_segment(track: pd.DataFrame, metres: float) -> tuple[float, float] | No
         return None
     window = hr[(m >= m[start]) & (m <= targets[start])]
     return float(seconds[start]), float(np.nanmean(window)) if np.isfinite(window).any() else np.nan
+
+
+def short_efforts(tracks: dict[int, pd.DataFrame], runs: pd.DataFrame) -> pd.DataFrame:
+    """Fastest 400 m / 800 m of every run with a stream (watch distance, so a
+    track session counts as much as a road run), shaped like ``run_efforts``."""
+    columns = ["activity_id", "day", "effort", "distance_m", "seconds", "pace_min_km", "avg_hr", "source"]
+    if not tracks or runs is None or runs.empty:
+        return pd.DataFrame(columns=columns)
+    days = runs.set_index("activity_id")["day"]
+    rows = []
+    for activity_id, clock in tracks.items():
+        if activity_id not in days.index:
+            continue
+        for key, metres in SHORT_EFFORTS.items():
+            best = best_segment(clock, metres)
+            if best is None or best[0] <= 0:
+                continue
+            rows.append({"activity_id": activity_id, "day": days[activity_id], "effort": key, "distance_m": metres,
+                         "seconds": round(best[0], 1), "pace_min_km": units.pace_from(best[0], metres / 1000),
+                         "avg_hr": best[1], "source": "odcinek ze strumienia próbek"})
+    return pd.DataFrame(rows, columns=columns)
 
 
 def efforts(

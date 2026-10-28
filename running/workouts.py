@@ -27,6 +27,9 @@ import pandas as pd
 RECOVERY = ("recovery", "rest")
 QUALITY = ("intervals", "threshold", "tempo", "race")
 OPTIONAL = ("avg_hr", "max_hr", "cadence")
+# Rep lengths people run; a rep within +-7% of one is "that" rep, wherever it was run.
+REP_DISTANCES = (200, 300, 400, 500, 600, 800, 1000, 1200, 1500, 1600, 2000, 3000, 4000, 5000)
+REP_TOLERANCE = 0.07
 SIMILAR_REP = 0.35  # rep length within +-35% counts as "the same workout"
 FIT_DAYS = 730
 FIT_MIN_REPS, FIT_MIN_SESSIONS = 8, 3
@@ -44,10 +47,13 @@ def reps(laps: pd.DataFrame | None) -> pd.DataFrame:
     laps = laps.reindex(columns=[*laps.columns, *(c for c in OPTIONAL if c not in laps.columns)])
     blocks: list[dict[str, Any]] = []
     current: dict[str, Any] | None = None
+    covered = 0.0
     for lap in laps.sort_values("lap").itertuples(index=False):
+        covered += float(lap.distance_m or 0)
         if lap.intensity == "active" and lap.distance_m:
             if current is None or lap.step_index != current["step"]:
-                current = {"step": lap.step_index, "laps": [], "rest": []}
+                current = {"step": lap.step_index, "laps": [], "rest": [],
+                           "at_m": covered - float(lap.distance_m)}
                 blocks.append(current)
             current["laps"].append(lap)
             continue
@@ -66,6 +72,7 @@ def reps(laps: pd.DataFrame | None) -> pd.DataFrame:
         rest_s = sum(float(p.duration_s or 0) for p in rest)
         rest_m = sum(float(p.distance_m or 0) for p in rest)
         rows.append({
+            "at_km": round(block["at_m"] / 1000, 2),
             "km": round(metres / 1000, 2),
             "seconds": seconds,
             "pace": seconds / 60 / (metres / 1000),
@@ -165,3 +172,58 @@ def peers(sessions: pd.DataFrame, activity_id: int) -> pd.DataFrame:
     ratio = sessions["rep_km"] / target["rep_km"]
     return sessions.assign(similar=ratio.between(1 - SIMILAR_REP, 1 + SIMILAR_REP),
                            current=sessions["activity_id"] == activity_id)
+
+
+def rep_length(km: float) -> int | None:
+    """The standard rep length (m) this rep is, or None."""
+    metres = km * 1000
+    best = min(REP_DISTANCES, key=lambda d: abs(metres / d - 1))
+    return best if abs(metres / best - 1) <= REP_TOLERANCE else None
+
+
+def rep_label(metres: int) -> str:
+    return f"{metres / 1000:g} km".replace(".", ",") if metres >= 1000 else f"{metres} m"
+
+
+def rep_efforts(every: pd.DataFrame, runs: pd.DataFrame) -> pd.DataFrame:
+    """Every workout rep as a pass of the "segment" of its standard length
+    (``rep-1000``...), in the shape of ``segments.efforts``. Reps of 0.98 and
+    1.03 km are not the same distance, so ``seconds`` is the time *at that
+    pace over the standard length* and the ranking is by pace."""
+    columns = ["segment_id", "activity_id", "start_local", "kind", "pass", "at_km", "seconds", "pace_min_km",
+               "hr", "rank", "of", "km"]
+    if every is None or every.empty:
+        return pd.DataFrame(columns=columns)
+    frame = every.assign(length=every["km"].map(rep_length)).dropna(subset=["length"])
+    if frame.empty:
+        return pd.DataFrame(columns=columns)
+    kinds = runs.set_index("activity_id")["kind"] if runs is not None and "kind" in runs.columns else pd.Series()
+    out = pd.DataFrame({
+        "segment_id": "rep-" + frame["length"].astype(int).astype(str),
+        "activity_id": frame["activity_id"],
+        "start_local": frame["start_local"],
+        "kind": frame["activity_id"].map(kinds),
+        "pass": frame["rep"],
+        "at_km": frame["at_km"] if "at_km" in frame.columns else np.nan,
+        "seconds": (frame["pace"] * 60 * frame["length"] / 1000).round(1),
+        "pace_min_km": frame["pace"],
+        "hr": frame["hr"],
+        "km": frame["km"],
+    })
+    out["rank"] = out.groupby("segment_id")["pace_min_km"].rank(method="min").astype(int)
+    out["of"] = out.groupby("segment_id")["pace_min_km"].transform("size")
+    return out.sort_values(["segment_id", "start_local", "pass"]).reset_index(drop=True)[columns]
+
+
+def rep_segments(efforts: pd.DataFrame) -> list[dict[str, Any]]:
+    """Pseudo-segments for the rep lengths that were run at least twice."""
+    if efforts.empty:
+        return []
+    sizes = efforts.groupby("segment_id").size()
+    out = []
+    for segment_id, count in sizes.items():
+        metres = int(str(segment_id).split("-")[1])
+        if count >= 2:
+            out.append({"id": segment_id, "name": f"Odcinek {rep_label(metres)} (interwały)", "length_m": metres,
+                        "points": [], "reps": True, "runs": int(count)})
+    return sorted(out, key=lambda item: item["length_m"])

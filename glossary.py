@@ -349,7 +349,8 @@ TERMS: dict[str, Term] = {
             "Ten sam podbieg czy prosta w parku pojawia się w wielu biegach różnego typu — segment "
             "pozwala porównać właśnie ten kawałek.",
             "Czas jest ze strumienia próbek (dokładność kilku sekund), tempo liczone na długości segmentu. "
-            "Kierunek ma znaczenie: od startu do mety.",
+            "Kierunek ma znaczenie: od startu do mety. „auto” = znaleziony sam na trasie przebiegniętej "
+            "co najmniej 4 razy; zapisz go jako swój, żeby nadać mu nazwę.",
         ),
         "pace_at_hr": (
             "Tempo przy tym samym tętnie",
