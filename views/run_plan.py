@@ -13,7 +13,7 @@ import routing
 import shell
 import theme as tz
 import config
-from running import coach, garmin_workout as gw, plan as planning, store, units
+from running import coach, garmin_workout as gw, plan as planning, store, text, units
 from views import run_common as rc
 
 STATUS_ICONS = rc.STATUS_ICONS
@@ -26,23 +26,8 @@ def _status_labels() -> dict[str, str]:
             "missed": tr(pl="brak biegu", en="no run")}
 
 
-def _phase_label(code: str) -> str:
-    """``plan.PHASE_LABELS`` in the interface language."""
-    tr = i18n.tr
-    return {"base": tr(pl="baza", en="base"), "build": tr(pl="budowa", en="build"),
-            "peak": tr(pl="specyfika", en="specific"), "taper": "taper",
-            "race": tr(pl="start", en="race")}.get(code, code)
-
-
-def _adjustment(code: str) -> str:
-    """``plan.ADJUSTMENTS`` in the interface language."""
-    tr = i18n.tr
-    return {"fatigue": tr(pl="zmęczenie — 7 dni bez jakości, objętość −20%",
-                          en="fatigue — 7 days without quality, volume −20%"),
-            "sick": tr(pl="choroba — 4 dni wolne, potem tydzień spokojnie",
-                       en="illness — 4 days off, then an easy week"),
-            "busy": tr(pl="mniej czasu — tydzień skrócony o 30%, jakość zostaje",
-                       en="less time — the week cut by 30%, quality stays")}.get(code, code)
+_phase_label = text.phase_label
+_adjustment = text.adjustment_label
 
 
 def render() -> None:
@@ -241,15 +226,15 @@ def _header(active: dict, result: dict, matched: pd.DataFrame) -> None:
     created = active.get("forecast", {})
     now = result["distances"].get(request["distance"]) if result.get("status") == "ok" else None
     then = f"{units.fmt_time(created.get('realistic_s'))} (VDOT {created.get('vdot')})"
-    text = tr(pl=f"Prognoza przy tworzeniu planu: {then}", en=f"Forecast when the plan was made: {then}")
+    line = tr(pl=f"Prognoza przy tworzeniu planu: {then}", en=f"Forecast when the plan was made: {then}")
     if now:
         today = f"{units.fmt_time(now.realistic_s)} (VDOT {result['vdot']:.1f})"
-        text += tr(pl=f" · dziś: {today}", en=f" · today: {today}")
+        line += tr(pl=f" · dziś: {today}", en=f" · today: {today}")
     if request.get("goal_s"):
         goal = units.fmt_time(request["goal_s"])
-        text += tr(pl=f" · cel: {goal}", en=f" · goal: {goal}")
-    st.caption(text + ".")
-    for warning in active.get("warnings", []):
+        line += tr(pl=f" · cel: {goal}", en=f" · goal: {goal}")
+    st.caption(line + ".")
+    for warning in text.warnings(active):
         st.warning(warning)
 
 
@@ -485,7 +470,8 @@ def _actions_body(active: dict, frame: pd.DataFrame, result: dict) -> None:
     history = active.get("history", [])
     if history:
         st.caption(tr(pl="Historia zmian: ", en="Change history: ")
-                   + " · ".join(f"{h['at'][:16].replace('T', ' ')} {h['action']}" for h in history[-5:]))
+                   + " · ".join(f"{h['at'][:16].replace('T', ' ')} {text.history_action(h['action'])}"
+                                for h in history[-5:]))
 
 
 def _garmin(active: dict) -> None:

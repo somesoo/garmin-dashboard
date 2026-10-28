@@ -18,12 +18,7 @@ RACES: dict[str, float] = {
     "hm": 21.0975,
     "m": 42.195,
 }
-RACE_LABELS: dict[str, str] = {
-    "5k": "5 km",
-    "10k": "10 km",
-    "hm": "półmaraton",
-    "m": "maraton",
-}
+
 
 
 def _number(value: Any) -> float | None:

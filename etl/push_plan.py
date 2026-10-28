@@ -23,6 +23,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import config  # noqa: E402
+import i18n  # noqa: E402
 from running import garmin_workout as gw, store  # noqa: E402
 
 
@@ -64,7 +65,8 @@ def push(plan: dict[str, Any], api: Any, today: dt.date, days: int, log=print) -
             created = api.upload_workout(gw.to_garmin(session))
             workout_id = _id(created, "workoutId")
             if workout_id is None:
-                raise RuntimeError(f"Garmin nie zwrócił workoutId: {created!r}")
+                raise RuntimeError(i18n.tr(pl=f"Garmin nie zwrócił workoutId: {created!r}",
+                                           en=f"Garmin returned no workoutId: {created!r}"))
             time.sleep(config.THROTTLE)
             scheduled = api.schedule_workout(workout_id, session["date"])
             registry[session["id"]] = {
@@ -81,11 +83,20 @@ def push(plan: dict[str, Any], api: Any, today: dt.date, days: int, log=print) -
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Wyślij plan treningowy do kalendarza Garmin")
-    p.add_argument("plan_id", nargs="?", help="domyślnie plan najbliższego startu")
-    p.add_argument("--days", type=int, default=7, help="ile dni naprzód (domyślnie 7)")
-    p.add_argument("--dry-run", action="store_true", help="pokaż zmiany i JSON, nic nie wysyłaj")
+    tr = i18n.tr
+    p = argparse.ArgumentParser(description=tr(pl="Wyślij plan treningowy do kalendarza Garmin",
+                                               en="Send the training plan to the Garmin calendar"))
+    p.add_argument("plan_id", nargs="?", help=tr(pl="domyślnie plan najbliższego startu",
+                                                 en="default: the plan of the nearest race"))
+    p.add_argument("--days", type=int, default=7, help=tr(pl="ile dni naprzód (domyślnie 7)",
+                                                          en="how many days ahead (default 7)"))
+    p.add_argument("--dry-run", action="store_true", help=tr(pl="pokaż zmiany i JSON, nic nie wysyłaj",
+                                                             en="show the changes and the JSON, send nothing"))
+    p.add_argument("--lang", choices=list(i18n.LANGS),
+                   help=tr(pl="język nazw i opisów treningów", en="the language of workout names and descriptions"))
     args = p.parse_args(argv)
+    if args.lang:
+        i18n.force(args.lang)
 
     today = dt.date.today()
     if args.plan_id:
@@ -94,16 +105,19 @@ def main(argv: list[str] | None = None) -> int:
         ahead = [x for x in store.plans() if x.get("request", {}).get("race_date", "") >= today.isoformat()]
         plan = min(ahead, key=lambda x: x["request"]["race_date"]) if ahead else None
     if plan is None:
-        print("Brak planu (podaj id albo utwórz plan na stronie Plan treningowy).")
+        print(tr(pl="Brak planu (podaj id albo utwórz plan na stronie Plan treningowy).",
+                 en="No plan (give an id or create a plan on the Training plan page)."))
         return 1
     errors = store.validate_plan(plan)
     if errors:
-        print("Plan nie przechodzi walidacji:\n  " + "\n  ".join(errors))
+        print(tr(pl="Plan nie przechodzi walidacji:", en="The plan fails validation:") + "\n  " + "\n  ".join(errors))
         return 1
 
     actions = gw.sync_actions(plan, today, args.days)
     if not actions:
-        print(f"{plan.get('name', plan['id'])}: kalendarz Garmin aktualny na {args.days} dni.")
+        name = plan.get("name", plan["id"])
+        print(tr(pl=f"{name}: kalendarz Garmin aktualny na {args.days} dni.",
+                 en=f"{name}: the Garmin calendar is up to date for {args.days} days."))
         return 0
     if args.dry_run:
         for action in actions:
@@ -115,7 +129,8 @@ def main(argv: list[str] | None = None) -> int:
     from etl.fetch import connect
 
     push(plan, connect(), today, args.days)
-    print("Gotowe — zsynchronizuj zegarek, żeby treningi pojawiły się w kalendarzu.")
+    print(tr(pl="Gotowe — zsynchronizuj zegarek, żeby treningi pojawiły się w kalendarzu.",
+             en="Done — sync the watch so the sessions show up in its calendar."))
     return 0
 
 

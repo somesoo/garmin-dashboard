@@ -50,7 +50,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from running import physio, units
+import i18n
+from running import physio, text, units
+from running.text import HIGH, LOW, MEDIUM
 from running.sessions import HARD_KINDS
 
 REQUIREMENTS: dict[str, dict[str, float]] = {
@@ -310,7 +312,7 @@ def forecast(
     Returns ``{"status": "ok" | "insufficient", ...}`` -- never raises on thin data.
     """
     if runs is None or runs.empty:
-        return {"status": "insufficient", "reason": "Brak biegów w danych."}
+        return {"status": "insufficient", "reason": i18n.tr(pl="Brak biegów w danych.", en="No runs in the data.")}
     anchor = pd.Timestamp(anchor) if anchor is not None else runs["day"].max()
     runs = runs[runs["day"] <= anchor]
     efforts = efforts[efforts["day"] <= anchor] if efforts is not None and not efforts.empty else efforts
@@ -330,10 +332,13 @@ def forecast(
     if vdot_a is None and vdot_b is None:
         return {
             "status": "insufficient",
-            "reason": (
-                f"W ostatnich {PERF_WINDOW_DAYS} dniach nie ma biegu z mierzalnym najlepszym "
-                "odcinkiem (≥ 1 km, ≥ 3,5 min), a tętno nie ma kalibracji. Jeden bieg testowy "
-                "(np. 3–5 km na maksa) wystarczy, żeby zacząć."
+            "reason": i18n.tr(
+                pl=f"W ostatnich {PERF_WINDOW_DAYS} dniach nie ma biegu z mierzalnym najlepszym odcinkiem (≥ 1 km, "
+                   "≥ 3,5 min), a tętno nie ma kalibracji. Jeden bieg testowy (np. 3–5 km na maksa) wystarczy, "
+                   "żeby zacząć.",
+                en=f"In the last {PERF_WINDOW_DAYS} days there is no run with a measurable best effort (≥ 1 km, "
+                   "≥ 3.5 min), and heart rate is not calibrated. One test run (e.g. 3–5 km all out) is enough "
+                   "to start.",
             ),
             "anchor": anchor,
         }
@@ -347,23 +352,29 @@ def forecast(
         # the trend has full say.
         age_weight = min(1.0, perf["age_days"] / 84)
         combined = vdot_a * (trend ** age_weight if trend else 1.0)
-        weights = {"wyniki": round(1 - age_weight, 2), "trend tętna": round(age_weight, 2)} if trend else {"wyniki": 1.0}
+        weights = {"wyniki": round(1 - age_weight, 2), "trend tętna": round(age_weight, 2)} if trend else {"wyniki": 1.0}  # i18n: key
         weights = {name: weight for name, weight in weights.items() if weight > 0}
         if lower_bound and vdot_b is not None and vdot_b > combined:
             # A lower bound can be raised by the HR estimate, never lowered.
             combined = 0.5 * combined + 0.5 * vdot_b
-            weights = {"wyniki": 0.5, "tętno (poziom)": 0.5}
+            weights = {"wyniki": 0.5, "tętno (poziom)": 0.5}  # i18n: key
         if trend is None:
-            notes.append("Brak trendu tętna (za mało spokojnych biegów z tętnem) — prognoza to ostatni wynik bez korekty.")
+            notes.append(i18n.tr(
+                pl="Brak trendu tętna (za mało spokojnych biegów z tętnem) — prognoza to ostatni wynik bez korekty.",
+                en="No heart rate trend (too few easy runs with heart rate) — the forecast is the last result "
+                   "without a correction."))
     else:
-        weights = {"tętno (poziom)": 1.0}
+        weights = {"tętno (poziom)": 1.0}  # i18n: key
         combined = vdot_b
-        notes.append("Brak odcinków z ostatnich 120 dni — prognoza stoi wyłącznie na skalibrowanym tętnie.")
+        notes.append(i18n.tr(pl="Brak odcinków z ostatnich 120 dni — prognoza stoi wyłącznie na skalibrowanym tętnie.",
+                             en="No efforts from the last 120 days — the forecast stands on calibrated heart rate "
+                                "alone."))
     if lower_bound:
-        notes.append(
-            "Najlepszy odcinek nie był wysiłkiem maksymalnym (tętno < 91% HRmax) — wynik z niego "
-            "to dolna granica możliwości, więc przedział jest szerszy w stronę szybszych czasów."
-        )
+        notes.append(i18n.tr(
+            pl="Najlepszy odcinek nie był wysiłkiem maksymalnym (tętno < 91% HRmax) — wynik z niego to dolna granica "
+               "możliwości, więc przedział jest szerszy w stronę szybszych czasów.",
+            en="The best effort was not maximal (HR < 91% HRmax) — its result is a lower bound of what you can do, "
+               "so the range is wider towards faster times."))
 
     anchor_m = perf["distance_m"] if perf else 5000.0
     distances: dict[str, DistanceForecast] = {}
@@ -377,7 +388,7 @@ def forecast(
         realistic = potential * penalty
         methods: dict[str, float | None] = {
             "wyniki": physio.race_time(vdot_a, metres) * penalty if vdot_a else None,
-            "tętno": physio.race_time(vdot_b, metres) * penalty if vdot_b else None,
+            "tętno": physio.race_time(vdot_b, metres) * penalty if vdot_b else None,  # i18n: key
             "Garmin": garmin.get(key),
         }
         spread = _disagreement(methods, perf)
@@ -417,12 +428,14 @@ def forecast(
             item.target_low_s = physio.race_time(combined + counted / 4, metres) * target_penalty
             item.target_high_s = physio.race_time(combined + counted / 6, metres) * target_penalty
         if key == "m" and prep["score"] < 0.45:
-            item.warnings.append(
-                "Przygotowanie do maratonu jest dziś niskie — to prognoza ukończenia przy równym "
-                "rozłożeniu sił, a nie wyniku, do którego warto startować."
-            )
+            item.warnings.append(i18n.tr(
+                pl="Przygotowanie do maratonu jest dziś niskie — to prognoza ukończenia przy równym rozłożeniu sił, "
+                   "a nie wyniku, do którego warto startować.",
+                en="Marathon preparation is low today — this forecasts finishing at an even effort, not a result "
+                   "worth racing for."))
         if key == "hm" and prep["score"] < 0.35:
-            item.warnings.append("Za mało długich biegów, żeby półmaraton był dziś testem formy.")
+            item.warnings.append(i18n.tr(pl="Za mało długich biegów, żeby półmaraton był dziś testem formy.",
+                                         en="Too few long runs for a half marathon to be a test of form today."))
         distances[key] = item
 
     return {
@@ -470,7 +483,7 @@ def _disagreement(methods: dict[str, float | None], perf: dict[str, Any] | None)
     band. With a single method the disagreement is an assumed 3%.
     """
     fresh = bool(perf and perf["near_max"] and perf["age_days"] <= 56)
-    base = {"wyniki": 0.7 if fresh else 0.4, "tętno": 0.15 if fresh else 0.3, "Garmin": 0.15 if fresh else 0.3}
+    base = {"wyniki": 0.7 if fresh else 0.4, "tętno": 0.15 if fresh else 0.3, "Garmin": 0.15 if fresh else 0.3}  # i18n: key
     pairs = [(base[name], math.log(value)) for name, value in methods.items() if value and name in base]
     if len(pairs) < 2:
         return 0.03
@@ -480,61 +493,69 @@ def _disagreement(methods: dict[str, float | None], perf: dict[str, Any] | None)
     return float(math.sqrt(np.average((logs - mean) ** 2, weights=weights)))
 
 
-CONFIDENCE_SIGMA = {"wysoka": 0.04, "średnia": 0.075}
+CONFIDENCE_SIGMA = {HIGH: 0.04, MEDIUM: 0.075}
 
 
 def _confidence(sigma: float, perf: dict[str, Any] | None, hr: dict[str, Any] | None) -> str:
     fresh_max = bool(perf and perf["near_max"] and perf["age_days"] <= 42)
-    if sigma <= CONFIDENCE_SIGMA["wysoka"] and fresh_max:
-        return "wysoka"
-    if sigma <= CONFIDENCE_SIGMA["średnia"] and perf is not None:
-        return "średnia"
-    return "niska"
+    if sigma <= CONFIDENCE_SIGMA[HIGH] and fresh_max:
+        return HIGH
+    if sigma <= CONFIDENCE_SIGMA[MEDIUM] and perf is not None:
+        return MEDIUM
+    return LOW
 
 
 def confidence_reasons(item: DistanceForecast, perf: dict[str, Any] | None) -> list[str]:
     """Why the confidence is not one level higher, largest cause first.
 
-    Plain sentences for the forecast page: the label alone ("średnia") says
+    Plain sentences for the forecast page: the label alone ("medium") says
     nothing about what would raise it.
     """
-    if item.confidence == "wysoka":
+    if item.confidence == HIGH:
         return []
+    tr = i18n.tr
     reasons: list[tuple[float, str]] = []
     if perf is None:
-        reasons.append((1.0, "brak udokumentowanego mocnego biegu z 120 dni — prognoza stoi na samym tętnie"))
+        reasons.append((1.0, tr(pl="brak udokumentowanego mocnego biegu z 120 dni — prognoza stoi na samym tętnie",
+                                en="no documented hard run in 120 days — the forecast stands on heart rate alone")))
     else:
         if not perf["near_max"]:
-            reasons.append((0.9, "najlepszy odcinek nie był wysiłkiem maksymalnym (tętno < 91% HRmax), "
-                                 "więc to tylko dolna granica"))
+            reasons.append((0.9, tr(pl="najlepszy odcinek nie był wysiłkiem maksymalnym (tętno < 91% HRmax), więc to "
+                                       "tylko dolna granica",
+                                    en="the best effort was not maximal (HR < 91% HRmax), so it is only a lower "
+                                       "bound")))
         elif perf["age_days"] > 42:
-            reasons.append((0.8, f"ostatni maksymalny wysiłek ma {perf['age_days'] // 7} tyg. — "
-                                 "wysoka pewność wymaga świeżego (≤ 6 tyg.)"))
+            weeks = perf["age_days"] // 7
+            reasons.append((0.8, tr(pl=f"ostatni maksymalny wysiłek ma {weeks} tyg. — wysoka pewność wymaga świeżego "
+                                       "(≤ 6 tyg.)",
+                                    en=f"the last maximal effort is {weeks} weeks old — high confidence needs a fresh "
+                                       "one (≤ 6 weeks)")))
     parts = item.sigma_parts
     anchor_km = f"{(perf or {}).get('distance_m', 5000) / 1000:.1f}".rstrip("0").rstrip(".")
-    names = {"wyniki": "wysiłki", "tętno": "tętno", "Garmin": "Garmin"}
-    times = ", ".join(f"{names[name]} {units.fmt_time(value)}" for name, value in item.methods.items() if value)
+    # Method codes ("wyniki", "tętno", "Garmin") named for the sentence.
+    names = {"wyniki": tr(pl="wysiłki", en="efforts"), "tętno": tr(pl="tętno", en="heart rate")}  # i18n: key
+    times = ", ".join(f"{names.get(name, name)} {units.fmt_time(value)}"
+                      for name, value in item.methods.items() if value)
+    distance = text.race_label(item.key)
     labels = {
-        "dystans": f"przeliczenie z {anchor_km} km na {units.RACE_LABELS.get(item.key, item.key)}",
-        "metody": f"metody dają różne czasy ({times})",
-        "wiek": "wysiłek, na którym stoi prognoza, się starzeje",
-        "przygotowanie": "niskie przygotowanie do dystansu (długie biegi, kilometry)",
+        "dystans": tr(pl=f"przeliczenie z {anchor_km} km na {distance}", en=f"converting from {anchor_km} km to "
+                                                                             f"{distance}"),
+        "metody": tr(pl=f"metody dają różne czasy ({times})", en=f"the methods give different times ({times})"),
+        "wiek": tr(pl="wysiłek, na którym stoi prognoza, się starzeje", en="the effort the forecast stands on is "
+                                                                          "ageing"),
+        "przygotowanie": tr(pl="niskie przygotowanie do dystansu (długie biegi, kilometry)",
+                            en="low preparation for the distance (long runs, kilometres)"),
     }
     for name, label in labels.items():
         share = parts.get(name, 0.0)
         if share >= 0.01:
-            reasons.append((share, f"{label} (ok. ±{Z80 * share:.0%})"))
+            reasons.append((share, label + tr(pl=f" (ok. ±{Z80 * share:.0%})", en=f" (about ±{Z80 * share:.0%})")))
     reasons.sort(key=lambda pair: pair[0], reverse=True)
     return [text for _, text in reasons]
 
 
-GOAL_STATUS = {
-    "none": "bez celu czasowego",
-    "now": "w zasięgu już dziś",
-    "plan": "realny po planie",
-    "ambitious": "ambitny",
-    "stretch": "bardzo ambitny",
-}
+# goal_status codes (labels: text.goal_status).
+GOAL_STATUS = ("none", "now", "plan", "ambitious", "stretch")
 
 
 def goal_status(item: DistanceForecast | None, goal_s: float | None) -> str:
@@ -577,39 +598,62 @@ def advice(result: dict[str, Any], runs: pd.DataFrame, key: str) -> list[str]:
     anchor = result["anchor"]
     recent = runs[(runs["day"] <= anchor) & (runs["day"] > anchor - pd.Timedelta(days=28))]
     kinds = recent["kind"].value_counts() if "kind" in recent.columns else pd.Series(dtype=int)
+    tr = i18n.tr
     tips: list[tuple[float, str]] = []
 
+    long_km, long_need = f"{prep['long_km']:.0f}", f"{prep['long_need']:.0f}"
     if prep["long_km"] < prep["long_need"]:
         gap = prep["long_need"] - prep["long_km"]
-        tips.append((gap / prep["long_need"],
-                     f"Długie wybieganie: najdłuższy bieg w 6 tyg. to {prep['long_km']:.0f} km, dla tego "
-                     f"dystansu przyjęto ≥ {prep['long_need']:.0f} km. Wydłużaj o 1–2 km na tydzień, "
-                     "w spokojnym tempie."))
+        tips.append((gap / prep["long_need"], tr(
+            pl=f"Długie wybieganie: najdłuższy bieg w 6 tyg. to {long_km} km, dla tego dystansu przyjęto ≥ "
+               f"{long_need} km. Wydłużaj o 1–2 km na tydzień, w spokojnym tempie.",
+            en=f"Long run: the longest run in 6 weeks is {long_km} km, for this distance ≥ {long_need} km is "
+               "assumed. Add 1–2 km a week, at an easy pace.")))
+    weekly, weekly_need = f"{prep['weekly_km']:.0f}", f"{prep['weekly_need']:.0f}"
     if prep["weekly_km"] < prep["weekly_need"]:
-        tips.append(((prep["weekly_need"] - prep["weekly_km"]) / prep["weekly_need"],
-                     f"Objętość: średnio {prep['weekly_km']:.0f} km/tydz. przy założonych "
-                     f"{prep['weekly_need']:.0f} km. Dokładaj spokojne kilometry, nie tempo."))
+        tips.append(((prep["weekly_need"] - prep["weekly_km"]) / prep["weekly_need"], tr(
+            pl=f"Objętość: średnio {weekly} km/tydz. przy założonych {weekly_need} km. Dokładaj spokojne kilometry, "
+               "nie tempo.",
+            en=f"Volume: {weekly} km/week on average against an assumed {weekly_need} km. Add easy kilometres, "
+               "not pace.")))
     if prep["consistency"] < 0.75:
-        tips.append((0.75 - prep["consistency"],
-                     f"Regularność: tylko {prep['consistency']:.0%} z ostatnich 8 tygodni miało "
-                     f"≥ {max(2, prep['runs_need'] - 1)} biegi. Stała liczba biegów w tygodniu daje "
-                     "więcej niż pojedyncze mocne tygodnie."))
+        share, runs_need = f"{prep['consistency']:.0%}", max(2, prep["runs_need"] - 1)
+        tips.append((0.75 - prep["consistency"], tr(
+            pl=f"Regularność: tylko {share} z ostatnich 8 tygodni miało ≥ {runs_need} biegi. Stała liczba biegów w "
+               "tygodniu daje więcej niż pojedyncze mocne tygodnie.",
+            en=f"Consistency: only {share} of the last 8 weeks had ≥ {runs_need} runs. A steady number of runs a "
+               "week gives more than single big weeks.")))
     if key in ("10k", "hm", "m") and kinds.get("threshold", 0) + kinds.get("tempo", 0) == 0:
-        tips.append((0.35, "Próg: w 4 tygodniach nie było biegu progowego ani tempa. Jedna sesja "
-                           "tygodniowo (np. 3×10 min w tempie T) podnosi tempo, które utrzymasz godzinę."))
+        tips.append((0.35, tr(
+            pl="Próg: w 4 tygodniach nie było biegu progowego ani tempa. Jedna sesja tygodniowo (np. 3×10 min w "
+               "tempie T) podnosi tempo, które utrzymasz godzinę.",
+            en="Threshold: no threshold or tempo run in 4 weeks. One session a week (e.g. 3×10 min at T pace) "
+               "lifts the pace you can hold for an hour.")))
     if key in ("5k", "10k") and kinds.get("intervals", 0) == 0:
-        tips.append((0.3, "Interwały VO₂max: brak w 4 tygodniach. Np. 5×1000 m w tempie I z 2–3 min "
-                          "truchtu — dla 5 i 10 km to najbardziej specyficzny bodziec."))
+        tips.append((0.3, tr(
+            pl="Interwały VO₂max: brak w 4 tygodniach. Np. 5×1000 m w tempie I z 2–3 min truchtu — dla 5 i 10 km "
+               "to najbardziej specyficzny bodziec.",
+            en="VO₂max intervals: none in 4 weeks. E.g. 5×1000 m at I pace with 2–3 min jogs — for 5 and 10 km the "
+               "most specific stimulus.")))
     if key == "m":
-        tips.append((0.2, "Specyfika maratonu: w ostatnich 8 tygodniach przed startem część długich "
-                          "wybiegań kończ odcinkiem w tempie maratońskim (8–14 km)."))
+        tips.append((0.2, tr(
+            pl="Specyfika maratonu: w ostatnich 8 tygodniach przed startem część długich wybiegań kończ odcinkiem "
+               "w tempie maratońskim (8–14 km).",
+            en="Marathon specifics: in the last 8 weeks before the race finish some long runs with a stretch at "
+               "marathon pace (8–14 km).")))
     if result.get("lower_bound") or (result.get("perf") or {}).get("age_days", 0) > 42:
-        tips.append((0.25, "Test: prognoza opiera się na odcinkach treningowych. Bieg na maksa na 3–5 km "
-                           "(np. parkrun) zawęzi przedział bardziej niż jakikolwiek wykres."))
+        tips.append((0.25, tr(
+            pl="Test: prognoza opiera się na odcinkach treningowych. Bieg na maksa na 3–5 km (np. parkrun) zawęzi "
+               "przedział bardziej niż jakikolwiek wykres.",
+            en="Test: the forecast rests on training stretches. An all-out 3–5 km run (e.g. a parkrun) narrows the "
+               "range more than any chart.")))
     hard_share = (recent["kind"].isin(HARD_KINDS).sum() / len(recent)) if len(recent) and "kind" in recent else 0
     if hard_share > 0.45:
-        tips.append((0.3, f"Rozkład: {hard_share:.0%} biegów z 4 tygodni to sesje mocne. Przy przewadze "
-                          "spokojnych kilometrów (~75–80%) jakość mocnych sesji zwykle rośnie."))
+        tips.append((0.3, tr(
+            pl=f"Rozkład: {hard_share:.0%} biegów z 4 tygodni to sesje mocne. Przy przewadze spokojnych kilometrów "
+               "(~75–80%) jakość mocnych sesji zwykle rośnie.",
+            en=f"Distribution: {hard_share:.0%} of the runs in 4 weeks were hard sessions. With mostly easy "
+               "kilometres (~75–80%) the quality of the hard sessions usually rises.")))
     tips.sort(key=lambda pair: -pair[0])
     return [text for _, text in tips[:4]]
 

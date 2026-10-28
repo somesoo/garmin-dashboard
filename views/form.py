@@ -180,7 +180,13 @@ def _banister(models: dict) -> None:
         caption=verdict if fit.get("fitted") else None,
     ):
         if not fit.get("fitted"):
-            reason = fit.get("reason") or tr(pl="brak danych", en="no data")
+            # analytics.banister stores a code (older models.json: a Polish sentence, shown as is).
+            reason = {"few_points": tr(pl="za mało pomiarów wydolności (min. 25)",
+                                       en="too few fitness measurements (min. 25)"),
+                      "no_scipy": tr(pl="brak scipy", en="scipy is missing"),
+                      "no_convergence": tr(pl="dopasowanie nie zbiegło", en="the fit did not converge")
+                      + (f": {fit['detail']}" if fit.get("detail") else ""),
+                      }.get(fit.get("reason"), fit.get("reason") or tr(pl="brak danych", en="no data"))
             st.caption(tr(pl=f"Nie dopasowano: {reason}", en=f"Not fitted: {reason}"))
             return
         columns = st.columns(4)

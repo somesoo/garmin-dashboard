@@ -17,50 +17,13 @@ import streamlit as st
 
 import i18n
 import shell
-from running import coach, forecast, plan as planning, segments, sessions, store, units, workouts
+from running import coach, forecast, plan as planning, segments, sessions, store, text, units, workouts
 
 KIND_ORDER = ["recovery", "easy", "long", "tempo", "threshold", "intervals", "race"]
-# forecast.py reports confidence as these Polish codes; labels below translate them.
-CONFIDENCE_ICON = {"wysoka": "●●●", "średnia": "●●○", "niska": "●○○"}  # i18n: key
-
-
-def confidence_label(code: Any) -> str:
-    tr = i18n.tr
-    return {"wysoka": tr(pl="wysoka", en="high"), "średnia": tr(pl="średnia", en="medium"),  # i18n: key
-            "niska": tr(pl="niska", en="low")}.get(str(code), str(code))
-
-
-def confidence(code: Any) -> str:
-    """``high ●●●``: the label with its dots."""
-    return f"{confidence_label(code)} {CONFIDENCE_ICON.get(str(code), '')}".strip()
-
-
-def race_label(key: Any) -> str:
-    tr = i18n.tr
-    return {"5k": "5 km", "10k": "10 km", "hm": tr(pl="półmaraton", en="half marathon"),
-            "m": tr(pl="maraton", en="marathon")}.get(str(key), str(key))
-
-
-def effort_label(key: Any) -> str:
-    """Best-effort distance (``sessions.EFFORT_LABELS`` keys)."""
-    key = str(key)
-    if key in ("hm", "m"):
-        return race_label(key)
-    names = {"block": i18n.tr(pl="blok workoutu", en="workout block"), "mile": i18n.tr(pl="1 mila", en="1 mile")}
-    return names.get(key) or sessions.EFFORT_LABELS.get(key, key)
-
-
-def action_label(code: str) -> str:
-    """The decision ``coach.next_session`` names with a Polish code."""
-    tr = i18n.tr
-    return {
-        "jak w planie": tr(pl="jak w planie", en="as planned"),
-        "jak w planie, z kontrolą": tr(pl="jak w planie, z kontrolą", en="as planned, with a check"),  # i18n: key
-        "zamień na spokojny": tr(pl="zamień na spokojny", en="swap for an easy run"),  # i18n: key
-        "przesuń": tr(pl="przesuń", en="postpone"),  # i18n: key
-        "propozycja": tr(pl="propozycja", en="suggestion"),
-        "decyzja rano": tr(pl="decyzja rano", en="decide in the morning"),
-    }.get(code, code)
+# Labels of stored codes live in running/text.py, next to the code that writes them.
+CONFIDENCE_ICON = text.CONFIDENCE_ICON
+confidence_label, confidence, race_label = text.confidence_label, text.confidence, text.race_label
+effort_label, action_label, kind_label = text.effort_label, text.action_label, text.kind_label
 
 
 def runs() -> pd.DataFrame:
@@ -123,8 +86,12 @@ def upcoming_weeks(today: dt.date) -> tuple[dict[str, float], dict[str, float]]:
     return weeks, prep
 
 
+# Cache keys are the build id (and the coach files' stamp): a rebuild or a
+# saved race invalidates the result. The forecast also carries sentences, so
+# the language is part of its key. (Streamlit does not hash parameters whose
+# name starts with "_" -- a key must not.)
 @st.cache_data(show_spinner=False)
-def _forecast(_build: str, _stamp: str, today: str) -> dict[str, Any]:
+def _forecast(build: str, stamp: str, today: str, lang: str) -> dict[str, Any]:
     frame = runs()
     weeks, prep = upcoming_weeks(dt.date.fromisoformat(today))
     return forecast.forecast(frame, efforts(), shell.daily(), hr_max=hr_max(frame),
@@ -135,11 +102,11 @@ def current_forecast() -> dict[str, Any]:
     frame = runs()
     if frame.empty:
         return {"status": "insufficient", "reason": i18n.tr(pl="Brak tabeli biegów.", en="No runs table.")}
-    return _forecast(shell.build_id(), store_stamp(), dt.date.today().isoformat())
+    return _forecast(shell.build_id(), store_stamp(), dt.date.today().isoformat(), i18n.lang())
 
 
 @st.cache_data(show_spinner=False)
-def _paths(_build: str) -> dict[int, pd.DataFrame]:
+def _paths(build: str) -> dict[int, pd.DataFrame]:
     routes = shell.table("routes")
     frame = runs()
     if routes.empty or frame.empty:
@@ -153,7 +120,7 @@ def paths() -> dict[int, pd.DataFrame]:
 
 
 @st.cache_data(show_spinner=False)
-def _loops(_build: str) -> frozenset[int]:
+def _loops(build: str) -> frozenset[int]:
     return frozenset(a for a, p in paths().items() if segments.is_loop(p))
 
 
@@ -163,7 +130,7 @@ def is_loop(activity_id: int) -> bool:
 
 
 @st.cache_data(show_spinner=False)
-def _rep_efforts(_build: str) -> pd.DataFrame:
+def _rep_efforts(build: str) -> pd.DataFrame:
     frame = runs()
     _, every = workouts.history(frame, shell.table("run_laps"))
     return workouts.rep_efforts(every, frame)
@@ -175,7 +142,7 @@ def rep_efforts() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def _all_efforts(_build: str) -> pd.DataFrame:
+def _all_efforts(build: str) -> pd.DataFrame:
     standard = efforts()
     short = sessions.short_efforts(paths(), runs())
     if not short.empty:
@@ -191,7 +158,7 @@ def all_efforts() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def _signatures(_build: str) -> dict[int, dict[str, Any]]:
+def _signatures(build: str) -> dict[int, dict[str, Any]]:
     return segments.signatures(paths())
 
 
@@ -206,17 +173,17 @@ def same_route(activity_id: int) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def _auto_segments(_build: str, _stamp: str) -> list[dict[str, Any]]:
+def _auto_segments(build: str, stamp: str, lang: str) -> list[dict[str, Any]]:
     return segments.frequent(paths(), runs(), store.segments())
 
 
 def all_segments() -> list[dict[str, Any]]:
     """Saved segments first, then the ones found on frequent routes (``auto``)."""
-    return store.segments() + _auto_segments(shell.build_id(), store.segments_stamp())
+    return store.segments() + _auto_segments(shell.build_id(), store.segments_stamp(), i18n.lang())
 
 
 @st.cache_data(show_spinner=False)
-def _segment_efforts(_build: str, _stamp: str) -> pd.DataFrame:
+def _segment_efforts(build: str, stamp: str) -> pd.DataFrame:
     return segments.efforts(all_segments(), paths(), runs())
 
 
@@ -226,7 +193,7 @@ def segment_efforts() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def _shared(_build: str, activity_id: int) -> pd.DataFrame:
+def _shared(build: str, activity_id: int) -> pd.DataFrame:
     return segments.shared(activity_id, paths(), runs())
 
 
@@ -251,21 +218,6 @@ def guard() -> pd.DataFrame | None:
 
 def fmt_time(seconds: Any) -> str:
     return units.fmt_time(seconds)
-
-
-def kind_label(kind: Any) -> str:
-    """Session type (``sessions.KINDS`` codes) in the interface language."""
-    tr = i18n.tr
-    labels = {
-        "recovery": tr(pl="regeneracyjny", en="recovery"),
-        "easy": tr(pl="spokojny", en="easy"),
-        "long": tr(pl="długie wybieganie", en="long run"),
-        "tempo": "tempo",
-        "threshold": tr(pl="próg", en="threshold"),
-        "intervals": tr(pl="interwały", en="intervals"),
-        "race": tr(pl="start / próba", en="race / test"),
-    }
-    return labels.get(str(kind), str(kind))
 
 
 def runs_table(frame: pd.DataFrame) -> pd.DataFrame:
@@ -375,10 +327,10 @@ def week_strip(active: dict[str, Any] | None, frame: pd.DataFrame, today: dt.dat
         matched = planning.match(active, frame, today, laps=shell.table("run_laps"))
         for row in matched.itertuples(index=False) if not matched.empty else []:
             if monday <= row.date < monday + dt.timedelta(days=7):
-                text = f"{STATUS_ICONS.get(row.effective, '·')} {row.title}"
+                cell = f"{STATUS_ICONS.get(row.effective, '·')} {row.title}"
                 if pd.notna(row.actual_km) and row.actual_km:
-                    text += f"  \n{row.actual_km:.1f} km"
-                cells.setdefault(row.date, []).append(text)
+                    cell += f"  \n{row.actual_km:.1f} km"
+                cells.setdefault(row.date, []).append(cell)
     else:
         week = frame[(frame["day"] >= pd.Timestamp(monday)) & (frame["day"] < pd.Timestamp(monday + dt.timedelta(days=7)))]
         for row in week.itertuples(index=False):

@@ -90,6 +90,9 @@ class Choice(unittest.TestCase):
         patch = mock.patch.object(i18n, "SETTINGS", Path(tempfile.mkdtemp()) / "ui.json")
         patch.start()
         self.addCleanup(patch.stop)
+        # The package pins Polish for every other test; these test the choice itself.
+        i18n.force(None)
+        self.addCleanup(i18n.force, "pl")
 
     def test_default_is_polish(self):
         self.assertEqual(i18n.lang(), "pl")

@@ -350,11 +350,11 @@ def banister_fit(frame: pd.DataFrame, performance: pd.DataFrame) -> dict[str, An
     long their taper should be, instead of assuming the textbook 42/7.
     """
     if frame.empty or performance.empty or len(performance) < 25:
-        return {"fitted": False, "reason": "za malo pomiarow wydolnosci (min. 25)"}
+        return {"fitted": False, "reason": "few_points"}
     try:
         from scipy.optimize import least_squares
     except ImportError:
-        return {"fitted": False, "reason": "brak scipy"}
+        return {"fitted": False, "reason": "no_scipy"}
 
     load = frame["load_day"].astype(float)
     perf = (
@@ -365,7 +365,7 @@ def banister_fit(frame: pd.DataFrame, performance: pd.DataFrame) -> dict[str, An
     )
     observed = perf.dropna()
     if len(observed) < 25:
-        return {"fitted": False, "reason": "za malo pomiarow wydolnosci (min. 25)"}
+        return {"fitted": False, "reason": "few_points"}
 
     def traces(tau_fit: float, tau_fatigue: float) -> tuple[pd.Series, pd.Series]:
         fitness = load.ewm(alpha=1 / max(tau_fit, 1.0), adjust=False).mean()
@@ -383,7 +383,7 @@ def banister_fit(frame: pd.DataFrame, performance: pd.DataFrame) -> dict[str, An
     try:
         result = least_squares(residual, guess, bounds=bounds, max_nfev=4000)
     except Exception as exc:  # noqa: BLE001 - reported, not raised
-        return {"fitted": False, "reason": f"dopasowanie nie zbieglo: {exc}"}
+        return {"fitted": False, "reason": "no_convergence", "detail": str(exc)}
 
     p0, k1, k2, tau_fit, tau_fatigue = (float(v) for v in result.x)
     residuals = result.fun

@@ -204,6 +204,26 @@ językach** — tekst, który ktoś czyta, idzie przez `i18n.tr(pl=..., en=...)`
   czytaj przez `glossary.term(key)`. Nowe hasło = wpis w obu plikach (test).
 - Glob dostaje słowa przez `globe._text()`; `index.html` trzyma polskie
   wartości domyślne dla `test.html`.
+- **Nic, co jest zapisywane, nie trzyma zdania w jednym języku.** Plan
+  (`data/coach/plans/*.json`) ma przy sesji kod `text` (`{"key": "threshold",
+  "reps": 4, "rep": 1.6}`), ostrzeżenia jako `{"key": ...}`; `kind_reason`
+  w `run_sessions` to JSON z kodem (`text.reason_code`), `run_efforts.source`
+  to `garmin`/`whole`/`stream`/`block`, `models.json` — kod powodu. Zdania
+  składa `running/text.py` przy wyświetlaniu. `store.plan()` uzupełnia
+  `title`/`main`/`purpose` w bieżącym języku, `store.save_plan` je usuwa.
+  Plan sprzed kodów (polskie zdania) jest rozpoznawany przy pierwszym odczycie
+  (`text.migrate_plan`) i zapisywany z powrotem; nierozpoznany opis zostaje
+  jako `{"key": "custom", "pl": {...}}`.
+- Proza liczona na bieżąco (`coach`, `forecast`, walidacja, CLI) idzie przez
+  `tr`. Wynik cache'owany, który niesie zdania, ma język w kluczu cache
+  (`rc._forecast`, `rc._auto_segments`). CLI mają `--lang`; bez niego obowiązuje
+  język wybrany w aplikacji (`data/ui.json`). Testy przypinają polski
+  (`tests/__init__.py`).
+- Odcisk workoutu na zegarku (`garmin_workout.fingerprint`) liczy się z kodu
+  `text`, nie z tytułu — zmiana języka nie podmienia wysłanych treningów.
+- Parametry cache'owanych funkcji, od których zależy wynik, **nie mogą**
+  zaczynać się od `_` — Streamlit ich nie hashuje (tak `_build` przez długi
+  czas nie unieważniał cache po przebudowie hurtowni).
 - `i18n.BILINGUAL` to moduły już w pełni dwujęzyczne; `tests/test_i18n.py`
   oblewa polski literał poza `pl=` (docstringi i linie z `# i18n: key` — nazwy
   kolumn — są pominięte). Po przetłumaczeniu modułu dopisz go do listy.

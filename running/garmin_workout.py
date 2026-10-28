@@ -19,6 +19,8 @@ import hashlib
 import json
 from typing import Any
 
+import i18n
+
 
 RUNNING = {"sportTypeId": 1, "sportTypeKey": "running", "displayOrder": 1}
 STEP_TYPES = {
@@ -144,8 +146,10 @@ def to_garmin(session: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def fingerprint(session: dict[str, Any]) -> str:
-    """Changes whenever what the watch would show changes."""
-    payload = json.dumps([session.get("date"), session.get("title"), session.get("steps")], sort_keys=True)
+    """Changes whenever what the watch would show changes -- but not with the
+    interface language: the session's text code stands in for its title."""
+    payload = json.dumps([session.get("date"), session.get("text") or session.get("title"), session.get("steps")],
+                         sort_keys=True)
     return hashlib.sha1(payload.encode()).hexdigest()[:12]
 
 
@@ -180,7 +184,9 @@ def sync_actions(plan: dict[str, Any], today: dt.date, days: int = 7) -> list[di
 def describe(action: dict[str, Any]) -> str:
     session = action.get("session") or {}
     entry = action.get("entry") or {}
-    label = {"upload": "wyślij", "replace": "podmień", "remove": "usuń"}[action["action"]]
+    tr = i18n.tr
+    label = {"upload": tr(pl="wyślij", en="upload"), "replace": tr(pl="podmień", en="replace"),
+             "remove": tr(pl="usuń", en="remove")}[action["action"]]
     return f"{label}: {session.get('date') or entry.get('date')} {session.get('title') or entry.get('title', '')}".strip()
 
 

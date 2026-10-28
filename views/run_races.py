@@ -12,7 +12,7 @@ import bento
 import i18n
 import routing
 import theme as tz
-from running import forecast, plan as planning, store, units
+from running import forecast, plan as planning, store, text, units
 from views import run_common as rc
 
 def _priority_help() -> str:
@@ -20,14 +20,7 @@ def _priority_help() -> str:
                    en="A — the season's target race, B — an important test, C — a training race.")
 
 
-def _goal_status(code: str) -> str:
-    """``forecast.GOAL_STATUS`` in the interface language."""
-    tr = i18n.tr
-    return {"none": tr(pl="bez celu czasowego", en="no time goal"),
-            "now": tr(pl="w zasięgu już dziś", en="within reach today"),
-            "plan": tr(pl="realny po planie", en="realistic after the plan"),
-            "ambitious": tr(pl="ambitny", en="ambitious"),
-            "stretch": tr(pl="bardzo ambitny", en="very ambitious")}.get(code, code)
+
 
 
 def render() -> None:
@@ -100,19 +93,19 @@ def _race_numbers(race: dict, result: dict) -> None:
                                   en="Assumes the plan is followed: ~1 VDOT per 5 weeks and the preparation the "
                                      "plan reaches."))
         status = forecast.goal_status(item, goal)
-        columns[3].metric(tr(pl="Status celu", en="Goal status"), _goal_status(status))
+        columns[3].metric(tr(pl="Status celu", en="Goal status"), text.goal_status(status))
         band, sure = f"{units.fmt_time(item.low_s)}–{units.fmt_time(item.high_s)}", rc.confidence_label(item.confidence)
         prep = item.prep
         long_run = f"{prep['long_km']:.0f}/{prep['long_need']:.0f} km"
         week = f"{prep['weekly_km']:.0f}/{prep['weekly_need']:.0f} km"
-        text = tr(pl=f"Przedział dziś: {band}, pewność {sure}; przygotowanie do dystansu {prep['score']:.0%} "
+        line = tr(pl=f"Przedział dziś: {band}, pewność {sure}; przygotowanie do dystansu {prep['score']:.0%} "
                      f"(długi bieg {long_run}, tydzień {week}).",
                   en=f"Range today: {band}, confidence {sure}; preparation for the distance {prep['score']:.0%} "
                      f"(long run {long_run}, week {week}).")
         if goal:
             pace = units.fmt_pace(units.pace_from(goal, units.RACES[race["distance"]]))
-            text += tr(pl=f" Tempo celu: {pace}.", en=f" Goal pace: {pace}.")
-        st.caption(text)
+            line += tr(pl=f" Tempo celu: {pace}.", en=f" Goal pace: {pace}.")
+        st.caption(line)
     else:
         st.caption(result.get("reason") or tr(pl="Brak prognozy.", en="No forecast."))
 

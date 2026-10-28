@@ -47,6 +47,8 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
+import i18n
+
 M_PER_DEG = 111_320.0
 STEP_M = 10.0
 CELL_M = 50.0
@@ -407,7 +409,7 @@ def _place(name: Any) -> str:
     text = str(name or "").strip()
     for cut in (" - ", " Running", " Bieganie", " Run"):
         text = text.split(cut)[0]
-    return text.strip() or "Trasa"
+    return text.strip() or i18n.tr(pl="Trasa", en="Route")
 
 
 def frequent(tracks: dict[int, pd.DataFrame], runs: pd.DataFrame, saved: list[dict[str, Any]] = (),

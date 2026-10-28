@@ -38,7 +38,11 @@ BILINGUAL = ["app.py", "shell.py", "bento.py", "routing.py", "theme.py", "globe.
              *(f"views/{name}.py" for name in (
                  "activities", "atlas", "form", "notebook", "physio", "recovery", "reference", "routes",
                  "run_common", "run_forecast", "run_load", "run_overview", "run_plan", "run_races", "run_segments",
-                 "run_session", "sleep", "stats", "today", "trends"))]
+                 "run_session", "sleep", "stats", "today", "trends")),
+             *(f"running/{name}.py" for name in (
+                 "coach", "forecast", "garmin_workout", "physio", "pipeline", "plan", "segments", "sessions", "store",
+                 "text", "units", "workouts")),
+             "etl/push_plan.py", "etl/exclude.py", "analytics.py"]
 
 
 def saved() -> str:
@@ -67,8 +71,19 @@ def remember(value: str) -> None:
         pass  # the session still has it; only the next tab falls back
 
 
+_forced: str | None = None
+
+
+def force(value: str | None) -> None:
+    """Pin the language for a command-line run (``--lang``); None undoes it."""
+    global _forced
+    _forced = value if value in LANGS else None
+
+
 def lang() -> str:
     """The language of the current page render."""
+    if _forced:
+        return _forced
     try:
         import streamlit as st
         from streamlit.runtime.scriptrunner import get_script_run_ctx

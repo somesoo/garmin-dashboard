@@ -9,7 +9,7 @@ import bento
 import i18n
 import routing
 import theme as tz
-from running import sessions, store, units, workouts
+from running import store, units, workouts
 from views import run_common as rc
 
 
@@ -180,7 +180,7 @@ def _distance_records() -> None:
             tr(pl="kiedy", en="when"): pd.to_datetime(shown["day"]).dt.strftime("%d.%m.%Y"),
             tr(pl="trening", en="session"): shown["activity_id"].map(lambda a: rc.kind_label(frame.at[a, "kind"])
                                                                      if a in frame.index else "—"),
-            tr(pl="źródło", en="source"): shown["source"],
+            tr(pl="źródło", en="source"): shown["source"].map(rc.text.source),
             tr(pl="przewaga nad 2.", en="lead over 2nd"): [
                 ("<1 s" if second[e] - s < 0.5 else f"{second[e] - s:.0f} s") if e in second.index else "—"
                 for e, s in zip(shown["effort"], shown["seconds"])],

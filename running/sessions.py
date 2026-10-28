@@ -16,17 +16,13 @@ import numpy as np
 import pandas as pd
 
 from running import physio, units
+from running.text import HIGH, LOW, MEDIUM, reason_code
 
-# Run kinds, internal key -> Polish label shown on the page.
-KINDS: dict[str, str] = {
-    "recovery": "regeneracyjny",
-    "easy": "spokojny",
-    "long": "długie wybieganie",
-    "tempo": "tempo",
-    "threshold": "próg",
-    "intervals": "interwały",
-    "race": "start / próba",
-}
+# Run kinds (labels: running.text.kind_label). ``kind_reason`` holds a code
+# (text.reason_code) and ``run_efforts.source`` one of SOURCES, so the
+# warehouse never stores a sentence in one language.
+KINDS = ("recovery", "easy", "long", "tempo", "threshold", "intervals", "race")
+SOURCES = ("garmin", "whole", "stream", "block")
 HARD_KINDS = ("tempo", "threshold", "intervals", "race")
 
 # Below a kilometre or slower than a brisk walk is a recording left running
@@ -35,7 +31,7 @@ MIN_KM = 1.0
 MAX_PACE = 12.0
 
 RACE_WORDS = re.compile(
-    r"\b(race|zawody|parkrun|maraton|półmaraton|polmaraton|marathon|half|start|"
+    r"\b(race|zawody|parkrun|maraton|półmaraton|polmaraton|marathon|half|start|"  # i18n: key
     r"pb|test|time ?trial|tt)\b",
     re.IGNORECASE,
 )
@@ -50,21 +46,11 @@ EFFORT_DISTANCES: dict[str, float] = {
     "hm": 21097.5,
     "m": 42195.0,
 }
-EFFORT_LABELS = {
-    "block": "blok workoutu",
-    "1k": "1 km",
-    "mile": "1 mila",
-    "3k": "3 km",
-    "5k": "5 km",
-    "10k": "10 km",
-    "hm": "półmaraton",
-    "m": "maraton",
-}
 GARMIN_SPLITS = {"1k": "best_1k_s", "mile": "best_mile_s", "5k": "best_5k_s"}
 # Best efforts too short for the forecast (VDOT from 400 m means nothing),
 # shown with the records only.
 SHORT_EFFORTS: dict[str, float] = {"400m": 400.0, "800m": 800.0}
-EFFORT_LABELS.update({"400m": "400 m", "800m": "800 m"})
+
 
 
 def select_runs(activities: pd.DataFrame) -> pd.DataFrame:
@@ -211,28 +197,28 @@ def _classify_one(
     ) or minutes >= 95
 
     if manual in KINDS:
-        return manual, "oznaczone ręcznie na stronie Zawody", "wysoka"
+        return manual, reason_code("manual"), HIGH
     if RACE_WORDS.search(name):
-        return "race", f"nazwa „{name}” wskazuje na start lub test", "średnia"
+        return "race", reason_code("name_race", name=name), MEDIUM
 
     if block:
         if block["reps"] >= 2 or (block["rests"] and block["reps"] >= 1):
-            return "intervals", f"workout z zegarka: {block['reps']} powtórzeń z przerwami", "wysoka"
+            return "intervals", reason_code("watch_reps", reps=int(block["reps"])), HIGH
         if (block["warmup"] or block["cooldown"]) and block["active_m"] >= 1500 and block["active_speed"] > 0:
             block_pace = units.pace_from_speed(block["active_speed"])
-            label = f"blok {block['active_m'] / 1000:.1f} km w {units.fmt_pace(block_pace)}"
+            where = dict(km=block["active_m"] / 1000, pace=block_pace)
             if "T" in paces:
                 t_fast, t_slow = paces["T"]
                 if block_pace <= t_slow * 1.02:
-                    return "threshold", f"{label} — w tempie progowym lub szybciej", "wysoka"
+                    return "threshold", reason_code("block_threshold", **where), HIGH
                 if "M" in paces and block_pace <= paces["M"][1] * 1.03:
-                    return "tempo", f"{label} — między tempem maratońskim a progiem", "wysoka"
+                    return "tempo", reason_code("block_tempo", **where), HIGH
             elif ref_pace_ok(row) and block_pace < row["ref_pace"] * 0.88:
-                return "threshold", f"{label} — wyraźnie szybciej niż zwykle", "średnia"
+                return "threshold", reason_code("block_faster", **where), MEDIUM
     if REPS.search(name):
-        return "intervals", f"nazwa „{name}” opisuje powtórzenia", "średnia"
+        return "intervals", reason_code("name_reps", name=name), MEDIUM
     if cv is not None and cv >= 0.22 and (row.get("te_anaerobic") or 0) >= 1.5:
-        return "intervals", f"zmienność prędkości {cv:.0%} i TE beztlenowy {row.get('te_anaerobic'):.1f}", "średnia"
+        return "intervals", reason_code("variability", cv=float(cv), te=float(row.get("te_anaerobic"))), MEDIUM
 
     if hr_frac is not None:
         # Heart rate says how hard it felt; pace says what was trained. A run
@@ -243,24 +229,23 @@ def _classify_one(
         near_m = "M" not in paces or (pace is not None and pace <= paces["M"][1] * 1.04)
         if hr_frac >= 0.87 and minutes >= 15 and near_m:
             kind = "threshold" if minutes <= 50 and near_t else "tempo"
-            return kind, f"ciągły wysiłek na {hr_frac:.0%} HRmax przez {minutes:.0f} min", "średnia"
+            return kind, reason_code("hr_continuous", hr=hr_frac, min=float(minutes)), MEDIUM
         if hr_frac >= 0.81 and minutes >= 20 and near_m and not long_enough:
-            return "tempo", f"średnie tętno {hr_frac:.0%} HRmax — powyżej strefy spokojnej", "średnia"
+            return "tempo", reason_code("hr_above_easy", hr=hr_frac), MEDIUM
         if hr_frac >= 0.81 and not near_m and not long_enough:
-            return "easy", (f"tempo spokojne ({units.fmt_pace(pace)}), ale tętno {hr_frac:.0%} HRmax — "
-                            "upał, zmęczenie albo teren"), "średnia"
+            return "easy", reason_code("easy_hot", pace=pace, hr=hr_frac), MEDIUM
         if long_enough:
-            return "long", f"{km:.1f} km, wyraźnie dłużej niż zwykle ({ref_km or 0:.1f} km)", "wysoka"
+            return "long", reason_code("long_hr", km=float(km), ref=float(ref_km or 0)), HIGH
         if hr_frac < 0.72 and minutes <= 50:
-            return "recovery", f"krótko i lekko: {hr_frac:.0%} HRmax", "średnia"
-        return "easy", f"średnie tętno {hr_frac:.0%} HRmax — strefa spokojna", "średnia"
+            return "recovery", reason_code("recovery", hr=hr_frac), MEDIUM
+        return "easy", reason_code("easy_hr", hr=hr_frac), MEDIUM
 
     # No heart rate and no structure: only distance and pace are left.
     if long_enough:
-        return "long", f"{km:.1f} km — dłużej niż zwykle (brak tętna)", "niska"
+        return "long", reason_code("long_nohr", km=float(km)), LOW
     if ref_pace_ok(row) and pace < row["ref_pace"] * 0.9 and minutes >= 15:
-        return "tempo", "wyraźnie szybciej niż zwykle (brak tętna)", "niska"
-    return "easy", "brak tętna i struktury — przyjęto bieg spokojny", "niska"
+        return "tempo", reason_code("tempo_nohr"), LOW
+    return "easy", reason_code("easy_nohr"), LOW
 
 
 def ref_pace_ok(row: dict[str, Any]) -> bool:
@@ -372,7 +357,7 @@ def short_efforts(tracks: dict[int, pd.DataFrame], runs: pd.DataFrame) -> pd.Dat
                 continue
             rows.append({"activity_id": activity_id, "day": days[activity_id], "effort": key, "distance_m": metres,
                          "seconds": round(best[0], 1), "pace_min_km": units.pace_from(best[0], metres / 1000),
-                         "avg_hr": best[1], "source": "odcinek ze strumienia próbek"})
+                         "avg_hr": best[1], "source": "stream"})
     return pd.DataFrame(rows, columns=columns)
 
 
@@ -408,20 +393,20 @@ def efforts(
             if garmin_column and hasattr(run, garmin_column):
                 value = getattr(run, garmin_column)
                 if value is not None and not pd.isna(value) and value > 0:
-                    seconds, source = float(value), "Garmin (najszybszy odcinek)"
+                    seconds, source = float(value), "garmin"
                     # Garmin gives the time only; the heart rate of (almost)
                     # the same stretch comes from the stream.
                     if clock is not None and not clock.empty:
                         found = best_segment(clock, metres)
                         hr = found[1] if found else np.nan
             if seconds is None and units.race_key(run.distance_km) == key:
-                seconds, source = float(run.duration_min) * 60, "cały bieg"
+                seconds, source = float(run.duration_min) * 60, "whole"
                 hr = float(run.avg_hr) if run.avg_hr is not None and not pd.isna(run.avg_hr) else np.nan
             if seconds is None and clock is not None and not clock.empty:
                 found = best_segment(clock, metres)
                 if found:
                     seconds, hr = found
-                    source = "odcinek ze strumienia próbek"
+                    source = "stream"
             if seconds is None or seconds <= 0:
                 continue
             pace = units.pace_from(seconds, metres / 1000)
@@ -460,7 +445,7 @@ def efforts(
                         "seconds": round(block["active_s"], 1),
                         "pace_min_km": round(pace, 3),
                         "avg_hr": hr,
-                        "source": "blok workoutu z zegarka",
+                        "source": "block",
                         "vdot": physio.vdot(block["active_m"], block["active_s"]),
                     }
                 )

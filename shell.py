@@ -223,18 +223,18 @@ def _window_label(key: str) -> str:
     }[key]
 
 
-@st.cache_data(show_spinner=False)
-def _table(name: str, _build: str) -> pd.DataFrame:
+@st.cache_data(show_spinner=False, max_entries=64)
+def _table(name: str, build: str) -> pd.DataFrame:
     return db.table(name)
 
 
-@st.cache_data(show_spinner=False)
-def _sql(sql: str, _build: str) -> pd.DataFrame:
+@st.cache_data(show_spinner=False, max_entries=64)
+def _sql(sql: str, build: str) -> pd.DataFrame:
     return db.query(sql)
 
 
 @st.cache_data(show_spinner=False)
-def _models(_build: str) -> dict:
+def _models(build: str) -> dict:
     path = config.TABLES / "models.json"
     if not path.exists():
         return {}

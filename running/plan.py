@@ -31,7 +31,8 @@ from typing import Any
 
 import pandas as pd
 
-from running import physio, store, units, workouts
+import i18n
+from running import physio, store, text, units, workouts
 from running.sessions import HARD_KINDS
 
 PEAK_KM = {"5k": 32.0, "10k": 42.0, "hm": 50.0, "m": 65.0}
@@ -43,19 +44,7 @@ GUARD = 1.3
 GUARD_WEEKS = 4
 MAX_STEP_KM = 6.0
 LONG_STEP_KM = {"5k": 1.0, "10k": 1.5, "hm": 1.5, "m": 2.0}
-WEEKDAYS = ["pon", "wt", "śr", "czw", "pt", "sob", "nd"]
-TYPE_LABELS = {
-    "rest": "odpoczynek",
-    "recovery": "regeneracyjny",
-    "easy": "spokojny",
-    "long": "długie wybieganie",
-    "tempo": "tempo",
-    "threshold": "próg",
-    "intervals": "interwały",
-    "race": "start",
-}
 HARD_TYPES = ("tempo", "threshold", "intervals", "race", "long")
-PHASE_LABELS = {"base": "baza", "build": "budowa", "peak": "specyfika", "taper": "taper", "race": "start"}
 
 
 @dataclass
@@ -71,19 +60,20 @@ class PlanRequest:
     name: str | None = None
 
     def validate(self) -> list[str]:
+        tr = i18n.tr
         errors = []
         if self.distance not in units.RACES:
-            errors.append("Nieznany dystans.")
+            errors.append(tr(pl="Nieznany dystans.", en="Unknown distance."))
         days = sorted(set(self.run_days))
         if not 2 <= len(days) <= 7:
-            errors.append("Wybierz od 2 do 7 dni biegowych w tygodniu.")
+            errors.append(tr(pl="Wybierz od 2 do 7 dni biegowych w tygodniu.", en="Pick 2 to 7 running days a week."))
         if any(d < 0 or d > 6 for d in days):
-            errors.append("Dni tygodnia to 0–6.")
+            errors.append(tr(pl="Dni tygodnia to 0–6.", en="Weekdays are 0–6."))
         start = self.start or dt.date.today()
         if self.race_date <= start:
-            errors.append("Data zawodów musi być w przyszłości.")
+            errors.append(tr(pl="Data zawodów musi być w przyszłości.", en="The race date must be in the future."))
         if self.goal_s is not None and self.goal_s <= 0:
-            errors.append("Cel czasowy musi być dodatni.")
+            errors.append(tr(pl="Cel czasowy musi być dodatni.", en="The time goal must be positive."))
         return errors
 
 
@@ -265,10 +255,7 @@ def steps_km(steps: list[dict[str, Any]], easy_pace: float = 6.5) -> float:
     return round(total, 2)
 
 
-def _pace_text(band: tuple[float, float] | None) -> str:
-    if not band:
-        return "—"
-    return f"{units.fmt_pace(band[0], False)}–{units.fmt_pace(band[1])}"
+
 
 
 def _session(
@@ -281,7 +268,8 @@ def _session(
     distance: str,
     race_pace: float | None,
 ) -> dict[str, Any]:
-    """One session with warm-up / main / cool-down, pace band, HR band and purpose."""
+    """One session: type, distance, pace and HR band, workout steps, and the
+    ``text`` code its title, main set and purpose are written from (text.py)."""
     easy = paces.get("E")
     hr_easy = physio.hr_band(hr_max, *physio.HR_FRACTIONS["E"])
     session: dict[str, Any] = {
@@ -298,46 +286,28 @@ def _session(
     if kind in ("easy", "recovery"):
         band = (easy[0], easy[1]) if kind == "easy" else (easy[1], easy[1] * 1.06) if easy else None
         session.update(
-            title=f"{TYPE_LABELS[kind].capitalize()} {km:.0f} km",
+            text={"key": kind, **({"strides": week["phase"] in ("build", "peak")} if kind == "easy" else {})},
             distance_km=km,
             pace_lo=band[0] if band else None,
             pace_hi=band[1] if band else None,
             hr=hr_easy if kind == "easy" else physio.hr_band(hr_max, 0.6, 0.72),
-            warmup="—",
-            main=f"{km:.1f} km ciągle w tempie {_pace_text(band)}" + (
-                ", na końcu 6×20 s przebieżek" if kind == "easy" and week["phase"] in ("build", "peak") else ""),
-            cooldown="—",
             steps=[_step("run", km=km, pace=band)],
-            purpose=(
-                "Objętość tlenowa: buduje sieć naczyń włosowatych i ekonomię bez kosztu regeneracji. "
-                "Za szybko = zmęczenie bez dodatkowego bodźca."
-                if kind == "easy"
-                else "Ruch dla krążenia między mocnymi dniami; cel to świeżość na następną jakość."
-            ),
         )
     elif kind == "long":
-        segment = ""
+        spec: dict[str, Any] = {"key": "long"}
         steps = [_step("run", km=km, pace=easy)]
         if race_pace and week["phase"] == "peak" and distance in ("hm", "m"):
             part = min(round(km * (0.35 if distance == "m" else 0.3)), 14 if distance == "m" else 8)
-            segment = f"; ostatnie {part} km w tempie startowym {units.fmt_pace(race_pace)}"
             steps = [_step("run", km=km - part, pace=easy),
                      _step("run", km=part, pace=(race_pace * 0.99, race_pace * 1.01))]
+            spec.update(part=float(part), race_pace=round(sum(steps[-1]["pace"]) / 2, 3))
         session.update(
-            title=f"Długie wybieganie {km:.0f} km",
+            text=spec,
             distance_km=km,
             pace_lo=easy[0] if easy else None,
             pace_hi=easy[1] if easy else None,
             hr=hr_easy,
-            warmup="pierwsze 2 km wolniej",
-            main=f"{km:.1f} km w tempie {_pace_text(easy)}{segment}",
-            cooldown="ostatni km trucht",
             steps=steps,
-            purpose=(
-                "Wytrzymałość specyficzna: glikogen, mięśnie i ścięgna przyzwyczajone do czasu na nogach. "
-                + ("Odcinek w tempie startowym uczy utrzymać je na zmęczeniu." if segment else
-                   "Tempo spokojne — liczy się czas, nie prędkość.")
-            ),
         )
     elif kind == "threshold":
         band = paces.get("T")
@@ -347,21 +317,14 @@ def _session(
         reps = max(2, round(work / rep))
         work = reps * rep
         session.update(
-            title=f"Próg {reps}×{rep:g} km",
+            text={"key": "threshold", "reps": int(reps), "rep": float(rep)},
             distance_km=round(work + 3.5 + 0.2 * (reps - 1), 1),
             pace_lo=band[0] if band else None,
             pace_hi=band[1] if band else None,
             hr=physio.hr_band(hr_max, *physio.HR_FRACTIONS["T"]),
-            warmup="2 km spokojnie + 4 przebieżki",
-            main=f"{reps}×{rep:g} km w tempie {_pace_text(band)}, przerwa 1 min truchtu",
-            cooldown="1,5 km spokojnie",
             steps=[_step("warmup", km=2.0, pace=easy),
                    _repeat(reps, _step("run", km=rep, pace=band), _step("recovery", s=60)),
                    _step("cooldown", km=1.5, pace=easy)],
-            purpose=(
-                "Próg mleczanowy: najszybsze tempo, które utrzymasz ok. godziny. Podnosi tempo "
-                "dla 10 km i półmaratonu; 'komfortowo ciężko', nie na maksa."
-            ),
         )
     elif kind == "intervals":
         band = paces.get("I")
@@ -369,22 +332,15 @@ def _session(
         # Daniels: interval work up to ~8% of the week's volume (and <= 8 km).
         reps = max(3, min(8, round(max(3.0, min(8.0, 0.08 * week["volume_km"])) / rep)))
         session.update(
-            title=f"Interwały {reps}×{rep * 1000:.0f} m",
+            text={"key": "intervals", "reps": int(reps), "rep": float(rep)},
             distance_km=round(reps * rep * 1.5 + 3.5, 1),
             pace_lo=band[0] if band else None,
             pace_hi=band[1] if band else None,
             hr=physio.hr_band(hr_max, *physio.HR_FRACTIONS["I"]),
-            warmup="2 km spokojnie + 4–6 przebieżek",
-            main=f"{reps}×{rep * 1000:.0f} m w tempie {_pace_text(band)}, przerwa trucht równy czasowi odcinka",
-            cooldown="1,5 km spokojnie",
             steps=[_step("warmup", km=2.0, pace=easy),
                    _repeat(reps, _step("run", km=rep, pace=band),
                            _step("recovery", s=rep * (sum(band) / 2 if band else 5.0) * 60)),
                    _step("cooldown", km=1.5, pace=easy)],
-            purpose=(
-                "VO₂max: kilka minut łącznie blisko maksymalnego poboru tlenu. Największy bodziec "
-                "dla 5 i 10 km; tempo równe na wszystkich powtórzeniach ważniejsze niż szybkie pierwsze."
-            ),
         )
     elif kind == "tempo":
         band = paces.get("M") if distance in ("m", "hm") or week["phase"] == "base" else paces.get("T")
@@ -392,43 +348,31 @@ def _session(
             band = (race_pace * 0.99, race_pace * 1.01)
         work = max(3.0, min(14.0 if distance == "m" else 8.0, 0.2 * week["volume_km"]))
         session.update(
-            title=f"Tempo {work:.0f} km",
+            text={"key": "tempo", "work": round(float(work), 1), "distance": distance},
             distance_km=round(work + 3.5, 1),
             pace_lo=band[0] if band else None,
             pace_hi=band[1] if band else None,
             hr=physio.hr_band(hr_max, *physio.HR_FRACTIONS["M"]),
-            warmup="2 km spokojnie",
-            main=f"{work:.0f} km ciągle w tempie {_pace_text(band)}",
-            cooldown="1,5 km spokojnie",
             steps=[_step("warmup", km=2.0, pace=easy), _step("run", km=round(work, 1), pace=band),
                    _step("cooldown", km=1.5, pace=easy)],
-            purpose=(
-                "Wytrzymałość tempowa: długi, równy wysiłek poniżej progu. W fazie specyfiki — "
-                "w tempie startowym, żeby je zautomatyzować."
-                if distance in ("hm", "m")
-                else "Wprowadzenie do pracy tempowej: równy, kontrolowany wysiłek przed cięższymi sesjami."
-            ),
         )
     elif kind == "race":
         session.update(
-            title="Start",
+            text={"key": "race", "distance": distance},
             distance_km=units.RACES[distance],
             pace_lo=race_pace * 0.99 if race_pace else None,
             pace_hi=race_pace * 1.01 if race_pace else None,
             hr="—",
-            warmup="10–15 min truchtu + 3 przebieżki" if distance in ("5k", "10k") else "5–10 min truchtu",
-            main=f"{units.RACE_LABELS[distance]} — pierwszy kilometr nie szybciej niż planowane tempo",
-            cooldown="trucht i marsz",
             steps=[_step("warmup", s=600 if distance in ("5k", "10k") else 420),
                    _step("run", km=units.RACES[distance],
                          pace=(race_pace * 0.99, race_pace * 1.01) if race_pace else None)],
-            purpose="Dzień, do którego prowadzi plan.",
         )
     session["duration_min"] = (
         round(session["distance_km"] * ((session.get("pace_lo") or 6.5) + (session.get("pace_hi") or 6.5)) / 2)
         if session.get("distance_km")
         else None
     )
+    session.update(text.session_text(session))
     return session
 
 
@@ -449,7 +393,8 @@ def generate(
     if errors:
         raise ValueError(" ".join(errors))
     if result.get("status") != "ok":
-        raise ValueError("Brak prognozy formy — plan potrzebuje co najmniej jednego mierzalnego biegu. "
+        raise ValueError(i18n.tr(pl="Brak prognozy formy — plan potrzebuje co najmniej jednego mierzalnego biegu. ",
+                                 en="No fitness forecast — the plan needs at least one measurable run. ")
                          + str(result.get("reason", "")))
     anchor = anchor if anchor is not None else (runs["day"].max() if not runs.empty else pd.Timestamp.today())
     start = request.start or (dt.date.today() + dt.timedelta(days=1))
@@ -458,7 +403,7 @@ def generate(
     paces = physio.training_paces(vdot)
     base = baseline(runs, pd.Timestamp(anchor), vdot)
     item = result["distances"].get(request.distance)
-    warnings: list[str] = []
+    warnings: list[dict[str, Any]] = []
 
     race_pace = None
     if request.goal_s and item is not None:
@@ -466,17 +411,13 @@ def generate(
         if request.goal_s >= reach:
             race_pace = units.pace_from(request.goal_s, units.RACES[request.distance])
         else:
-            warnings.append(
-                f"Cel {units.fmt_time(request.goal_s)} jest szybszy niż optymistyczny kraniec dzisiejszej "
-                f"prognozy ({units.fmt_time(item.low_s)}). Odcinki startowe w planie idą w tempie "
-                "prognozy; przebuduj plan po kolejnym teście."
-            )
+            warnings.append({"key": "goal_too_fast", "goal_s": round(request.goal_s), "low_s": round(item.low_s)})
     if race_pace is None and item is not None:
         race_pace = units.pace_from(item.realistic_s, units.RACES[request.distance])
 
     weeks = _weeks(request, start)
     if len(weeks) < 3:
-        warnings.append("Mniej niż 3 tygodnie do startu: to nie budowa formy, tylko utrzymanie i świeżość.")
+        warnings.append({"key": "short"})
     _volumes(weeks, base, request)
     # Long runs are capped by time on feet, not only by distance: past ~2.5 h
     # (2:45 for the marathon) the run costs more recovery than it builds.
@@ -485,8 +426,7 @@ def generate(
         for week in weeks:
             week["long_km"] = round(min(week["long_km"], limit), 1)
     if base["weekly_km_4w"] < 5:
-        warnings.append("W ostatnich 4 tygodniach prawie nie było biegania — plan startuje od minimum "
-                        "i rośnie ostrożnie. Pierwsze 2 tygodnie traktuj jako sprawdzian tolerancji.")
+        warnings.append({"key": "no_running"})
 
     run_days = sorted(set(request.run_days))
     long_day = request.long_day if request.long_day in run_days else run_days[-1]
@@ -561,7 +501,7 @@ def generate(
     sessions = sorted((keep or []) + sessions, key=lambda s: s["date"])
     plan = {
         "id": store.new_id("plan"),
-        "name": request.name or f"{units.RACE_LABELS[request.distance]} — {request.race_date.isoformat()}",
+        "name": request.name or f"{text.race_label(request.distance)} — {request.race_date.isoformat()}",
         "race_id": request.race_id,
         "created": dt.datetime.now().isoformat(timespec="seconds"),
         "request": {
@@ -807,17 +747,14 @@ def replan(
     return fresh
 
 
-ADJUSTMENTS = {
-    "fatigue": "zmęczenie — 7 dni bez jakości, objętość −20%",
-    "sick": "choroba — 4 dni wolne, potem tydzień spokojnie",
-    "busy": "mniej czasu — tydzień skrócony o 30%, jakość zostaje",
-}
+# The reasons a plan can be adjusted for (labels: text.adjustment_label).
+ADJUSTMENTS = ("fatigue", "sick", "busy")
 
 
 def adjust(plan: dict[str, Any], reason: str, today: dt.date | None = None) -> dict[str, Any]:
     """Local change after a change in condition; the rest of the plan is untouched."""
     if reason not in ADJUSTMENTS:
-        raise ValueError(f"Nieznany powód: {reason}")
+        raise ValueError(i18n.tr(pl=f"Nieznany powód: {reason}", en=f"Unknown reason: {reason}"))
     today = today or dt.date.today()
     horizon = today + dt.timedelta(days=11 if reason == "sick" else 7)
     plan = dict(plan)
@@ -829,28 +766,26 @@ def adjust(plan: dict[str, Any], reason: str, today: dt.date | None = None) -> d
         if not today <= date < horizon or session.get("status") != "planned" or session["type"] == "race":
             continue
         if reason == "sick" and date < today + dt.timedelta(days=4):
-            session.update(type="rest", title="Odpoczynek (choroba)", distance_km=0.0, duration_min=0, steps=[],
-                           main="bez biegania", purpose="Przy infekcji bieganie wydłuża chorobę i nie buduje formy.")
+            session.update(type="rest", text={"key": "sick"}, distance_km=0.0, duration_min=0, steps=[])
         elif reason in ("sick", "fatigue"):
             factor = 0.8
             km = round((session.get("distance_km") or 0) * factor, 1)
             if session["type"] in ("tempo", "threshold", "intervals"):
                 km = round(min(km, 6.0), 1)
             if session["type"] != "long":
-                session.update(type="easy", title=f"Spokojny {km:.0f} km (korekta)",
-                               pace_lo=easy[0] if easy else None, pace_hi=easy[1] if easy else None,
-                               main=f"{km:.1f} km spokojnie", warmup="—", cooldown="—")
+                session.update(type="easy", text={"key": "adjusted"},
+                               pace_lo=easy[0] if easy else None, pace_hi=easy[1] if easy else None)
             if session["type"] == "long" and session.get("steps"):
                 session["steps"] = _scale_steps(session["steps"], factor)
             else:
                 session["steps"] = [_step("run", km=km, pace=easy)]
             session["distance_km"] = km
-            session["purpose"] = "Korekta planu: najpierw regeneracja, jakość wraca, gdy wróci świeżość."
         else:  # busy
             session["distance_km"] = round((session.get("distance_km") or 0) * 0.7, 1)
             if session.get("steps"):
                 session["steps"] = _scale_steps(session["steps"], 0.7)
-        session["note"] = (session.get("note") or "") + f" [{ADJUSTMENTS[reason]}]"
+        session["adjusted"] = reason
+        session.update(text.session_text(session))
         changed.append(session["id"])
     plan["history"] = list(plan.get("history", [])) + [
         {"at": dt.datetime.now().isoformat(timespec="seconds"), "action": reason, "sessions": len(changed)}
@@ -865,22 +800,28 @@ def soften(plan: dict[str, Any], session_id: str, today: dt.date | None = None) 
     easy = tuple((plan.get("paces") or {}).get("E") or ()) or None
     session = _find(plan, session_id)
     if session["type"] not in HARD_TYPES or session["type"] == "race":
-        raise ValueError("Ta sesja nie jest mocna — nie ma czego zmiękczać.")
+        raise ValueError(i18n.tr(pl="Ta sesja nie jest mocna — nie ma czego zmiękczać.",
+                                 en="This session is not a hard one — there is nothing to soften."))
     if session["date"] < today.isoformat():
-        raise ValueError("Sesja jest w przeszłości.")
+        raise ValueError(_past())
     km = session.get("distance_km") or 0
     if session["type"] != "long":
         km = min(km, 6.0)
     km = round(km * (0.8 if session["type"] == "long" else 1.0), 1)
-    before = session.get("title")
-    session.update(type="easy", title=f"Spokojny {km:.0f} km (zamiast: {before})", distance_km=km,
-                   pace_lo=easy[0] if easy else None, pace_hi=easy[1] if easy else None,
-                   warmup="—", main=f"{km:.1f} km spokojnie", cooldown="—",
-                   steps=[_step("run", km=km, pace=easy)],
-                   purpose="Regeneracja nie pozwalała na jakość; spokojny bieg utrzymuje objętość bez długu zmęczenia.")
-    session["note"] = (session.get("note") or "") + f" [zmiękczone z „{before}”]"
+    before = dict(session.get("text") or {"key": session["type"]})
+    # Only the easy and long titles carry a distance ("Długie wybieganie 16 km").
+    before_km = float(round(session.get("distance_km") or 0)) if before.get("key") in ("easy", "recovery", "long") \
+        else None
+    session.update(type="easy", text={"key": "softened", "before": before, "before_km": before_km},
+                   distance_km=km, pace_lo=easy[0] if easy else None, pace_hi=easy[1] if easy else None,
+                   steps=[_step("run", km=km, pace=easy)])
+    session.update(text.session_text(session))
     _log(plan, "soften", session_id)
     return plan
+
+
+def _past() -> str:
+    return i18n.tr(pl="Sesja jest w przeszłości.", en="The session is in the past.")
 
 
 def postpone(plan: dict[str, Any], session_id: str, today: dt.date | None = None) -> dict[str, Any]:
@@ -892,15 +833,17 @@ def postpone(plan: dict[str, Any], session_id: str, today: dt.date | None = None
     today = today or dt.date.today()
     session = _find(plan, session_id)
     date = dt.date.fromisoformat(session["date"])
+    tr = i18n.tr
     if date < today:
-        raise ValueError("Sesja jest w przeszłości.")
+        raise ValueError(_past())
     target = date + dt.timedelta(days=1)
     race_day = plan.get("request", {}).get("race_date")
     if race_day and target.isoformat() >= race_day and session["type"] != "race":
-        raise ValueError("Przesunięcie wypadłoby na dzień startu albo po nim.")
+        raise ValueError(tr(pl="Przesunięcie wypadłoby na dzień startu albo po nim.",
+                            en="The move would land on race day or after it."))
     other = next((s for s in plan.get("sessions", []) if s["date"] == target.isoformat()), None)
     if other is not None and other["type"] == "race":
-        raise ValueError("Następnego dnia jest start.")
+        raise ValueError(tr(pl="Następnego dnia jest start.", en="The race is the next day."))
     moved = {s["id"]: s["date"] for s in plan.get("sessions", [])}
     moved[session["id"]] = target.isoformat()
     if other is not None:
@@ -908,7 +851,9 @@ def postpone(plan: dict[str, Any], session_id: str, today: dt.date | None = None
     hard = sorted(dt.date.fromisoformat(moved[s["id"]]) for s in plan.get("sessions", [])
                   if s["type"] in HARD_TYPES)
     if any((b - a).days == 1 for a, b in zip(hard, hard[1:])):
-        raise ValueError("Po przesunięciu dwa mocne dni wypadłyby obok siebie — lepiej zamienić na spokojny.")
+        raise ValueError(tr(pl="Po przesunięciu dwa mocne dni wypadłyby obok siebie — lepiej zamienić na spokojny.",
+                            en="After the move two hard days would sit side by side — better swap it for an easy "
+                               "run."))
     session["date"] = target.isoformat()
     if other is not None:
         other["date"] = date.isoformat()
@@ -935,7 +880,7 @@ def _find(plan: dict[str, Any], session_id: str) -> dict[str, Any]:
     for session in plan.get("sessions", []):
         if session["id"] == session_id:
             return session
-    raise ValueError(f"Brak sesji {session_id}.")
+    raise ValueError(i18n.tr(pl=f"Brak sesji {session_id}.", en=f"No session {session_id}."))
 
 
 def _log(plan: dict[str, Any], action: str, session_id: str) -> None:
@@ -947,7 +892,7 @@ def _log(plan: dict[str, Any], action: str, session_id: str) -> None:
 def set_status(plan: dict[str, Any], session_id: str, status: str, note: str | None = None,
                activity_id: int | None = None) -> dict[str, Any]:
     if status not in store.STATUSES:
-        raise ValueError(f"Status spoza {store.STATUSES}")
+        raise ValueError(i18n.tr(pl=f"Status spoza {store.STATUSES}", en=f"Status outside {store.STATUSES}"))
     for session in plan.get("sessions", []):
         if session["id"] == session_id:
             session["status"] = status
@@ -967,5 +912,5 @@ def week_table(plan: dict[str, Any]) -> pd.DataFrame:
     if not sessions.empty:
         quality = sessions[sessions["type"].isin(("tempo", "threshold", "intervals"))].groupby("week").size()
         weeks["quality"] = weeks["week"].map(quality).fillna(0).astype(int)
-    weeks["phase_label"] = weeks["phase"].map(PHASE_LABELS)
+    weeks["phase_label"] = weeks["phase"].map(text.phase_label)
     return weeks

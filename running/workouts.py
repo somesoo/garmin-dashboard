@@ -24,6 +24,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+import i18n
+
 RECOVERY = ("recovery", "rest")
 QUALITY = ("intervals", "threshold", "tempo", "race")
 OPTIONAL = ("avg_hr", "max_hr", "cadence")
@@ -182,7 +184,10 @@ def rep_length(km: float) -> int | None:
 
 
 def rep_label(metres: int) -> str:
-    return f"{metres / 1000:g} km".replace(".", ",") if metres >= 1000 else f"{metres} m"
+    if metres < 1000:
+        return f"{metres} m"
+    km = f"{metres / 1000:g} km"
+    return i18n.tr(pl=km.replace(".", ","), en=km)
 
 
 def rep_efforts(every: pd.DataFrame, runs: pd.DataFrame) -> pd.DataFrame:
@@ -224,6 +229,7 @@ def rep_segments(efforts: pd.DataFrame) -> list[dict[str, Any]]:
     for segment_id, count in sizes.items():
         metres = int(str(segment_id).split("-")[1])
         if count >= 2:
-            out.append({"id": segment_id, "name": f"Odcinek {rep_label(metres)} (interwały)", "length_m": metres,
+            name = i18n.tr(pl=f"Odcinek {rep_label(metres)} (interwały)", en=f"{rep_label(metres)} rep (intervals)")
+            out.append({"id": segment_id, "name": name, "length_m": metres,
                         "points": [], "reps": True, "runs": int(count)})
     return sorted(out, key=lambda item: item["length_m"])

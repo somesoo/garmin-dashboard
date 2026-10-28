@@ -11,7 +11,7 @@ from pathlib import Path
 import pandas as pd
 
 from tests.helpers import activities, daily, run, training_block
-from running import coach, forecast, physio, plan as planning, sessions, store, units
+from running import coach, forecast, physio, plan as planning, sessions, store, text, units
 
 
 class TempStore(unittest.TestCase):
@@ -139,11 +139,11 @@ class Generator(unittest.TestCase):
         threshold = next(s for s in plan["sessions"] if s["type"] == "threshold")
         t_fast, t_slow = physio.training_paces(self.result["vdot"])["T"]
         self.assertAlmostEqual(threshold["pace_lo"], t_fast)
-        self.assertTrue(any("szybszy" in w for w in plan["warnings"]))
+        self.assertTrue(any("szybszy" in w for w in text.warnings(plan)))
 
     def test_too_close_to_race_warns(self):
         plan = self.make(race=dt.date(2026, 3, 15))
-        self.assertTrue(any("3 tygodnie" in w for w in plan["warnings"]))
+        self.assertTrue(any("3 tygodnie" in w for w in text.warnings(plan)))
 
     def test_invalid_requests(self):
         with self.assertRaises(ValueError):

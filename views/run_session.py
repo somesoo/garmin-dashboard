@@ -104,7 +104,8 @@ def _character(run: pd.Series) -> None:
     kind, sure = rc.kind_label(run["kind"]), rc.confidence_label(run["kind_confidence"])
     with bento.tile(
         tr(pl=f"Charakter: {kind}", en=f"Character: {kind}"), key="character", terms=["run_kind", "te", "cadence"],
-        caption=tr(pl=f"pewność {sure} — {run['kind_reason']}", en=f"confidence {sure} — {run['kind_reason']}"),
+        caption=tr(pl=f"pewność {sure} — {rc.text.reason(run['kind_reason'])}",
+                   en=f"confidence {sure} — {rc.text.reason(run['kind_reason'])}"),
         how=tr(pl="Etykieta to opis sesji z danych, nie ocena — przy niskiej pewności traktuj ją jako przypuszczenie.",
                en="The label describes the session from the data, it is not a grade — at low confidence treat it as "
                   "a guess."),

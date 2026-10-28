@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import config  # noqa: E402
+import i18n  # noqa: E402
 from etl import load  # noqa: E402
 
 
@@ -32,11 +33,13 @@ def save(nights: dict[dt.date, str]) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Wyklucz noce spoza Twojego nadgarstka")
+    tr = i18n.tr
+    p = argparse.ArgumentParser(description=tr(pl="Wyklucz noce spoza Twojego nadgarstka",
+                                               en="Exclude nights recorded off your wrist"))
     p.add_argument("days", nargs="*", type=dt.date.fromisoformat, metavar="YYYY-MM-DD")
-    p.add_argument("--remove", action="store_true", help="przywróć podane noce")
-    p.add_argument("--reason", default="zegarek u kogoś innego")
-    p.add_argument("--no-rebuild", action="store_true", help="tylko zapisz listę")
+    p.add_argument("--remove", action="store_true", help=tr(pl="przywróć podane noce", en="restore these nights"))
+    p.add_argument("--reason", default=tr(pl="zegarek u kogoś innego", en="the watch on someone else"))
+    p.add_argument("--no-rebuild", action="store_true", help=tr(pl="tylko zapisz listę", en="only save the list"))
     args = p.parse_args(argv)
 
     nights = load.excluded_nights()
@@ -49,9 +52,10 @@ def main(argv: list[str] | None = None) -> int:
         save(nights)
 
     for day, reason in sorted(nights.items()):
-        print(f"{day}  (noc {day - dt.timedelta(days=1):%d.%m} → {day:%d.%m})  {reason}")
+        night = f"{day - dt.timedelta(days=1):%d.%m} → {day:%d.%m}"
+        print(tr(pl=f"{day}  (noc {night})  {reason}", en=f"{day}  (night {night})  {reason}"))
     if not nights:
-        print("brak wykluczonych nocy")
+        print(tr(pl="brak wykluczonych nocy", en="no excluded nights"))
 
     if args.days and not args.no_rebuild:
         from etl import fetch

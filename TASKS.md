@@ -12,20 +12,10 @@
       Kody zapisywane przez analitykę i `running/` (`form_zone`, `quadrant`,
       `model`, typ treningu, pewność, decyzja dnia, status celu, fazy planu)
       zostają kodami — tłumaczy je widok.
-- [ ] **Etap 3** — proza generowana w `running/` i `analytics.py`, która w EN
-      wciąż jest po polsku:
-      - `coach.py`: obserwacje (*Co mówią dane*), sygnały regeneracji, powody
-        decyzji dnia, brief;
-      - `forecast.py`: ostrzeżenia, `notes`, `advice`, `confidence_reasons`,
-        `reason` przy braku prognozy, źródło kotwicy;
-      - `sessions.py`: `kind_reason`, `source` najlepszych odcinków;
-      - `workouts.py`: nazwy segmentów z interwałów („Odcinek 1 km (interwały)”);
-      - `segments.py`: nazwy segmentów auto (miasto + długość);
-      - `plan.py`: tytuły i opisy sesji (`title`, `main`, `purpose`, rozgrzewka),
-        historia zmian, opisy workoutów na zegarek (`garmin_workout.py`);
-      - `analytics.py`: powód niedopasowania modelu Banistera (`models.json`).
-      Zapisane plany w `data/coach/` mają tekst po polsku — zdecydować, czy
-      przejść na klucze, czy zostawić stare plany po polsku.
+- [x] **Etap 3** — `running/` i CLI w `etl/` (w `i18n.BILINGUAL`): plan zapisuje
+      kody (`text`), zdania składa `running/text.py`; stare plany migrowane przy
+      pierwszym odczycie. `kind_reason`, `source`, powód Banistera jako kody.
+      Coach, prognoza, walidacja i CLI (`--lang`) przez `tr`.
 - [ ] **Etap 4** (opcjonalnie) — insighty (`insights/*.en.md`).
 
 ## Czeka na zgodę

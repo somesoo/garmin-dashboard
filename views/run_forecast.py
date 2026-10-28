@@ -296,8 +296,9 @@ def _anchor(result: dict) -> None:
     perf = result.get("perf")
     caption = None
     if perf:
-        caption = tr(pl=f"{perf['day']:%d.%m.%Y} · {perf['age_days']} dni temu · {perf['source']}",
-                     en=f"{perf['day']:%d.%m.%Y} · {perf['age_days']} days ago · {perf['source']}")
+        where = rc.text.source(perf["source"])
+        caption = tr(pl=f"{perf['day']:%d.%m.%Y} · {perf['age_days']} dni temu · {where}",
+                     en=f"{perf['day']:%d.%m.%Y} · {perf['age_days']} days ago · {where}")
     with bento.tile(tr(pl="Wysiłek, na którym stoi prognoza", en="The effort the forecast stands on"), key="anchor",
                     terms=["near_max"], caption=caption) as t:
         if not perf:

@@ -7,7 +7,7 @@ import unittest
 import pandas as pd
 
 from tests.helpers import activities, run, track
-from running import physio, sessions, units
+from running import physio, sessions, text, units
 
 
 class Selection(unittest.TestCase):
@@ -57,7 +57,7 @@ class Classification(unittest.TestCase):
         result = self.classify(rows, vdot=40.0)
         self.assertEqual(result.loc[60, "kind"], "threshold")
         self.assertEqual(result.loc[61, "kind"], "easy")
-        self.assertIn("tętno", result.loc[61, "kind_reason"])
+        self.assertIn("tętno", text.reason(result.loc[61, "kind_reason"]))
 
     def test_long_run_and_recovery(self):
         rows = self.history() + [run(70, "2026-01-25", 14.0, 6.7, hr=145), run(71, "2026-01-26", 4.0, 7.2, hr=125)]
@@ -109,9 +109,9 @@ class Efforts(unittest.TestCase):
         routes = pd.concat([track(1, 10.0, 5.0), track(2, 6.0, 5.0)])
         table = sessions.efforts(frame, routes)
         mine = table[table["activity_id"] == 1].set_index("effort")
-        self.assertEqual(mine.loc["1k", "source"], "Garmin (najszybszy odcinek)")
-        self.assertEqual(mine.loc["10k", "source"], "cały bieg")
-        self.assertEqual(mine.loc["3k", "source"], "odcinek ze strumienia próbek")
+        self.assertEqual(mine.loc["1k", "source"], "garmin")
+        self.assertEqual(mine.loc["10k", "source"], "whole")
+        self.assertEqual(mine.loc["3k", "source"], "stream")
         self.assertNotIn("1k", set(table[table["activity_id"] == 2]["effort"]))
         self.assertAlmostEqual(mine.loc["10k", "vdot"], physio.vdot(10000, 3000), places=3)
 
