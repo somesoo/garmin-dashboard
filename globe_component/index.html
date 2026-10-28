@@ -88,11 +88,36 @@ const attr = document.getElementById("attr");
 let heatColors = null;
 let tracksUrl = null;
 
+// Words come from globe.py in the interface language; these Polish defaults
+// keep test.html readable without Streamlit.
+let T = {
+  zoomIn: "Przybliż", zoomOut: "Oddal", reset: "Cały glob", whole: "cały glob",
+  legend: "ile razy przebiegnięte", heatMax: "16× i więcej", session: "Trening",
+  openOne: "kliknij, aby otworzyć trasę", openMany: "kliknij, aby wybrać · przybliż, aby rozdzielić",
+  lang: "pl", activities: ["aktywność", "aktywności", "aktywności"],
+};
+
+// i18n.plural, for the activity count: Polish 1 / 2-4 (not 12-14) / 5+, English 1 / many.
+function activities(n) {
+  const forms = T.activities;
+  if (T.lang === "en") return n === 1 ? forms[0] : forms[1];
+  if (n === 1) return forms[0];
+  return n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? forms[1] : forms[2];
+}
+
+function applyText() {
+  document.getElementById("in").title = T.zoomIn;
+  document.getElementById("out").title = T.zoomOut;
+  document.getElementById("reset").title = T.reset;
+}
+
 // Pass-count key, shown only once the tracks are on screen.
 function renderLegend() {
   if (!heatColors) return;
-  legend.innerHTML = "<b>ile razy przebiegnięte</b>" + HEAT_CLASSES.map((cls, index) =>
-    `<span><i style="height:${Math.max(2, cls.width)}px;background:${heatColors[index]}"></i>${cls.label}</span>`
+  const last = HEAT_CLASSES.length - 1;
+  legend.innerHTML = `<b>${T.legend}</b>` + HEAT_CLASSES.map((cls, index) =>
+    `<span><i style="height:${Math.max(2, cls.width)}px;background:${heatColors[index]}"></i>` +
+    `${index === last ? T.heatMax : cls.label}</span>`
   ).join("");
 }
 
@@ -120,14 +145,14 @@ const globe = createGlobe(canvas, {
     const bits = [];
     if (cluster.count === 1) {
       const a = cluster.activity;
-      bits.push(`<b>${a.name || "Trening"}</b>`);
+      bits.push(`<b>${a.name || T.session}</b>`);
       bits.push([a.date, a.sport, a.km ? a.km + " km" : null, a.min ? a.min + " min" : null]
         .filter(Boolean).join(" · "));
-      bits.push("<i>kliknij, aby otworzyć trasę</i>");
+      bits.push(`<i>${T.openOne}</i>`);
     } else {
       bits.push(`<b>${cluster.name}</b>`);
-      bits.push(`${cluster.count} aktywności`);
-      bits.push("<i>kliknij, aby wybrać · przybliż, aby rozdzielić</i>");
+      bits.push(`${cluster.count} ${activities(cluster.count)}`);
+      bits.push(`<i>${T.openMany}</i>`);
     }
     tip.innerHTML = bits.join("<br>");
     tip.style.left = x + "px";
@@ -135,7 +160,7 @@ const globe = createGlobe(canvas, {
     tip.style.opacity = 1;
   },
   onZoom(zoom) {
-    scale.textContent = zoom <= 1.01 ? "cały glob" : `×${zoom < 10 ? zoom.toFixed(1) : Math.round(zoom)}`;
+    scale.textContent = zoom <= 1.01 ? T.whole : `×${zoom < 10 ? zoom.toFixed(1) : Math.round(zoom)}`;
     legend.style.display = tracksUrl && zoom >= HEAT_ZOOM ? "block" : "none";
     attr.style.display = zoom >= FLAT_ZOOM ? "block" : "none";
   },
@@ -144,7 +169,7 @@ const globe = createGlobe(canvas, {
 document.getElementById("in").onclick = () => globe.zoomBy(1.8);
 document.getElementById("out").onclick = () => globe.zoomBy(1 / 1.8);
 document.getElementById("reset").onclick = () => globe.setZoom(1, null);
-document.getElementById("reset").title = "Cały glob";
+applyText();
 
 function fit() {
   const width = Math.max(240, stage.clientWidth || window.innerWidth);
@@ -167,6 +192,11 @@ window.addEventListener("message", (event) => {
   if (args.height && args.height !== height) {
     height = args.height;
     fit();
+  }
+  if (args.text) {
+    T = { ...T, ...args.text };
+    applyText();
+    renderLegend();
   }
   if (args.theme) {
     globe.setTheme(args.theme);

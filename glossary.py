@@ -4,11 +4,17 @@ One entry per concept, written for a runner rather than a physiologist. Pages
 point at entries by key (``shell.lead(..., terms=[...])``, ``shell.metrics``),
 and the Słownik page lists them all — so an explanation is written once and
 reads the same everywhere.
+
+``TERMS`` is the Polish text; the English one is ``glossary_en`` under the same
+keys. Read entries through ``term()``, which picks the interface language.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+import glossary_en
+import i18n
 
 
 @dataclass(frozen=True)
@@ -455,33 +461,50 @@ FIELDS = {
 }
 
 # Shared reading of the trend idiom, so section notes do not repeat it.
-TREND_HOW = (
+_TREND_HOW = (
     "Blade kropki to pojedyncze dni, wyraźna linia to średnia krocząca — to ona niesie sygnał. "
     "Szary pas to twoja norma, liczba na końcu linii to ostatnia wartość."
 )
 
 
+def trend_how() -> str:
+    return i18n.tr(pl=_TREND_HOW, en=glossary_en.TREND_HOW)
+
+
 def term(key: str) -> Term:
-    return TERMS[key]
+    """The entry in the interface language."""
+    item = TERMS[key]
+    if i18n.lang() == "en":
+        return Term(*glossary_en.TERMS[key], group=glossary_en.GROUPS[item.group])
+    return item
 
 
 def short(key: str) -> str:
     """One-paragraph tooltip text for a tile or a table column."""
-    item = TERMS[key]
+    item = term(key)
     text = f"{item.what} {item.why}"
     return f"{text}\n\n{item.read}" if item.read else text
 
 
+def why_label() -> str:
+    return i18n.tr(pl="Po co", en="Why")
+
+
+def read_label() -> str:
+    return i18n.tr(pl="Jak czytać", en="How to read")
+
+
 def markdown(key: str) -> str:
-    item = TERMS[key]
-    lines = [f"**{item.name}** — {item.what}", f"*Po co:* {item.why}"]
+    item = term(key)
+    lines = [f"**{item.name}** — {item.what}", f"*{why_label()}:* {item.why}"]
     if item.read:
-        lines.append(f"*Jak czytać:* {item.read}")
+        lines.append(f"*{read_label()}:* {item.read}")
     return "\n\n".join(lines)
 
 
 def groups() -> dict[str, list[str]]:
+    """Keys by group, the group named in the interface language."""
     out: dict[str, list[str]] = {}
-    for key, item in TERMS.items():
-        out.setdefault(item.group, []).append(key)
+    for key in TERMS:
+        out.setdefault(term(key).group, []).append(key)
     return out

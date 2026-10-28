@@ -26,6 +26,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
+import i18n
 import theme as tz
 
 ROOT = Path(__file__).resolve().parent
@@ -126,7 +127,8 @@ def starts(_frame: pd.DataFrame, build: str) -> list[dict[str, Any]]:
                 "id": int(row.activity_id),
                 "lat": round(float(row.start_lat), 5),
                 "lon": round(float(row.start_lon), 5),
-                "name": str(getattr(row, "name", "") or "Trening"),
+                # Cached per build, so no language here: the page fills a nameless one in.
+                "name": str(getattr(row, "name", "") or ""),
                 "place": str(getattr(row, "location", "") or "—"),
                 "sport": str(getattr(row, "sport", "") or ""),
                 "km": round(float(getattr(row, "distance_km", 0) or 0), 1),
@@ -166,6 +168,7 @@ def show(
         tracks=tracks,
         selected=selected,
         theme=_theme(),
+        text=_text(),
         spin=bool(spin),
         speed=speed,
         target={"lon": float(target[0]), "lat": float(target[1]), "zoom": float(target[2])},
@@ -174,6 +177,26 @@ def show(
         key=key,
         default=None,
     )
+
+
+def _text() -> dict[str, Any]:
+    """The component's words in the interface language (index.html keeps the
+    Polish ones as defaults, so test.html works without Streamlit)."""
+    tr = i18n.tr
+    return {
+        "zoomIn": tr(pl="Przybliż", en="Zoom in"),
+        "zoomOut": tr(pl="Oddal", en="Zoom out"),
+        "reset": tr(pl="Cały glob", en="The whole globe"),
+        "whole": tr(pl="cały glob", en="whole globe"),
+        "legend": tr(pl="ile razy przebiegnięte", en="times run"),
+        "heatMax": tr(pl="16× i więcej", en="16× or more"),
+        "session": tr(pl="Trening", en="Session"),
+        "openOne": tr(pl="kliknij, aby otworzyć trasę", en="click to open the route"),
+        "openMany": tr(pl="kliknij, aby wybrać · przybliż, aby rozdzielić", en="click to choose · zoom in to split"),
+        "lang": i18n.lang(),
+        # Activity noun: Polish 1 / 2-4 / 5+, English 1 / many (i18n.plural).
+        "activities": i18n.pick({"pl": ["aktywność", "aktywności", "aktywności"], "en": ["activity", "activities"]}),
+    }
 
 
 def home(starts: list[dict[str, Any]], zoom: float = 1.6) -> tuple[float, float, float]:

@@ -12,10 +12,14 @@ import i18n
 def render() -> None:
     bento.header(
         i18n.page("slownik"),
-        "Co oznacza każdy wskaźnik, po co jest i jak go czytać. To samo objaśnienie jest pod „?” w nagłówku "
-        "każdego kafla i w podpowiedziach liczb.",
+        i18n.tr(pl="Co oznacza każdy wskaźnik, po co jest i jak go czytać. To samo objaśnienie jest pod „?” "
+                   "w nagłówku każdego kafla i w podpowiedziach liczb.",
+                en="What every indicator means, why it is there and how to read it. The same explanation sits "
+                   "behind the “?” in every tile's header and in the number tooltips."),
     )
-    needle = st.text_input("Szukaj", placeholder="szukaj: HRV, TSB, pewność…", key="glossary_search",
+    needle = st.text_input(i18n.tr(pl="Szukaj", en="Search"),
+                           placeholder=i18n.tr(pl="szukaj: HRV, TSB, pewność…", en="search: HRV, TSB, confidence…"),
+                           key="glossary_search",
                            label_visibility="collapsed").strip().lower()
     groups = []
     for group, keys in glossary.groups().items():
@@ -28,12 +32,13 @@ def render() -> None:
     # row grid would leave holes under the short ones.
     columns = bento.row(2, 2)
     for index, (group, items) in enumerate(groups):
-        with columns[index % 2], bento.panel(group, key=f"glossary_{index}", caption=f"{len(items)} pojęć"):
+        count = f"{len(items)} {i18n.plural(len(items), pl=('pojęcie', 'pojęcia', 'pojęć'), en=('term', 'terms'))}"
+        with columns[index % 2], bento.panel(group, key=f"glossary_{index}", caption=count):
             for item in items:
                 with st.expander(item.name, expanded=bool(needle)):
                     st.markdown(item.what)
-                    st.markdown(f"*Po co:* {item.why}")
+                    st.markdown(f"*{glossary.why_label()}:* {item.why}")
                     if item.read:
-                        st.markdown(f"*Jak czytać:* {item.read}")
-    with bento.panel("Wykresy", key="glossary_charts"):
-        st.markdown(glossary.TREND_HOW)
+                        st.markdown(f"*{glossary.read_label()}:* {item.read}")
+    with bento.panel(i18n.tr(pl="Wykresy", en="Charts"), key="glossary_charts"):
+        st.markdown(glossary.trend_how())

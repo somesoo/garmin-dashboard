@@ -15,11 +15,52 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+import i18n
 import shell
 from running import coach, forecast, plan as planning, segments, sessions, store, units, workouts
 
 KIND_ORDER = ["recovery", "easy", "long", "tempo", "threshold", "intervals", "race"]
-CONFIDENCE_ICON = {"wysoka": "●●●", "średnia": "●●○", "niska": "●○○"}
+# forecast.py reports confidence as these Polish codes; labels below translate them.
+CONFIDENCE_ICON = {"wysoka": "●●●", "średnia": "●●○", "niska": "●○○"}  # i18n: key
+
+
+def confidence_label(code: Any) -> str:
+    tr = i18n.tr
+    return {"wysoka": tr(pl="wysoka", en="high"), "średnia": tr(pl="średnia", en="medium"),  # i18n: key
+            "niska": tr(pl="niska", en="low")}.get(str(code), str(code))
+
+
+def confidence(code: Any) -> str:
+    """``high ●●●``: the label with its dots."""
+    return f"{confidence_label(code)} {CONFIDENCE_ICON.get(str(code), '')}".strip()
+
+
+def race_label(key: Any) -> str:
+    tr = i18n.tr
+    return {"5k": "5 km", "10k": "10 km", "hm": tr(pl="półmaraton", en="half marathon"),
+            "m": tr(pl="maraton", en="marathon")}.get(str(key), str(key))
+
+
+def effort_label(key: Any) -> str:
+    """Best-effort distance (``sessions.EFFORT_LABELS`` keys)."""
+    key = str(key)
+    if key in ("hm", "m"):
+        return race_label(key)
+    names = {"block": i18n.tr(pl="blok workoutu", en="workout block"), "mile": i18n.tr(pl="1 mila", en="1 mile")}
+    return names.get(key) or sessions.EFFORT_LABELS.get(key, key)
+
+
+def action_label(code: str) -> str:
+    """The decision ``coach.next_session`` names with a Polish code."""
+    tr = i18n.tr
+    return {
+        "jak w planie": tr(pl="jak w planie", en="as planned"),
+        "jak w planie, z kontrolą": tr(pl="jak w planie, z kontrolą", en="as planned, with a check"),  # i18n: key
+        "zamień na spokojny": tr(pl="zamień na spokojny", en="swap for an easy run"),  # i18n: key
+        "przesuń": tr(pl="przesuń", en="postpone"),  # i18n: key
+        "propozycja": tr(pl="propozycja", en="suggestion"),
+        "decyzja rano": tr(pl="decyzja rano", en="decide in the morning"),
+    }.get(code, code)
 
 
 def runs() -> pd.DataFrame:
@@ -93,7 +134,7 @@ def _forecast(_build: str, _stamp: str, today: str) -> dict[str, Any]:
 def current_forecast() -> dict[str, Any]:
     frame = runs()
     if frame.empty:
-        return {"status": "insufficient", "reason": "Brak tabeli biegów."}
+        return {"status": "insufficient", "reason": i18n.tr(pl="Brak tabeli biegów.", en="No runs table.")}
     return _forecast(shell.build_id(), store_stamp(), dt.date.today().isoformat())
 
 
@@ -198,10 +239,12 @@ def guard() -> pd.DataFrame | None:
     """The running tables or a clear message; None means the page should stop."""
     frame = runs()
     if frame.empty:
-        st.info(
-            "Brak tabel biegowych. Uruchom `analytics.py` (albo `etl/run.py`, który robi to po "
-            "pobraniu) — tabele `run_*` powstają z istniejących danych, bez odpytywania Garmina."
-        )
+        st.info(i18n.tr(
+            pl="Brak tabel biegowych. Uruchom `analytics.py` (albo `etl/run.py`, który robi to po pobraniu) — tabele "
+               "`run_*` powstają z istniejących danych, bez odpytywania Garmina.",
+            en="No running tables. Run `analytics.py` (or `etl/run.py`, which does it after a pull) — the `run_*` "
+               "tables are built from the existing data, without querying Garmin.",
+        ))
         return None
     return frame
 
@@ -211,33 +254,45 @@ def fmt_time(seconds: Any) -> str:
 
 
 def kind_label(kind: Any) -> str:
-    from running.sessions import KINDS
-
-    return KINDS.get(str(kind), str(kind))
+    """Session type (``sessions.KINDS`` codes) in the interface language."""
+    tr = i18n.tr
+    labels = {
+        "recovery": tr(pl="regeneracyjny", en="recovery"),
+        "easy": tr(pl="spokojny", en="easy"),
+        "long": tr(pl="długie wybieganie", en="long run"),
+        "tempo": "tempo",
+        "threshold": tr(pl="próg", en="threshold"),
+        "intervals": tr(pl="interwały", en="intervals"),
+        "race": tr(pl="start / próba", en="race / test"),
+    }
+    return labels.get(str(kind), str(kind))
 
 
 def runs_table(frame: pd.DataFrame) -> pd.DataFrame:
     """The compact run log used on several pages."""
+    tr = i18n.tr
     out = pd.DataFrame(
         {
-            "kiedy": frame["start_local"].dt.strftime("%d.%m.%Y"),
-            "typ": frame["kind"].map(kind_label),
+            tr(pl="kiedy", en="when"): frame["start_local"].dt.strftime("%d.%m.%Y"),
+            tr(pl="typ", en="type"): frame["kind"].map(kind_label),
             "km": frame["distance_km"].round(2),
-            "czas": (frame["duration_min"] * 60).map(units.fmt_time),
-            "tempo": frame["pace_min_km"].map(lambda v: units.fmt_pace(v, False)),
-            "tętno": frame["avg_hr"],
+            tr(pl="czas", en="time"): (frame["duration_min"] * 60).map(units.fmt_time),
+            tr(pl="tempo", en="pace"): frame["pace_min_km"].map(lambda v: units.fmt_pace(v, False)),
+            tr(pl="tętno", en="HR"): frame["avg_hr"],
             "load": frame["training_load"],
-            "nazwa": frame["name"],
+            tr(pl="nazwa", en="name"): frame["name"],
         }
     )
     return out
 
 
-RUN_COLUMNS = {
-    "km": st.column_config.NumberColumn("km", format="%.1f"),
-    "tętno": st.column_config.NumberColumn("tętno", format="%.0f"),
-    "load": st.column_config.NumberColumn("load", format="%.0f"),
-}
+def run_columns() -> dict[str, Any]:
+    heart = i18n.tr(pl="tętno", en="HR")
+    return {
+        "km": st.column_config.NumberColumn("km", format="%.1f"),
+        heart: st.column_config.NumberColumn(heart, format="%.0f"),
+        "load": st.column_config.NumberColumn("load", format="%.0f"),
+    }
 
 
 def pickable_runs(frame: pd.DataFrame, key: str, height: int | None = None, hint: bool = True) -> None:
@@ -246,14 +301,15 @@ def pickable_runs(frame: pd.DataFrame, key: str, height: int | None = None, hint
 
     shown = frame.sort_values("start_local", ascending=False).reset_index(drop=True)
     event = st.dataframe(
-        runs_table(shown), hide_index=True, width="stretch", column_config=RUN_COLUMNS,
+        runs_table(shown), hide_index=True, width="stretch", column_config=run_columns(),
         on_select="rerun", selection_mode="single-row", key=key, height=height or "auto",
     )
     rows = getattr(getattr(event, "selection", None), "rows", None) or []
     if rows:
         routing.open_run(int(shown.iloc[rows[0]]["activity_id"]))
     if hint:
-        st.caption("Kliknij wiersz, żeby otworzyć szczegóły treningu.")
+        st.caption(i18n.tr(pl="Kliknij wiersz, żeby otworzyć szczegóły treningu.",
+                           en="Click a row to open the session details."))
 
 
 def download_brief(prefix: str) -> None:
@@ -288,20 +344,21 @@ def forecast_tiles(result: dict[str, Any], keys: list[str] | None = None, compac
     """Realistic time per distance with the 80% interval underneath (``compact``:
     the interval only, for a 1-row bento tile; pace and confidence go to the tooltip)."""
     if result.get("status") != "ok":
-        st.caption(result.get("reason", "Brak prognozy."))
+        st.caption(result.get("reason") or i18n.tr(pl="Brak prognozy.", en="No forecast."))
         return
+    sure = i18n.tr(pl="pewność", en="confidence")
     items = [(k, v) for k, v in result["distances"].items() if keys is None or k in keys]
     for column, (key, item) in zip(st.columns(len(items)), items):
         if compact:
-            column.metric(units.RACE_LABELS[key], units.fmt_time(item.realistic_s),
-                          help=f"{units.fmt_pace(item.pace)} · pewność {item.confidence}")
+            column.metric(race_label(key), units.fmt_time(item.realistic_s),
+                          help=f"{units.fmt_pace(item.pace)} · {sure} {confidence_label(item.confidence)}")
             column.markdown(f"<div class='tile-caption'>{units.fmt_time(item.low_s)}–{units.fmt_time(item.high_s)}"
                             "</div>", unsafe_allow_html=True)
             continue
-        column.metric(units.RACE_LABELS[key], units.fmt_time(item.realistic_s))
+        column.metric(race_label(key), units.fmt_time(item.realistic_s))
         column.caption(
             f"{units.fmt_time(item.low_s)}–{units.fmt_time(item.high_s)} · {units.fmt_pace(item.pace)}  \n"
-            f"pewność {item.confidence} {CONFIDENCE_ICON[item.confidence]}"
+            f"{sure} {confidence(item.confidence)}"
         )
 
 
@@ -328,6 +385,7 @@ def week_strip(active: dict[str, Any] | None, frame: pd.DataFrame, today: dt.dat
             cells.setdefault(row.day.date(), []).append(f"✓ {kind_label(row.kind)}  \n{row.distance_km:.1f} km")
     for offset, column in enumerate(st.columns(7)):
         day = monday + dt.timedelta(days=offset)
-        label = f"**{planning.WEEKDAYS[offset]} {day:%d.%m}**" if day == today else f"{planning.WEEKDAYS[offset]} {day:%d.%m}"
+        name = f"{i18n.weekdays()[offset]} {day:%d.%m}"
+        label = f"**{name}**" if day == today else name
         column.markdown(label)
         column.caption("  \n".join(cells.get(day, [])) or "—")

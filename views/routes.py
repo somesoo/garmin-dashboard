@@ -17,35 +17,38 @@ import routing
 import shell
 import theme as tz
 
-COLOUR_CHOICES = {
-    "pace_min_km": "tempo",
-    "hr": "tętno",
-    "elevation_m": "wysokość",
-    "speed_ms": "prędkość",
-}
-COLOUR_UNITS = {
-    "pace_min_km": "tempo /km",
-    "hr": "bpm",
-    "elevation_m": "m n.p.m.",
-    "speed_ms": "m/s",
-}
+def _colour_choices() -> dict[str, str]:
+    tr = i18n.tr
+    return {"pace_min_km": tr(pl="tempo", en="pace"), "hr": tr(pl="tętno", en="heart rate"),
+            "elevation_m": tr(pl="wysokość", en="elevation"), "speed_ms": tr(pl="prędkość", en="speed")}
+
+
+def _colour_units() -> dict[str, str]:
+    tr = i18n.tr
+    return {"pace_min_km": tr(pl="tempo /km", en="pace /km"), "hr": "bpm",
+            "elevation_m": tr(pl="m n.p.m.", en="m a.s.l."), "speed_ms": "m/s"}
 
 
 def render() -> None:
+    tr = i18n.tr
     routes = shell.table("routes")
     activities = shell.table("activities")
 
-    bento.header(i18n.page("trasy"), "Jeden ślad GPS naraz. Wszystkie ślady (mapa ciepła) są na globie w Atlasie.")
+    bento.header(i18n.page("trasy"), tr(pl="Jeden ślad GPS naraz. Wszystkie ślady (mapa ciepła) są na globie w Atlasie.",
+                                        en="One GPS track at a time. All tracks (the heat map) are on the Atlas globe."))
     if routes.empty:
-        st.caption(
-            "Brak śladów GPS. `etl/run.py` pobiera je automatycznie — jeden request "
-            "na aktywność, payload się nie zmienia, więc pobrany raz zostaje na zawsze."
-        )
+        st.caption(tr(
+            pl="Brak śladów GPS. `etl/run.py` pobiera je automatycznie — jeden request na aktywność, payload się nie "
+               "zmienia, więc pobrany raz zostaje na zawsze.",
+            en="No GPS tracks. `etl/run.py` fetches them automatically — one request per activity; the payload never "
+               "changes, so once fetched it stays for good.",
+        ))
         return
 
     catalogue = _catalogue(routes, activities)
     if catalogue.empty:
-        st.caption("Aktywności ze śladem nie mają metadanych — odśwież tabele.")
+        st.caption(tr(pl="Aktywności ze śladem nie mają metadanych — odśwież tabele.",
+                      en="The activities with a track have no metadata — rebuild the tables."))
         return
 
     _explorer(routes, catalogue)
@@ -87,24 +90,28 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
         if match is not None:
             st.session_state["routes_activity"] = match
 
+    tr = i18n.tr
+    choices, units = _colour_choices(), _colour_units()
     picker, colour, analysis = st.columns([3, 2, 1], vertical_alignment="bottom")
     with picker:
         chosen = st.selectbox(
-            "Aktywność", options, format_func=describe, key="routes_activity", label_visibility="collapsed"
+            tr(pl="Aktywność", en="Activity"), options, format_func=describe, key="routes_activity",
+            label_visibility="collapsed",
         )
     with colour:
         colour_by = st.segmented_control(
-            "Kolor śladu",
-            list(COLOUR_CHOICES),
+            tr(pl="Kolor śladu", en="Track colour"),
+            list(choices),
             default="pace_min_km",
-            format_func=lambda v: COLOUR_CHOICES[v],
+            format_func=lambda v: choices[v],
             label_visibility="collapsed",
         )
     colour_by = colour_by or "pace_min_km"
     runs = shell.table("run_sessions")
     # Runs have a richer page (splits, reps, segments); the button leads there.
     if not runs.empty and (runs["activity_id"] == chosen).any() and analysis.button(
-            "Analiza treningu", icon=":material/insights:", key="routes_to_run", width="stretch"):
+            tr(pl="Analiza treningu", en="Workout analysis"), icon=":material/insights:", key="routes_to_run",
+            width="stretch"):
         routing.open_run(int(chosen))
 
     track = routes[pd.to_numeric(routes["activity_id"], errors="coerce") == chosen].sort_values("seq")
@@ -113,46 +120,59 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
 
     if summary is not None:
         columns = bento.row(1, 1, 1, 1)
-        bento.stat(columns[0], "Dystans", f"{summary.get('distance_km', float('nan')):.2f} km", key="r_km")
-        bento.stat(columns[1], "Czas", f"{summary.get('duration_min', float('nan')):.0f} min", key="r_time")
-        bento.stat(columns[2], "Tempo", shell.pace(summary.get("pace_min_km")), key="r_pace")
-        bento.stat(columns[3], "Tętno śr.", f"{summary.get('avg_hr', float('nan')):.0f}", key="r_hr",
-                   note=f"load {summary.get('training_load', float('nan')):.0f}")
+        bento.stat(columns[0], tr(pl="Dystans", en="Distance"), f"{summary.get('distance_km', float('nan')):.2f} km",
+                   key="r_km")
+        bento.stat(columns[1], tr(pl="Czas", en="Time"), f"{summary.get('duration_min', float('nan')):.0f} min",
+                   key="r_time")
+        bento.stat(columns[2], tr(pl="Tempo", en="Pace"), shell.pace(summary.get("pace_min_km")), key="r_pace")
+        bento.stat(columns[3], tr(pl="Tętno śr.", en="Avg HR"), f"{summary.get('avg_hr', float('nan')):.0f}",
+                   key="r_hr", note=f"load {summary.get('training_load', float('nan')):.0f}")
 
     left, right = bento.row(2, 2)
     with left, bento.tile(
-        "Ślad", rows=3, key="route_map", caption=f"kolor: {COLOUR_UNITS[colour_by]} · skala przycięta do 5–95%",
-        how="Linia pod spodem trzyma kształt trasy, kolor niesie wartość — ślad zostaje czytelny też tam, gdzie "
-            "zawraca po sobie. Postój na światłach nie zjada zakresu. Tempo ma odwróconą rampę: ciemniej = szybciej.",
+        tr(pl="Ślad", en="Track"), rows=3, key="route_map",
+        caption=tr(pl=f"kolor: {units[colour_by]} · skala przycięta do 5–95%",
+                   en=f"colour: {units[colour_by]} · scale clipped to 5–95%"),
+        how=tr(pl="Linia pod spodem trzyma kształt trasy, kolor niesie wartość — ślad zostaje czytelny też tam, "
+                  "gdzie zawraca po sobie. Postój na światłach nie zjada zakresu. Tempo ma odwróconą rampę: "
+                  "ciemniej = szybciej.",
+               en="The line underneath holds the route's shape, the colour carries the value — the track stays "
+                  "readable even where it doubles back. A stop at the lights does not eat the range. Pace has a "
+                  "reversed ramp: darker = faster."),
     ) as t:
         t.chart(
             tz.route_map(
-                track, color=colour_by, color_title=COLOUR_UNITS[colour_by],
+                track, color=colour_by, color_title=units[colour_by],
                 reverse_scale=(colour_by == "pace_min_km"), pace=(colour_by == "pace_min_km"), height=560,
                 # Tied to the activity, not the metric: recolouring keeps the view.
                 uirevision=f"route-{int(chosen)}",
             ),
-            empty="Ta aktywność nie ma śladu GPS.", key=f"route_map_{int(chosen)}",
+            empty=tr(pl="Ta aktywność nie ma śladu GPS.", en="This activity has no GPS track."),
+            key=f"route_map_{int(chosen)}",
         )
     with right:
-        with bento.tile("Profil wysokości", key="route_profile") as t:
-            t.chart(tz.profile(track), empty="Brak danych wysokości.")
+        with bento.tile(tr(pl="Profil wysokości", en="Elevation profile"), key="route_profile") as t:
+            t.chart(tz.profile(track), empty=tr(pl="Brak danych wysokości.", en="No elevation data."))
         panels = []
         if "hr" in track.columns and track["hr"].notna().any():
-            panels.append({"title": "Tętno (bpm)", "series": {"tętno": "hr"}, "kind": "line"})
+            panels.append({"title": tr(pl="Tętno (bpm)", en="Heart rate (bpm)"),
+                           "series": {tr(pl="tętno", en="heart rate"): "hr"}, "kind": "line"})
         if "pace_min_km" in track.columns and track["pace_min_km"].notna().any():
-            panels.append({"title": "Tempo (/km)", "series": {"tempo": "pace_min_km"}, "kind": "line", "pace": True})
+            panels.append({"title": tr(pl="Tempo (/km)", en="Pace (/km)"),
+                           "series": {tr(pl="tempo", en="pace"): "pace_min_km"}, "kind": "line", "pace": True})
         if "cadence" in track.columns and track["cadence"].notna().any():
-            panels.append({"title": "Kadencja", "series": {"kadencja": "cadence"}, "kind": "line"})
-        with bento.tile("Przebieg wzdłuż dystansu", rows=2, key="route_streams",
-                        caption="Wyżej na panelu tempa = szybciej.") as t:
+            panels.append({"title": tr(pl="Kadencja", en="Cadence"),
+                           "series": {tr(pl="kadencja", en="cadence"): "cadence"}, "kind": "line"})
+        with bento.tile(tr(pl="Przebieg wzdłuż dystansu", en="Along the distance"), rows=2, key="route_streams",
+                        caption=tr(pl="Wyżej na panelu tempa = szybciej.", en="Higher on the pace panel = faster.")) as t:
             figure = tz.stacked_panels(track, "distance_km", panels, height=400) if panels else None
             if figure is not None:
-                figure.update_xaxes(title_text="dystans (km)", row=len(panels), col=1)
-            t.chart(figure, table=track.head(200), empty="Brak strumienia próbek.")
+                figure.update_xaxes(title_text=tr(pl="dystans (km)", en="distance (km)"), row=len(panels), col=1)
+            t.chart(figure, table=track.head(200), empty=tr(pl="Brak strumienia próbek.", en="No sample stream."))
 
-    with st.expander("Plik GPX"):
-        st.caption("Ślad jest już w tabeli `routes`; oryginalny GPX pobierzesz z API:")
+    with st.expander(tr(pl="Plik GPX", en="GPX file")):
+        st.caption(tr(pl="Ślad jest już w tabeli `routes`; oryginalny GPX pobierzesz z API:",
+                      en="The track is already in the `routes` table; the original GPX comes from the API:"))
         st.code(
             "from garminconnect import Garmin\n"
             "g = Garmin(); g.login('~/.garminconnect')\n"

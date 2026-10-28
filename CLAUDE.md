@@ -23,6 +23,7 @@ garmin-dashboard/
   insights.py        parser notatek z insights/
   glossary.py        słownik pojęć: co to jest, po co, jak czytać (pomoc na stronach)
   i18n.py            język interfejsu (pl/en): tr(pl=, en=), plural, miesiące, tytuły stron
+  glossary_en.py     angielski tekst słownika pojęć (te same klucze co glossary.TERMS)
   app.py             router (st.navigation) — bez logiki widoków
   routing.py         rejestr stron: przejście z widoku do widoku bez reloadu
   globe.py           opakowanie komponentu globu (dane + motyw + klik)
@@ -193,6 +194,16 @@ językach** — tekst, który ktoś czyta, idzie przez `i18n.tr(pl=..., en=...)`
 - W sesji trzymaj klucz, nie etykietę (`shell.WINDOWS`: `"90d"`, etykieta przez
   `format_func`), inaczej zmiana języka resetuje wybór.
 - `url_path` stron zostają polskie w obu językach — to adresy.
+- **Kody w danych zostają kodami.** `form_zone`, `quadrant`, `model`
+  (analytics), typ treningu, pewność, decyzja dnia, status celu, fazy planu
+  (`running/`) są zapisywane po polsku/ASCII i czytają je insighty SQL — widok
+  tłumaczy je przy wyświetlaniu (`rc.kind_label`, `rc.confidence`,
+  `rc.action_label`, `rc.race_label`, `rc.effort_label`…), nie zmieniaj ich
+  w hurtowni.
+- Słownik pojęć: polski w `glossary.TERMS`, angielski w `glossary_en.TERMS`;
+  czytaj przez `glossary.term(key)`. Nowe hasło = wpis w obu plikach (test).
+- Glob dostaje słowa przez `globe._text()`; `index.html` trzyma polskie
+  wartości domyślne dla `test.html`.
 - `i18n.BILINGUAL` to moduły już w pełni dwujęzyczne; `tests/test_i18n.py`
   oblewa polski literał poza `pl=` (docstringi i linie z `# i18n: key` — nazwy
   kolumn — są pominięte). Po przetłumaczeniu modułu dopisz go do listy.

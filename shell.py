@@ -174,25 +174,39 @@ def page_style(mode: str = "light") -> str:
     return style
 
 
-# Column formats for activity tables: raw floats ("130.3395") and seconds on
-# the start time are noise in a log you scan by eye. Keys are the column names
-# the views build; the labels are what the table header shows.
-def activity_columns() -> dict[str, Any]:
+# Activity tables: the warehouse field, its header in the interface language,
+# and its format. Raw floats ("130.3395") and seconds on the start time are
+# noise in a log you scan by eye.
+def activity_labels() -> dict[str, str]:
+    """Field -> table header; rename a frame with it, then pass activity_columns()."""
     tr = i18n.tr
-    text, number = st.column_config.TextColumn, st.column_config.NumberColumn
     return {
-        "kiedy": text(tr(pl="kiedy", en="when")),
-        "km": number("km", format="%.1f"),
-        "min": number("min", format="%.0f"),
-        "min/km": text(tr(pl="tempo /km", en="pace /km")),
-        "tętno": number(tr(pl="tętno", en="HR"), format="%.0f"),  # i18n: key
-        "tętno max": number(tr(pl="tętno max", en="max HR"), format="%.0f"),  # i18n: key
-        "load": number("load", format="%.0f"),
-        "TE tlenowy": number(tr(pl="TE tlenowy", en="aerobic TE"), format="%.1f"),
-        "TE beztlenowy": number(tr(pl="TE beztlenowy", en="anaerobic TE"), format="%.1f"),
-        "kcal": number("kcal", format="%.0f"),
-        "przewyższenie": number(tr(pl="przewyższenie", en="elevation gain"), format="%.0f m"),  # i18n: key
+        "start_local": tr(pl="kiedy", en="when"),
+        "sport": "sport",
+        "name": tr(pl="nazwa", en="name"),
+        "location": tr(pl="miejsce", en="place"),
+        "distance_km": "km",
+        "duration_min": "min",
+        "pace_min_km": tr(pl="tempo /km", en="pace /km"),
+        "avg_hr": tr(pl="tętno", en="HR"),
+        "max_hr": tr(pl="tętno max", en="max HR"),
+        "training_load": "load",
+        "te_aerobic": tr(pl="TE tlenowy", en="aerobic TE"),
+        "te_anaerobic": tr(pl="TE beztlenowy", en="anaerobic TE"),
+        "best_1k_s": tr(pl="najlepszy 1 km", en="best 1 km"),
+        "best_5k_s": tr(pl="najlepszy 5 km", en="best 5 km"),
+        "calories": "kcal",
+        "elevation_gain_m": tr(pl="przewyższenie", en="elevation gain"),
     }
+
+
+def activity_columns() -> dict[str, Any]:
+    number = st.column_config.NumberColumn
+    formats = {"distance_km": "%.1f", "duration_min": "%.0f", "avg_hr": "%.0f", "max_hr": "%.0f",
+               "training_load": "%.0f", "te_aerobic": "%.1f", "te_anaerobic": "%.1f", "calories": "%.0f",
+               "elevation_gain_m": "%.0f m"}
+    labels = activity_labels()
+    return {labels[field]: number(labels[field], format=fmt) for field, fmt in formats.items()}
 
 
 # The value kept in the session is the key, not the label: switching the

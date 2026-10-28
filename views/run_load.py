@@ -15,26 +15,35 @@ from views import run_common as rc
 
 
 def render() -> None:
+    tr = i18n.tr
     bento.header(
         i18n.page("obciazenie-biegowe"),
-        "Wskaźniki pomagają zdecydować, czy dołożyć, czy odpuścić — nie diagnozują przetrenowania ani kontuzji. "
-        "Ból, który zmienia sposób biegania, jest ważniejszy niż każdy wykres tutaj.",
+        tr(pl="Wskaźniki pomagają zdecydować, czy dołożyć, czy odpuścić — nie diagnozują przetrenowania ani "
+              "kontuzji. Ból, który zmienia sposób biegania, jest ważniejszy niż każdy wykres tutaj.",
+           en="The indicators help decide whether to add or back off — they do not diagnose overtraining or injury. "
+              "Pain that changes the way you run matters more than any chart here."),
     )
     frame = rc.guard()
     if frame is None:
         return
     weeks = shell.clip(sessions.weekly(frame), "week")
     if weeks.empty:
-        st.caption("Brak biegów w wybranym zakresie.")
+        st.caption(tr(pl="Brak biegów w wybranym zakresie.", en="No runs in the selected range."))
         return
 
     edge = shell.cutoff()
     info = sessions.gaps(frame, edge if edge is not None else frame["day"].min(), frame["day"].max())
     columns = bento.row(1, 1, 1, 1)
-    bento.stat(columns[0], "Dni z biegiem", f"{info['run_days']}", key="run_days", note="w wybranym zakresie")
-    bento.stat(columns[1], "Dni bez biegu", f"{info['rest_days']}", key="rest_days")
-    bento.stat(columns[2], "Najdłuższa przerwa", f"{info['longest_break']} dni", key="longest_break")
-    bento.stat(columns[3], "Od ostatniego biegu", f"{info['days_since_last']} dni", key="since_last")
+    def days(n: int) -> str:
+        return f"{n} {i18n.plural(n, pl=('dzień', 'dni', 'dni'), en=('day', 'days'))}"
+
+    bento.stat(columns[0], tr(pl="Dni z biegiem", en="Days with a run"), f"{info['run_days']}", key="run_days",
+               note=tr(pl="w wybranym zakresie", en="in the selected range"))
+    bento.stat(columns[1], tr(pl="Dni bez biegu", en="Days without a run"), f"{info['rest_days']}", key="rest_days")
+    bento.stat(columns[2], tr(pl="Najdłuższa przerwa", en="Longest break"), days(info["longest_break"]),
+               key="longest_break")
+    bento.stat(columns[3], tr(pl="Od ostatniego biegu", en="Since the last run"), days(info["days_since_last"]),
+               key="since_last")
 
     left, right = bento.row(2, 2)
     with left:
@@ -53,41 +62,57 @@ def render() -> None:
 def _volume(weeks: pd.DataFrame) -> None:
     change = weeks["km"].pct_change().replace([float("inf")], pd.NA)
     jumps = weeks[(change > 0.3) & (weeks["km"] >= 15)]
+    tr = i18n.tr
     with bento.tile(
-        "Kilometry i najdłuższy bieg", rows=2, key="load_volume",
-        caption=("skoki > 30%: " + ", ".join(jumps["iso_week"].tail(4))) if not jumps.empty else
-        "Długi bieg powinien rosnąć razem z objętością.",
-        how="Dwa panele na wspólnej osi czasu: objętość tygodnia (linia: średnia 4 tyg.) i najdłuższy bieg. "
-            "Skok samego długiego biegu przy płaskiej objętości to typowe ryzyko. Pojedynczy skok objętości po "
-            "lżejszym tygodniu jest normalny; seria skoków — nie.",
+        tr(pl="Kilometry i najdłuższy bieg", en="Kilometres and the longest run"), rows=2, key="load_volume",
+        caption=(tr(pl="skoki > 30%: ", en="jumps > 30%: ") + ", ".join(jumps["iso_week"].tail(4)))
+        if not jumps.empty else tr(pl="Długi bieg powinien rosnąć razem z objętością.",
+                                   en="The long run should grow together with volume."),
+        how=tr(pl="Dwa panele na wspólnej osi czasu: objętość tygodnia (linia: średnia 4 tyg.) i najdłuższy bieg. "
+                  "Skok samego długiego biegu przy płaskiej objętości to typowe ryzyko. Pojedynczy skok objętości "
+                  "po lżejszym tygodniu jest normalny; seria skoków — nie.",
+               en="Two panels on a shared time axis: weekly volume (line: 4-week average) and the longest run. "
+                  "A jump in the long run alone with flat volume is the typical risk. A single jump in volume after "
+                  "a lighter week is normal; a series of jumps is not."),
     ) as t:
         view = weeks.assign(km_4w=weeks["km"].rolling(4, min_periods=2).mean().round(1))
+        longest = tr(pl="najdłuższy", en="longest")
         figure = tz.stacked_panels(
             view, "week",
             [
-                {"title": "km / tydzień", "series": {"km": "km"}, "kind": "bar", "height": 1.3},
-                {"title": "najdłuższy bieg (km)", "series": {"najdłuższy": "long_km"}, "kind": "bar", "height": 0.8},
+                {"title": tr(pl="km / tydzień", en="km / week"), "series": {"km": "km"}, "kind": "bar",
+                 "height": 1.3},
+                {"title": tr(pl="najdłuższy bieg (km)", en="longest run (km)"), "series": {longest: "long_km"},
+                 "kind": "bar", "height": 0.8},
             ],
             height=400,
         )
         if figure is not None:
             # The 4-week mean reads better as a line over the bars than as a second bar.
             line = view.dropna(subset=["km_4w"])
-            figure.add_scatter(x=line["week"], y=line["km_4w"], mode="lines", name="średnia 4 tyg.",
+            mean = tr(pl="średnia 4 tyg.", en="4-week mean")
+            figure.add_scatter(x=line["week"], y=line["km_4w"], mode="lines", name=mean,
                                line=dict(width=2.2, color=tz.tokens()["series"][1]), showlegend=False,
-                               hovertemplate="%{y:.1f} km<extra>średnia 4 tyg.</extra>", row=1, col=1)
+                               hovertemplate=f"%{{y:.1f}} km<extra>{mean}</extra>", row=1, col=1)
         t.chart(figure, table=view[["iso_week", "km", "km_4w", "long_km", "runs", "hours"]]
                 .sort_values("iso_week", ascending=False))
 
 
 def _intensity(weeks: pd.DataFrame) -> None:
     recent = weeks.tail(4)
+    tr = i18n.tr
+    hard = f"<b>{recent['hard'].mean():.1f}</b>"
     with bento.tile(
-        "Balans: % kilometrów spokojnie", key="load_intensity", terms=["quality_sessions", "run_kind"],
-        caption=f"pas 75–80% · mocnych sesji: <b>{recent['hard'].mean():.1f}</b>/tydz. (4 tyg.)",
-        how="Udział spokojnych kilometrów w tygodniu. Strefy tętna (wszystkie sporty) są na stronie Fizjologia.",
+        tr(pl="Balans: % kilometrów spokojnie", en="Balance: % of kilometres easy"), key="load_intensity",
+        terms=["quality_sessions", "run_kind"],
+        caption=tr(pl=f"pas 75–80% · mocnych sesji: {hard}/tydz. (4 tyg.)",
+                   en=f"band 75–80% · quality sessions: {hard}/week (4 weeks)"),
+        how=tr(pl="Udział spokojnych kilometrów w tygodniu. Strefy tętna (wszystkie sporty) są na stronie Fizjologia.",
+               en="The share of easy kilometres in the week. Heart rate zones (all sports) are on the Physiology "
+                  "page."),
     ) as t:
-        figure = tz.timeseries(weeks, "week", {"% spokojnie": "easy_km_pct"}, markers=True, end_labels=True)
+        figure = tz.timeseries(weeks, "week", {tr(pl="% spokojnie", en="% easy"): "easy_km_pct"}, markers=True,
+                               end_labels=True)
         if figure is not None:
             tz.band(figure, 75, 80)
         t.chart(figure, table=weeks[["iso_week", "hard", "easy_km_pct"]].sort_values("iso_week", ascending=False))
@@ -95,17 +120,23 @@ def _intensity(weeks: pd.DataFrame) -> None:
 
 def _ratio(frame: pd.DataFrame) -> None:
     ratio = shell.clip(sessions.km_ratio(frame))
+    tr = i18n.tr
     with bento.tile(
-        "Tempo przyrostu (km 7 d / 28 d)", key="load_ratio", terms=["run_ratio"],
-        caption="Pas 0,8–1,3 to stopniowy przyrost.",
-        how="Przy średniej z 28 dni poniżej 5 km/tydz. iloraz nie jest liczony — po przerwie każdy bieg dawałby "
-            "„skok”. Obciążenie wszystkich sportów jest na stronie Forma.",
+        tr(pl="Tempo przyrostu (km 7 d / 28 d)", en="Rate of increase (km 7 d / 28 d)"), key="load_ratio",
+        terms=["run_ratio"],
+        caption=tr(pl="Pas 0,8–1,3 to stopniowy przyrost.", en="The 0.8–1.3 band is a gradual increase."),
+        how=tr(pl="Przy średniej z 28 dni poniżej 5 km/tydz. iloraz nie jest liczony — po przerwie każdy bieg "
+                  "dawałby „skok”. Obciążenie wszystkich sportów jest na stronie Forma.",
+               en="With a 28-day average below 5 km/week the ratio is not computed — after a break every run "
+                  "would be a “jump”. Load across all sports is on the Form page."),
     ) as t:
         with t.header:
             if st.button("", icon=":material/arrow_forward:", type="tertiary", key="load_to_form",
-                         help="Obciążenie wszystkich sportów (Forma)"):
+                         help=tr(pl="Obciążenie wszystkich sportów (Forma)", en="Load across all sports (Form)")):
                 routing.goto("forma")
-        figure = tz.timeseries(ratio, "day", {"iloraz": "ratio"}, y_title="iloraz", end_labels=True, decimals=2)
+        ratio_label = tr(pl="iloraz", en="ratio")
+        figure = tz.timeseries(ratio, "day", {ratio_label: "ratio"}, y_title=ratio_label, end_labels=True,
+                               decimals=2)
         if figure is not None:
             tz.band(figure, 0.8, 1.3)
             tz.threshold(figure, 1.5, label="1.5")
@@ -119,39 +150,50 @@ def _breaks(frame: pd.DataFrame, edge) -> None:
     breaks = breaks[(breaks["dni"] >= 10)]
     if edge is not None:
         breaks = breaks[breaks["do"] >= edge]
+    tr = i18n.tr
     with bento.tile(
-        "Przerwy ≥ 10 dni", rows=2, key="breaks",
-        caption=f"Typowy odstęp między biegami: {gaps.median():.0f} dni." if len(gaps) else None,
-        how="Po przerwie ≥ 10 dni dobrze wrócić od ~70% wcześniejszej objętości.",
+        tr(pl="Przerwy ≥ 10 dni", en="Breaks ≥ 10 days"), rows=2, key="breaks",
+        caption=tr(pl=f"Typowy odstęp między biegami: {gaps.median():.0f} dni.",
+                   en=f"Typical gap between runs: {gaps.median():.0f} days.") if len(gaps) else None,
+        how=tr(pl="Po przerwie ≥ 10 dni dobrze wrócić od ~70% wcześniejszej objętości.",
+               en="After a break of ≥ 10 days it is good to return at ~70% of the earlier volume."),
     ) as t:
         if breaks.empty:
-            st.caption("Bez przerw ≥ 10 dni w tym zakresie.")
+            st.caption(tr(pl="Bez przerw ≥ 10 dni w tym zakresie.", en="No breaks of ≥ 10 days in this range."))
             return
+        breaks = breaks.sort_values("do", ascending=False)
         t.table(
             pd.DataFrame({
-                "ostatni bieg przed": pd.to_datetime(breaks["od"]).dt.strftime("%d.%m.%Y"),
-                "pierwszy po": pd.to_datetime(breaks["do"]).dt.strftime("%d.%m.%Y"),
-                "dni przerwy": (breaks["dni"] - 1).astype(int),
-            }).sort_values("pierwszy po", ascending=False),
+                tr(pl="ostatni bieg przed", en="last run before"): pd.to_datetime(breaks["od"]).dt.strftime("%d.%m.%Y"),
+                tr(pl="pierwszy po", en="first after"): pd.to_datetime(breaks["do"]).dt.strftime("%d.%m.%Y"),
+                tr(pl="dni przerwy", en="days off"): (breaks["dni"] - 1).astype(int),
+            }),
         )
 
 
 def _recovery() -> None:
     daily = shell.clip(shell.daily())
     columns = [c for c in ("readiness", "hrv_deviation", "sleep_h") if c in daily.columns]
+    tr = i18n.tr
     with bento.tile(
-        "Regeneracja w tle", rows=2, key="load_recovery", terms=["readiness", "hrv", "deviation"],
-        caption="Obciążenie czytane razem z odpowiedzią organizmu.",
-        how="Gotowość Garmina i HRV względem własnej średniej 7 d. Pełna analiza: strona Regeneracja.",
+        tr(pl="Regeneracja w tle", en="Recovery in the background"), rows=2, key="load_recovery",
+        terms=["readiness", "hrv", "deviation"],
+        caption=tr(pl="Obciążenie czytane razem z odpowiedzią organizmu.",
+                   en="Load read together with the body's response."),
+        how=tr(pl="Gotowość Garmina i HRV względem własnej średniej 7 d. Pełna analiza: strona Regeneracja.",
+               en="Garmin readiness and HRV against your own 7-day average. The full analysis: the Recovery page."),
     ) as t:
         if daily.empty or not columns or daily[columns].notna().sum().max() < 7:
-            st.caption("Brak danych o regeneracji (gotowość, HRV, sen) w tym zakresie.")
+            st.caption(tr(pl="Brak danych o regeneracji (gotowość, HRV, sen) w tym zakresie.",
+                          en="No recovery data (readiness, HRV, sleep) in this range."))
             return
         t.chart(tz.stacked_panels(
             daily, "day",
             [
-                {"title": "gotowość treningowa", "series": {"gotowość": "readiness"}, "kind": "line"},
-                {"title": "HRV — odchylenie od średniej 7 d", "series": {"HRV Δ": "hrv_deviation"}, "kind": "bar"},
+                {"title": tr(pl="gotowość treningowa", en="training readiness"),
+                 "series": {tr(pl="gotowość", en="readiness"): "readiness"}, "kind": "line"},
+                {"title": tr(pl="HRV — odchylenie od średniej 7 d", en="HRV — deviation from the 7-day mean"),
+                 "series": {"HRV Δ": "hrv_deviation"}, "kind": "bar"},
             ],
             height=360,
         ), table=daily[["day", "readiness", "hrv_deviation"]].tail(40))

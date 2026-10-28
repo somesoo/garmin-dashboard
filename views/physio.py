@@ -15,7 +15,9 @@ import theme as tz
 
 
 def render() -> None:
-    bento.header(i18n.page("fizjologia"), "Wszystko tutaj liczy się z samych treningów — bez testu na bieżni i bez laboratorium.")
+    bento.header(i18n.page("fizjologia"), i18n.tr(
+        pl="Wszystko tutaj liczy się z samych treningów — bez testu na bieżni i bez laboratorium.",
+        en="Everything here is computed from the training alone — no treadmill test, no laboratory."))
     table = shell.table("critical_speed")
     fitted = table.dropna(subset=["cs_ms"]) if not table.empty else table
     _cs_kpis(fitted)
@@ -41,27 +43,38 @@ def _cs_kpis(fitted: pd.DataFrame) -> None:
         for index, column in enumerate(columns):
             bento.empty_stat(column, f"cs_{index}")
         return
+    tr = i18n.tr
     last, first = fitted.tail(1).iloc[0], fitted.head(1).iloc[0]
-    bento.stat(columns[0], "CS — prędkość krytyczna", f"{last['cs_ms']:.2f} m/s", key="cs",
-               delta=f"{last['cs_ms'] - first['cs_ms']:+.2f}", help=glossary.short("cs"))
-    bento.stat(columns[1], "CS jako tempo", shell.pace(last["cs_pace_min_km"]), key="cs_pace")
-    bento.stat(columns[2], "D′ — zapas beztlenowy", f"{last['d_prime_m']:.0f} m", key="d_prime",
-               help=glossary.short("d_prime"))
-    bento.stat(columns[3], "Prognoza 5 km (model CS)", shell.clock(last.get("pred_5k_s")), key="cs_5k",
-               note="potencjał z odcinków — zwykle optymistyczny")
+    bento.stat(columns[0], tr(pl="CS — prędkość krytyczna", en="CS — critical speed"), f"{last['cs_ms']:.2f} m/s",
+               key="cs", delta=f"{last['cs_ms'] - first['cs_ms']:+.2f}", help=glossary.short("cs"))
+    bento.stat(columns[1], tr(pl="CS jako tempo", en="CS as pace"), shell.pace(last["cs_pace_min_km"]), key="cs_pace")
+    bento.stat(columns[2], tr(pl="D′ — zapas beztlenowy", en="D′ — anaerobic reserve"), f"{last['d_prime_m']:.0f} m",
+               key="d_prime", help=glossary.short("d_prime"))
+    bento.stat(columns[3], tr(pl="Prognoza 5 km (model CS)", en="5 km forecast (CS model)"),
+               shell.clock(last.get("pred_5k_s")), key="cs_5k",
+               note=tr(pl="potencjał z odcinków — zwykle optymistyczny",
+                       en="potential from stretches — usually optimistic"))
 
 
 def _critical_speed(table: pd.DataFrame, fitted: pd.DataFrame) -> None:
-    caption = (f"R² ostatniego dopasowania <b>{fitted['r2'].iloc[-1]}</b> · okno 90 dni"
+    tr = i18n.tr
+    caption = (tr(pl=f"R² ostatniego dopasowania <b>{fitted['r2'].iloc[-1]}</b> · okno 90 dni",
+                  en=f"R² of the latest fit <b>{fitted['r2'].iloc[-1]}</b> · 90-day window")
                if not fitted.empty else None)
     with bento.tile(
-        "Prędkość krytyczna i D′", rows=2, key="cs", terms=["cs", "d_prime", "r2"], caption=caption,
-        how="Model `d = CS·t + D′` dopasowany do najlepszych odcinków 1 km / 1 mila / 5 km z 90 dni. "
-            "CS i D′ zwykle idą w przeciwnych kierunkach: blok tlenowy podnosi CS i obniża D′. Jeśli rosną "
-            "oba, sprawdź kolumnę `distances` w danych — okno z dwoma dystansami to prosta przez dwa punkty.",
+        tr(pl="Prędkość krytyczna i D′", en="Critical speed and D′"), rows=2, key="cs", terms=["cs", "d_prime", "r2"],
+        caption=caption,
+        how=tr(pl="Model `d = CS·t + D′` dopasowany do najlepszych odcinków 1 km / 1 mila / 5 km z 90 dni. "
+                  "CS i D′ zwykle idą w przeciwnych kierunkach: blok tlenowy podnosi CS i obniża D′. Jeśli rosną "
+                  "oba, sprawdź kolumnę `distances` w danych — okno z dwoma dystansami to prosta przez dwa punkty.",
+               en="The model `d = CS·t + D′` fitted to the best 1 km / 1 mile / 5 km efforts of 90 days. CS and D′ "
+                  "usually move in opposite directions: an aerobic block raises CS and lowers D′. If both rise, "
+                  "check the `distances` column in the data — a window with two distances is a line through two "
+                  "points."),
     ) as t:
         if table.empty:
-            shell.missing("critical_speed", "Potrzebne biegi z co najmniej dwoma różnymi odcinkami.")
+            shell.missing("critical_speed", tr(pl="Potrzebne biegi z co najmniej dwoma różnymi odcinkami.",
+                                               en="Needs runs with at least two different efforts."))
             return
         t.chart(
             tz.stacked_panels(table, "day", [
@@ -74,9 +87,12 @@ def _critical_speed(table: pd.DataFrame, fitted: pd.DataFrame) -> None:
 
 def _hyperbola(fitted: pd.DataFrame) -> None:
     activities = shell.table("activities")
-    with bento.tile("Hiperbola wydolności", key="hyperbola", terms=["cs"],
-                    caption="Im dłuższy wysiłek, tym bliżej CS da się go utrzymać.",
-                    how="Punkty to twoje rekordy odcinków, linia to model dopasowany do nich.") as t:
+    tr = i18n.tr
+    with bento.tile(tr(pl="Hiperbola wydolności", en="Performance hyperbola"), key="hyperbola", terms=["cs"],
+                    caption=tr(pl="Im dłuższy wysiłek, tym bliżej CS da się go utrzymać.",
+                               en="The longer the effort, the closer to CS it can be held."),
+                    how=tr(pl="Punkty to twoje rekordy odcinków, linia to model dopasowany do nich.",
+                           en="Points are your best efforts, the line is the model fitted to them.")) as t:
         if fitted.empty:
             shell.missing("critical_speed")
             return
@@ -102,7 +118,7 @@ def _hyperbola_chart(t, last, activities) -> None:
         runs = activities[activities["sport"].astype(str).str.contains("running", na=False)]
         for column, metres, label in (
             ("best_1k_s", 1000, "1 km"),
-            ("best_mile_s", 1609, "1 mila"),
+            ("best_mile_s", 1609, i18n.tr(pl="1 mila", en="1 mile")),
             ("best_5k_s", 5000, "5 km"),
         ):
             if column in runs.columns:
@@ -118,7 +134,7 @@ def _hyperbola_chart(t, last, activities) -> None:
             textposition="top center",
             textfont=dict(size=11, color=tokens["ink_secondary"]),
             marker=dict(size=11, color=tokens["series"][1], line=dict(width=2, color=tokens["surface"])),
-            name="rekordy odcinków",
+            name=i18n.tr(pl="rekordy odcinków", en="best efforts"),
             hoverinfo="skip",
         )
     figure.add_hline(
@@ -131,16 +147,21 @@ def _hyperbola_chart(t, last, activities) -> None:
     )
     figure.update_layout(**tz.base_layout(legend=False, height=200, hover="closest"))
     # Log time: 1 km (~4 min) and 1 mile (~7 min) sit apart instead of on top of each other.
-    figure.update_xaxes(title_text="czas trwania (min)", type="log", tickvals=[1, 2, 5, 10, 20, 30, 60])
+    tr = i18n.tr
+    figure.update_xaxes(title_text=tr(pl="czas trwania (min)", en="duration (min)"), type="log",
+                        tickvals=[1, 2, 5, 10, 20, 30, 60])
     figure.update_yaxes(title_text="m/s")
+    distance, time, speed = tr(pl="dystans", en="distance"), tr(pl="czas", en="time"), tr(pl="prędkość m/s",
+                                                                                          en="speed m/s")
     t.chart(tz.style_axes(figure),
-            table=pd.DataFrame([{"dystans": p[2], "czas": p[3], "prędkość m/s": round(p[1], 2)} for p in points]))
+            table=pd.DataFrame([{distance: p[2], time: p[3], speed: round(p[1], 2)} for p in points]))
 
 
 def _riegel() -> None:
     riegel = shell.table("riegel")
-    with bento.tile("Wykładnik Riegela", key="riegel", terms=["riegel"],
-                    caption="Jak bardzo zwalniasz na dłuższych dystansach.") as t:
+    with bento.tile(i18n.tr(pl="Wykładnik Riegela", en="Riegel exponent"), key="riegel", terms=["riegel"],
+                    caption=i18n.tr(pl="Jak bardzo zwalniasz na dłuższych dystansach.",
+                                    en="How much you slow down over longer distances.")) as t:
         if riegel.empty:
             shell.missing("riegel")
             return
@@ -152,11 +173,15 @@ def _riegel() -> None:
 
 def _economy() -> None:
     efficiency = shell.table("efficiency")
+    tr = i18n.tr
     with bento.tile(
-        "Ekonomia biegu", key="economy", terms=["ef"],
-        caption="Ten sam wysiłek, coraz więcej prędkości? Liczy się mediana z 10 sesji.",
-        how="Rosnąca mediana przy tym samym tętnie to realny postęp tlenowy. Jeśli rośnie tylko dlatego, że "
-            "biegasz szybciej na wyższym tętnie — to nie postęp, tylko mocniejszy trening.",
+        tr(pl="Ekonomia biegu", en="Running economy"), key="economy", terms=["ef"],
+        caption=tr(pl="Ten sam wysiłek, coraz więcej prędkości? Liczy się mediana z 10 sesji.",
+                   en="The same effort, more and more speed? The 10-session median is what counts."),
+        how=tr(pl="Rosnąca mediana przy tym samym tętnie to realny postęp tlenowy. Jeśli rośnie tylko dlatego, że "
+                  "biegasz szybciej na wyższym tętnie — to nie postęp, tylko mocniejszy trening.",
+               en="A rising median at the same heart rate is real aerobic progress. If it rises only because you "
+                  "run faster at a higher heart rate — that is not progress, just harder training."),
     ) as t:
         if efficiency.empty:
             shell.missing("efficiency")
@@ -165,29 +190,32 @@ def _economy() -> None:
 
 
 def _economy_chart(t, efficiency) -> None:
+    tr = i18n.tr
     view = shell.clip(efficiency)
     tokens = tz.tokens()
     figure = go.Figure()
+    session = tr(pl="sesja", en="session")
     figure.add_scatter(
         x=view["day"],
         y=view["ef"],
         mode="markers",
-        name="sesja",
+        name=session,
         marker=dict(size=8, color=tz._alpha(tokens["series"][0], 0.45),
                     line=dict(width=2, color=tokens["surface"])),
-        hovertemplate="%{x|%Y-%m-%d}: %{y:.3f}<extra>sesja</extra>",
+        hovertemplate=f"%{{x|%Y-%m-%d}}: %{{y:.3f}}<extra>{session}</extra>",
     )
     if "ef_roll10" in view.columns:
+        median = tr(pl="mediana 10 sesji", en="10-session median")
         figure.add_scatter(
             x=view["day"],
             y=view["ef_roll10"],
             mode="lines",
-            name="mediana 10 sesji",
+            name=median,
             line=dict(width=2.4, color=tokens["series"][0]),
-            hovertemplate="%{y:.3f}<extra>mediana 10</extra>",
+            hovertemplate=f"%{{y:.3f}}<extra>{median}</extra>",
         )
     figure.update_layout(**tz.base_layout(legend=False, height=200, hover="closest"))
-    figure.update_yaxes(title_text="m / uderzenie")
+    figure.update_yaxes(title_text=tr(pl="m / uderzenie", en="m / beat"))
     t.chart(tz.local_dates(tz.style_axes(figure), view["day"]),
             table=view[["day", "distance_km", "avg_hr", "ef", "ef_roll10"]].tail(30))
 
@@ -198,28 +226,44 @@ def _zones() -> None:
     if not view.empty:
         view["week"] = pd.to_datetime(view["iso_week"] + "-1", format="%G-W%V-%u", errors="coerce")
         view = shell.clip(view.dropna(subset=["week"]), "week")
-    caption = (" · ".join(f"{name} ×{count}" for name, count in view["model"].value_counts().items())
+    tr = i18n.tr
+    models = _model_labels()
+    caption = (" · ".join(f"{models.get(name, name)} ×{count}" for name, count in view["model"].value_counts().items())
                if not view.empty else None)
     with bento.tile(
-        "Rozkład intensywności", key="zones", terms=["intensity", "hr_zones"], caption=caption,
-        how="Udział czasu tygodniowo: łatwo (strefy 1–2), środek (3), mocno (4–5). Model spolaryzowany to dużo "
-            "niebieskiego, trochę pomarańczowego i mało szarego pośrodku. Etykieta modelu to reguła opisowa "
-            "(≥70% łatwo, ≥10% mocno, <15% w środku), nie opublikowany indeks.",
+        tr(pl="Rozkład intensywności", en="Intensity distribution"), key="zones", terms=["intensity", "hr_zones"],
+        caption=caption,
+        how=tr(pl="Udział czasu tygodniowo: łatwo (strefy 1–2), środek (3), mocno (4–5). Model spolaryzowany to dużo "
+                  "niebieskiego, trochę pomarańczowego i mało szarego pośrodku. Etykieta modelu to reguła opisowa "
+                  "(≥70% łatwo, ≥10% mocno, <15% w środku), nie opublikowany indeks.",
+               en="Share of time per week: easy (zones 1–2), middle (3), hard (4–5). A polarised model is lots of "
+                  "blue, some orange and little grey in the middle. The model label is a descriptive rule (≥70% "
+                  "easy, ≥10% hard, <15% in the middle), not a published index."),
     ) as t:
         if view.empty:
-            st.caption("Brak treningów z tętnem w tym zakresie.")
+            st.caption(tr(pl="Brak treningów z tętnem w tym zakresie.", en="No sessions with heart rate in this range."))
             return
         colors = tz.intensity_colors()
         t.chart(
             tz.stacked(view, "week", ["easy_pct", "middle_pct", "hard_pct"],
-                       {"easy_pct": "łatwo", "middle_pct": "środek", "hard_pct": "mocno"}, y_title="% czasu",
+                       {"easy_pct": tr(pl="łatwo", en="easy"), "middle_pct": tr(pl="środek", en="middle"),
+                        "hard_pct": tr(pl="mocno", en="hard")}, y_title=tr(pl="% czasu", en="% of time"),
                        colors={"easy_pct": colors["easy"], "middle_pct": colors["middle"], "hard_pct": colors["hard"]}),
             table=view[["iso_week", "total_min", "easy_pct", "middle_pct", "hard_pct", "model"]]
             .sort_values("iso_week", ascending=False).head(25),
         )
 
 
+def _model_labels() -> dict[str, str]:
+    """Display names of the codes analytics.intensity_distribution stores in ``model``."""
+    tr = i18n.tr
+    return {"spolaryzowany": tr(pl="spolaryzowany", en="polarised"), "piramidalny": tr(pl="piramidalny", en="pyramidal"),
+            "progowy": tr(pl="progowy", en="threshold"),
+            "wysokointensywny": tr(pl="wysokointensywny", en="high-intensity"), "mieszany": tr(pl="mieszany", en="mixed")}
+
+
 def _predictions() -> None:
+    tr = i18n.tr
     frame = shell.daily()
     columns = [c for c in ("race_5k_s", "race_10k_s", "race_hm_s", "race_marathon_s") if c in frame.columns]
     if not columns:
@@ -228,15 +272,16 @@ def _predictions() -> None:
     labels = {
         "race_5k_s": "5 km",
         "race_10k_s": "10 km",
-        "race_hm_s": "półmaraton",
-        "race_marathon_s": "maraton",
+        "race_hm_s": tr(pl="półmaraton", en="half marathon"),
+        "race_marathon_s": tr(pl="maraton", en="marathon"),
     }
     present = [c for c in columns if pd.to_numeric(view[c], errors="coerce").notna().any()]
     if not present:
         return
-    with bento.tile("Prognozy Garmina", rows=2, key="garmin_predictions",
-                    caption="Dla porównania z naszą prognozą; zmiana względem początku zakresu.",
-                    how="W dół znaczy szybciej.") as t:
+    with bento.tile(tr(pl="Prognozy Garmina", en="Garmin's predictions"), rows=2, key="garmin_predictions",
+                    caption=tr(pl="Dla porównania z naszą prognozą; zmiana względem początku zakresu.",
+                               en="For comparison with our forecast; change against the start of the range."),
+                    how=tr(pl="W dół znaczy szybciej.", en="Down means faster.")) as t:
         _predictions_body(t, view, present, labels, frame)
 
 
@@ -259,8 +304,10 @@ def _predictions_body(t, view, present, labels, frame) -> None:
     cs_table = shell.table("critical_speed")
     model = cs_table.dropna(subset=["pred_5k_s"]).tail(1) if not cs_table.empty else pd.DataFrame()
     if not garmin.empty and not model.empty:
-        st.caption(f"5 km — model CS: **{shell.clock(float(model['pred_5k_s'].iloc[0]))}** · "
-                   f"Garmin: **{shell.clock(float(garmin.iloc[-1]))}** (model nie liczy zmęczenia na dystansie).")
+        ours, theirs = shell.clock(float(model["pred_5k_s"].iloc[0])), shell.clock(float(garmin.iloc[-1]))
+        st.caption(i18n.tr(
+            pl=f"5 km — model CS: **{ours}** · Garmin: **{theirs}** (model nie liczy zmęczenia na dystansie).",
+            en=f"5 km — CS model: **{ours}** · Garmin: **{theirs}** (the model ignores fatigue over the distance)."))
     if "race_5k_s" in view.columns:
         minutes = view[["day", "race_5k_s"]].copy()
         minutes["5 km"] = pd.to_numeric(minutes["race_5k_s"], errors="coerce") / 60

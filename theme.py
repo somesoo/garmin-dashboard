@@ -820,7 +820,7 @@ def show(
     *,
     table: pd.DataFrame | None = None,
     note: str | None = None,
-    empty: str = "Brak danych w tym zakresie.",
+    empty: str | None = None,
     key: str | None = None,
 ) -> None:
     """Render a figure with its table-view twin.
@@ -829,7 +829,7 @@ def show(
     read a value.
     """
     if fig is None:
-        st.caption(empty)
+        st.caption(empty or i18n.tr(pl="Brak danych w tym zakresie.", en="No data in this range."))
         return
     st.plotly_chart(fig, width="stretch", key=key, config={"displayModeBar": False})
     if note:

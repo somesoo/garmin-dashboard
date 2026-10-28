@@ -10,6 +10,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import glossary
+import glossary_en
 import i18n
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -17,7 +19,8 @@ POLISH = re.compile(r"[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]")
 
 
 def _untranslated(path: Path) -> list[str]:
-    """Polish string literals that are not the ``pl=`` side of a translation.
+    """Polish string literals that are not the Polish side of a translation
+    (``tr(pl=...)``, ``plural(pl=...)``, ``pick({"pl": ...})``).
 
     Docstrings are code documentation, not interface; a line marked
     ``# i18n: key`` holds an identifier (a column name), not text.
@@ -31,6 +34,10 @@ def _untranslated(path: Path) -> list[str]:
             for keyword in node.keywords:
                 if keyword.arg == "pl":
                     allowed.update(id(child) for child in ast.walk(keyword.value))
+        if isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values):
+                if isinstance(key, ast.Constant) and key.value == "pl":
+                    allowed.update(id(child) for child in ast.walk(value))
         if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             body = node.body
             if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
@@ -51,10 +58,25 @@ class Bilingual(unittest.TestCase):
     def test_no_empty_english(self):
         for name in i18n.BILINGUAL:
             for node in ast.walk(ast.parse((ROOT / name).read_text(encoding="utf-8"))):
-                if isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "tr":
+                name = getattr(node.func, "attr", None) or getattr(node.func, "id", None) if isinstance(node, ast.Call) \
+                    else None
+                if name == "tr":
                     for keyword in node.keywords:
                         if keyword.arg == "en" and isinstance(keyword.value, ast.Constant):
                             self.assertTrue(str(keyword.value.value).strip(), f"{name}:{node.lineno}")
+
+    def test_every_view_is_listed(self):
+        views = {f"views/{p.name}" for p in (ROOT / "views").glob("*.py") if p.name != "__init__.py"}
+        self.assertEqual(views - set(i18n.BILINGUAL), set())
+
+    def test_glossary_in_english(self):
+        self.assertEqual(set(glossary.TERMS), set(glossary_en.TERMS))
+        self.assertEqual({t.group for t in glossary.TERMS.values()}, set(glossary_en.GROUPS))
+        for key, item in glossary.TERMS.items():
+            name, what, why, read = glossary_en.TERMS[key]
+            self.assertTrue(name and what and why, key)
+            self.assertEqual(bool(item.read), bool(read), key)
+            self.assertIsNone(POLISH.search(" ".join((name, what, why, read))), key)
 
     def test_every_page_has_a_title(self):
         source = (ROOT / "app.py").read_text(encoding="utf-8")
