@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 import bento
+import routing
 import shell
 import theme as tz
 
@@ -48,6 +49,7 @@ def render() -> None:
     shown = activities[activities["sport"].isin(picked)] if picked else activities
 
     frame = shown.sort_values("start_local", ascending=False)
+    ids = pd.to_numeric(frame["activity_id"], errors="coerce").tolist()
     frame = frame[[c for c in COLUMNS if c in frame.columns]].copy()
     frame["start_local"] = pd.to_datetime(frame["start_local"]).dt.strftime("%d.%m.%Y %H:%M")
     if "pace_min_km" in frame.columns:
@@ -61,8 +63,30 @@ def render() -> None:
         columns={"najlepszy 1 km (s)": "najlepszy 1 km", "najlepszy 5 km (s)": "najlepszy 5 km"}
     )
     _charts(shown)
-    with bento.panel("Dziennik", key="activities_log", caption="Najnowsze na górze; tabelę można sortować."):
-        st.dataframe(frame, width="stretch", hide_index=True, height=440, column_config=shell.ACTIVITY_COLUMNS)
+    with bento.panel("Dziennik", key="activities_log",
+                     caption="Najnowsze na górze; tabelę można sortować. Kliknij wiersz, żeby otworzyć trasę."):
+        event = st.dataframe(frame, width="stretch", hide_index=True, height=440,
+                             column_config=shell.ACTIVITY_COLUMNS, on_select="rerun", selection_mode="single-row",
+                             key="activities_log_table")
+        rows = getattr(getattr(event, "selection", None), "rows", None) or []
+        if rows:
+            _open(ids[rows[0]])
+
+
+def _open(activity_id: float) -> None:
+    """The route page for anything with a GPS track; a run without one (treadmill) opens its analysis."""
+    if pd.isna(activity_id):
+        return
+    routes = shell.table("routes")
+    tracked = not routes.empty and (pd.to_numeric(routes["activity_id"], errors="coerce") == activity_id).any()
+    if tracked:
+        routing.open_activity(int(activity_id))
+        return
+    runs = shell.table("run_sessions")
+    if not runs.empty and (runs["activity_id"] == activity_id).any():
+        routing.open_run(int(activity_id))
+    else:
+        st.toast("Ta aktywność nie ma śladu GPS.")
 
 
 def _charts(shown: pd.DataFrame) -> None:

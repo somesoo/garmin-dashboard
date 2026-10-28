@@ -330,6 +330,11 @@ Jak to jest poskładane:
 - **Filtry nad globem**: *Kadr* (okolica / świat / miasta — `globe.place`
   dobiera zoom do kwantyli 4–96% śladów) i *Sport*. Strona *Trasy* nie ma już
   osobnej mapy gęstości — to jest ta mapa.
+- **Strona *Trasy* nie ma wpisu w menu** (`st.Page(..., visibility="hidden")`):
+  to szczegół jednej aktywności (mapa kolorowana metryką, profil, strumienie),
+  otwierany klikiem w wiersz Dziennika (*Aktywności*), w trening na globie
+  i przyciskiem „Mapa trasy” w *Treningu*; dla biegu ma powrót „Analiza
+  treningu”. Jedyny widok szczegółów dla sportów innych niż bieg.
 - **Zoom**: kółko myszy, pinch na touchpadzie (Chrome/Firefox: ctrl+wheel,
   Safari: `gesture*`), pinch dwoma palcami na ekranie dotykowym, dwuklik
   i przyciski + − ○; 1×–40000×. **Punkt pod kursorem zostaje pod kursorem**:

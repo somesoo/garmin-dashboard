@@ -57,7 +57,8 @@ PAGES = {
     "Przegląd": [
         st.Page(today.render, title="Dziś", icon=":material/today:", url_path="dzis", default=True),
         st.Page(atlas.render, title="Atlas", icon=":material/public:", url_path="atlas"),
-        st.Page(routes.render, title="Trasy", icon=":material/route:", url_path="trasy"),
+        # No menu entry: opened from the Dziennik, the Atlas globe and a run's "Mapa trasy".
+        st.Page(routes.render, title="Trasy", icon=":material/route:", url_path="trasy", visibility="hidden"),
         st.Page(activities.render, title="Aktywności", icon=":material/list_alt:", url_path="aktywnosci"),
     ],
     "Bieganie": [

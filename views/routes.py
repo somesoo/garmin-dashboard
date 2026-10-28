@@ -12,6 +12,7 @@ import pandas as pd
 import streamlit as st
 
 import bento
+import routing
 import shell
 import theme as tz
 
@@ -85,7 +86,7 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
         if match is not None:
             st.session_state["routes_activity"] = match
 
-    picker, colour = st.columns([3, 2], vertical_alignment="bottom")
+    picker, colour, analysis = st.columns([3, 2, 1], vertical_alignment="bottom")
     with picker:
         chosen = st.selectbox(
             "Aktywność", options, format_func=describe, key="routes_activity", label_visibility="collapsed"
@@ -99,6 +100,11 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
             label_visibility="collapsed",
         )
     colour_by = colour_by or "pace_min_km"
+    runs = shell.table("run_sessions")
+    # Runs have a richer page (splits, reps, segments); the button leads there.
+    if not runs.empty and (runs["activity_id"] == chosen).any() and analysis.button(
+            "Analiza treningu", icon=":material/insights:", key="routes_to_run", width="stretch"):
+        routing.open_run(int(chosen))
 
     track = routes[pd.to_numeric(routes["activity_id"], errors="coerce") == chosen].sort_values("seq")
     summary = catalogue[catalogue["activity_id"] == chosen]
