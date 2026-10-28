@@ -6,6 +6,7 @@ import pandas as pd
 
 import bento
 import glossary
+import i18n
 import shell
 import theme as tz
 
@@ -39,7 +40,7 @@ def render() -> None:
     feedback = row.get("readiness_feedback") if row is not None else None
 
     bento.header(
-        "Regeneracja",
+        i18n.page("regeneracja"),
         "HRV i tętno spoczynkowe mają sens wyłącznie względem własnej bazy. Zmiany pod liczbami: względem "
         "średniej z poprzednich 7 dni.",
     )

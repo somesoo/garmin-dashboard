@@ -7,6 +7,7 @@ import streamlit as st
 
 import bento
 import glossary
+import i18n
 import shell
 import theme as tz
 
@@ -17,7 +18,7 @@ def render() -> None:
     models = shell.models()
 
     bento.header(
-        "Forma",
+        i18n.page("forma"),
         "Model Banistera: każdy trening buduje wolną sprawność (CTL, 42 dni) i szybkie zmęczenie (ATL, 7 dni). "
         "Forma to ich różnica z dnia poprzedniego.",
     )

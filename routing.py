@@ -14,6 +14,8 @@ from typing import Any
 
 import streamlit as st
 
+import i18n
+
 _PAGES: dict[str, Any] = {}
 
 
@@ -33,7 +35,7 @@ def goto(url_path: str, **state: Any) -> None:
     """Switch to a page, leaving values behind for it in the session state."""
     target = page(url_path)
     if target is None:
-        st.warning(f"Nie znam strony „{url_path}”.")
+        st.warning(i18n.tr(pl=f"Nie znam strony „{url_path}”.", en=f"Unknown page “{url_path}”."))
         return
     for key, value in state.items():
         st.session_state[key] = value

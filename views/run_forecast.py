@@ -8,6 +8,7 @@ import streamlit as st
 
 import bento
 import glossary
+import i18n
 import routing
 import shell
 import theme as tz
@@ -19,7 +20,7 @@ def render() -> None:
     frame = rc.guard()
     result = rc.current_forecast() if frame is not None else {}
     vdot = f" Wydolność dziś: VDOT {result['vdot']:.1f}." if result.get("status") == "ok" else ""
-    bento.header("Prognoza wyników",
+    bento.header(i18n.page("prognoza"),
                  "Na jaki czas możesz dziś liczyć na każdym dystansie i jak bardzo tej liczbie ufać." + vdot)
     if frame is None:
         return
@@ -195,7 +196,7 @@ def _history_body(tile, history: pd.DataFrame, key: str) -> None:
     fig.update_layout(**tz.base_layout(legend=True, height=340))
     _minutes_axis(fig, pd.concat([minutes["low"], minutes["high"], minutes["garmin"]]))
     tile.chart(
-        tz.polish_dates(tz.style_axes(fig), minutes["day"]),
+        tz.local_dates(tz.style_axes(fig), minutes["day"]),
         table=view.assign(
             realistyczny=view["realistic_s"].map(units.fmt_time),
             od=view["low_s"].map(units.fmt_time), do=view["high_s"].map(units.fmt_time),

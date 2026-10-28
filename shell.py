@@ -20,6 +20,7 @@ import streamlit as st
 import config
 import db
 import glossary
+import i18n
 import routing
 import sync
 
@@ -174,22 +175,38 @@ def page_style(mode: str = "light") -> str:
 
 
 # Column formats for activity tables: raw floats ("130.3395") and seconds on
-# the start time are noise in a log you scan by eye.
-ACTIVITY_COLUMNS = {
-    "kiedy": st.column_config.TextColumn("kiedy"),
-    "km": st.column_config.NumberColumn("km", format="%.1f"),
-    "min": st.column_config.NumberColumn("min", format="%.0f"),
-    "min/km": st.column_config.TextColumn("tempo /km"),
-    "tętno": st.column_config.NumberColumn("tętno", format="%.0f"),
-    "tętno max": st.column_config.NumberColumn("tętno max", format="%.0f"),
-    "load": st.column_config.NumberColumn("load", format="%.0f"),
-    "TE tlenowy": st.column_config.NumberColumn("TE tlenowy", format="%.1f"),
-    "TE beztlenowy": st.column_config.NumberColumn("TE beztlenowy", format="%.1f"),
-    "kcal": st.column_config.NumberColumn("kcal", format="%.0f"),
-    "przewyższenie": st.column_config.NumberColumn("przewyższenie", format="%.0f m"),
-}
+# the start time are noise in a log you scan by eye. Keys are the column names
+# the views build; the labels are what the table header shows.
+def activity_columns() -> dict[str, Any]:
+    tr = i18n.tr
+    text, number = st.column_config.TextColumn, st.column_config.NumberColumn
+    return {
+        "kiedy": text(tr(pl="kiedy", en="when")),
+        "km": number("km", format="%.1f"),
+        "min": number("min", format="%.0f"),
+        "min/km": text(tr(pl="tempo /km", en="pace /km")),
+        "tętno": number(tr(pl="tętno", en="HR"), format="%.0f"),  # i18n: key
+        "tętno max": number(tr(pl="tętno max", en="max HR"), format="%.0f"),  # i18n: key
+        "load": number("load", format="%.0f"),
+        "TE tlenowy": number(tr(pl="TE tlenowy", en="aerobic TE"), format="%.1f"),
+        "TE beztlenowy": number(tr(pl="TE beztlenowy", en="anaerobic TE"), format="%.1f"),
+        "kcal": number("kcal", format="%.0f"),
+        "przewyższenie": number(tr(pl="przewyższenie", en="elevation gain"), format="%.0f m"),  # i18n: key
+    }
 
-WINDOWS = {"30 dni": 30, "90 dni": 90, "rok": 365, "wszystko": None}
+
+# The value kept in the session is the key, not the label: switching the
+# language must not reset the range.
+WINDOWS = {"30d": 30, "90d": 90, "365d": 365, "all": None}
+
+
+def _window_label(key: str) -> str:
+    return {
+        "30d": i18n.tr(pl="30 dni", en="30 days"),
+        "90d": i18n.tr(pl="90 dni", en="90 days"),
+        "365d": i18n.tr(pl="rok", en="year"),
+        "all": i18n.tr(pl="wszystko", en="all"),
+    }[key]
 
 
 @st.cache_data(show_spinner=False)
@@ -245,7 +262,7 @@ def daily() -> pd.DataFrame:
 
 def window_days() -> int | None:
     """The active time window, chosen once in the sidebar for every page."""
-    return WINDOWS.get(st.session_state.get("range_choice", "90 dni"))
+    return WINDOWS.get(st.session_state.get("range_choice", "90d"), 90)
 
 
 def cutoff() -> pd.Timestamp | None:
@@ -271,11 +288,25 @@ def clip(frame: pd.DataFrame, column: str = "day") -> pd.DataFrame:
 def range_picker() -> None:
     """The one global filter, rendered once in the sidebar."""
     st.sidebar.radio(
-        "Zakres",
+        i18n.tr(pl="Zakres", en="Range"),
         list(WINDOWS),
         index=1,
         key="range_choice",
+        format_func=_window_label,
         horizontal=True,
+    )
+
+
+def language_picker() -> None:
+    """Interface language, remembered for the next tab (i18n.py)."""
+    st.sidebar.segmented_control(
+        i18n.tr(pl="Język", en="Language"),
+        list(i18n.LANGS),
+        default=i18n.lang(),
+        key=i18n.KEY,
+        format_func=lambda code: code.upper(),
+        on_change=lambda: i18n.remember(st.session_state.get(i18n.KEY)),
+        label_visibility="collapsed",
     )
 
 
@@ -283,11 +314,17 @@ def footer() -> None:
     """Warehouse status, kept out of the canvas."""
     info = state()
     st.sidebar.divider()
+    days, activities, routes = (int(info.get(k, 0) or 0) for k in ("days", "activities", "routes"))
+    counts = " · ".join([
+        f"**{days}** {i18n.plural(days, pl=('dzień', 'dni', 'dni'), en=('day', 'days'))}",
+        f"**{activities}** "
+        f"{i18n.plural(activities, pl=('aktywność', 'aktywności', 'aktywności'), en=('activity', 'activities'))}",
+        f"**{routes}** {i18n.plural(routes, pl=('trasa', 'trasy', 'tras'), en=('route', 'routes'))}",
+    ])
     st.sidebar.caption(
-        f"**{info.get('days', 0)}** dni · **{info.get('activities', 0)}** aktywności · "
-        f"**{info.get('routes', 0)}** tras\n\n"
+        f"{counts}\n\n"
         f"{info.get('first_day')} → {info.get('last_day')}\n\n"
-        f"zbudowano: {info.get('built_at', '—')}"
+        + i18n.tr(pl="zbudowano", en="built") + f": {info.get('built_at', '—')}"
     )
     busy = sync.running()
     with st.sidebar:
@@ -313,21 +350,30 @@ def _pull(was_busy: bool) -> None:
         st.rerun()
     record = sync.last()
     if busy:
-        st.button("Pobieranie z Garmina…", icon=":material/sync:", width="stretch", disabled=True)
-        st.caption(f"od {_stamp(record.get('started_at'))} · strona odświeży się sama")
+        st.button(i18n.tr(pl="Pobieranie z Garmina…", en="Pulling from Garmin…"), icon=":material/sync:",
+                  width="stretch", disabled=True)
+        started = _stamp(record.get("started_at"))
+        st.caption(i18n.tr(pl=f"od {started} · strona odświeży się sama",
+                           en=f"since {started} · the page reloads on its own"))
         return
-    if st.button("Pobierz z Garmina", icon=":material/cloud_download:", width="stretch"):
+    if st.button(i18n.tr(pl="Pobierz z Garmina", en="Pull from Garmin"), icon=":material/cloud_download:",
+                 width="stretch"):
         sync.start()
         st.rerun()
     if record.get("code") == 2:
-        st.caption(":orange[Token Garmina wygasł] — zaloguj się raz hasłem: `.venv/bin/python etl/login.py`")
+        st.caption(i18n.tr(pl=":orange[Token Garmina wygasł] — zaloguj się raz hasłem:",
+                           en=":orange[The Garmin token has expired] — log in once with the password:")
+                   + " `.venv/bin/python etl/login.py`")
     elif record and record.get("code") != 0:
-        st.caption(":orange[Ostatnie pobranie nie powiodło się] — log w `data/fetch.log`")
+        st.caption(i18n.tr(pl=":orange[Ostatnie pobranie nie powiodło się] — log w",
+                           en=":orange[The last pull failed] — log in") + " `data/fetch.log`")
     hours = os.environ.get("GARMIN_AUTO_FETCH_H", "").strip()
-    note = f"pobrano: {_stamp(record.get('finished_at'))}"
+    finished = _stamp(record.get("finished_at"))
+    note = i18n.tr(pl=f"pobrano: {finished}", en=f"pulled: {finished}")
     upcoming = sync.next_due(float(hours)) if hours else None
     if upcoming is not None:
-        note += f" · automatycznie co {hours} h (następne ~{upcoming:%H:%M})"
+        note += i18n.tr(pl=f" · automatycznie co {hours} h (następne ~{upcoming:%H:%M})",
+                        en=f" · automatically every {hours} h (next ~{upcoming:%H:%M})")
     st.caption(note)
 
 
@@ -356,7 +402,7 @@ def explain(terms: tuple | list = (), how: str | None = None) -> None:
     if not terms and not how:
         return
 
-    with st.popover("Co to jest?", icon=":material/help_outline:", type="tertiary"):
+    with st.popover(i18n.tr(pl="Co to jest?", en="What is this?"), icon=":material/help_outline:", type="tertiary"):
         for index, key in enumerate(terms):
             if index:
                 st.divider()
@@ -364,10 +410,11 @@ def explain(terms: tuple | list = (), how: str | None = None) -> None:
         if how:
             if terms:
                 st.divider()
-            st.markdown(f"**Jak czytać wykres** — {how}")
+            st.markdown(f"**{i18n.tr(pl='Jak czytać wykres', en='How to read the chart')}** — {how}")
         target = routing.page("slownik")
         if target is not None:
-            st.page_link(target, label="Wszystkie pojęcia — Słownik", icon=":material/menu_book:")
+            st.page_link(target, label=i18n.tr(pl="Wszystkie pojęcia — Słownik", en="All terms — Glossary"),
+                         icon=":material/menu_book:")
 
 
 def metrics(row: pd.Series | None, previous: pd.Series | None, specs: list[tuple]) -> None:
@@ -405,7 +452,7 @@ def week_before(frame: pd.DataFrame) -> pd.Series | None:
 
 
 def missing(name: str, hint: str = "") -> None:
-    st.caption(f"Tabela `{name}` jest pusta. {hint}".strip())
+    st.caption(i18n.tr(pl=f"Tabela `{name}` jest pusta. {hint}", en=f"Table `{name}` is empty. {hint}").strip())
 
 
 def pace(minutes: float | None) -> str:
@@ -450,10 +497,12 @@ def has_data() -> bool:
 
 def no_data_screen() -> None:
     st.title("Garmin Dashboard")
-    st.warning(
-        "Brak danych. Uruchom `Dashboard.command` (macOS), `Dashboard.cmd` (Windows) albo "
-        "`.venv/bin/python etl/run.py` (Linux)."
-    )
+    st.warning(i18n.tr(
+        pl="Brak danych. Uruchom `Dashboard.command` (macOS), `Dashboard.cmd` (Windows) albo "
+           "`.venv/bin/python etl/run.py` (Linux).",
+        en="No data yet. Run `Dashboard.command` (macOS), `Dashboard.cmd` (Windows) or "
+           "`.venv/bin/python etl/run.py` (Linux).",
+    ))
     st.stop()
 
 

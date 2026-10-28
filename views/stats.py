@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import bento
+import i18n
 import shell
 import theme as tz
 
@@ -23,7 +24,7 @@ WEEKDAYS = {
 
 def render() -> None:
     bento.header(
-        "Statystyka",
+        i18n.page("statystyka"),
         "Testów są tu setki, więc samo p nic nie znaczy: „istotne” znaczy zawsze q < 0,05 po kontroli FDR "
         "(Benjamini-Hochberg).",
     )

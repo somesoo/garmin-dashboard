@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT))
 
 import streamlit as st  # noqa: E402
 
+import i18n  # noqa: E402
 import routing  # noqa: E402
 import shell  # noqa: E402
 import theme  # noqa: E402
@@ -53,38 +54,43 @@ st.markdown(shell.page_style(theme.mode()), unsafe_allow_html=True)
 if not shell.has_data():
     shell.no_data_screen()
 
+
+def _page(render, url_path: str, icon: str, **kwargs) -> st.Page:
+    """A menu entry; its title is the page's title in the current language."""
+    return st.Page(render, title=i18n.page(url_path), icon=f":material/{icon}:", url_path=url_path, **kwargs)
+
+
 PAGES = {
-    "Przegląd": [
-        st.Page(today.render, title="Dziś", icon=":material/today:", url_path="dzis", default=True),
-        st.Page(atlas.render, title="Atlas", icon=":material/public:", url_path="atlas"),
+    i18n.group("overview"): [
+        _page(today.render, "dzis", "today", default=True),
+        _page(atlas.render, "atlas", "public"),
         # No menu entry: opened from the Dziennik, the Atlas globe and a run's "Mapa trasy".
-        st.Page(routes.render, title="Trasy", icon=":material/route:", url_path="trasy", visibility="hidden"),
-        st.Page(activities.render, title="Aktywności", icon=":material/list_alt:", url_path="aktywnosci"),
+        _page(routes.render, "trasy", "route", visibility="hidden"),
+        _page(activities.render, "aktywnosci", "list_alt"),
     ],
-    "Bieganie": [
-        st.Page(run_overview.render, title="Bieganie", icon=":material/directions_run:", url_path="bieganie"),
-        st.Page(run_forecast.render, title="Prognoza wyników", icon=":material/timer:", url_path="prognoza"),
-        st.Page(run_plan.render, title="Plan treningowy", icon=":material/calendar_month:", url_path="plan"),
-        st.Page(run_races.render, title="Zawody i cele", icon=":material/flag:", url_path="zawody"),
-        st.Page(run_session.render, title="Trening", icon=":material/insights:", url_path="bieg"),
-        st.Page(run_segments.render, title="Segmenty", icon=":material/conversion_path:", url_path="segmenty"),
-        st.Page(run_load.render, title="Obciążenie biegowe", icon=":material/stacked_bar_chart:",
-                url_path="obciazenie-biegowe"),
+    i18n.group("running"): [
+        _page(run_overview.render, "bieganie", "directions_run"),
+        _page(run_forecast.render, "prognoza", "timer"),
+        _page(run_plan.render, "plan", "calendar_month"),
+        _page(run_races.render, "zawody", "flag"),
+        _page(run_session.render, "bieg", "insights"),
+        _page(run_segments.render, "segmenty", "conversion_path"),
+        _page(run_load.render, "obciazenie-biegowe", "stacked_bar_chart"),
     ],
-    "Ciało": [
-        st.Page(recovery.render, title="Regeneracja", icon=":material/monitor_heart:", url_path="regeneracja"),
-        st.Page(sleep.render, title="Rytm i sen", icon=":material/bedtime:", url_path="sen"),
-        st.Page(trends.render, title="Trendy", icon=":material/trending_up:", url_path="trendy"),
+    i18n.group("body"): [
+        _page(recovery.render, "regeneracja", "monitor_heart"),
+        _page(sleep.render, "sen", "bedtime"),
+        _page(trends.render, "trendy", "trending_up"),
     ],
-    "Trening": [
-        st.Page(form.render, title="Forma", icon=":material/bolt:", url_path="forma"),
-        st.Page(physio.render, title="Fizjologia", icon=":material/speed:", url_path="fizjologia"),
+    i18n.group("training"): [
+        _page(form.render, "forma", "bolt"),
+        _page(physio.render, "fizjologia", "speed"),
     ],
-    "Analiza": [
-        st.Page(stats.render, title="Statystyka", icon=":material/science:", url_path="statystyka"),
-        st.Page(notebook.insights, title="Insights", icon=":material/lightbulb:", url_path="insights"),
-        st.Page(notebook.sql, title="SQL", icon=":material/terminal:", url_path="sql"),
-        st.Page(reference.render, title="Słownik", icon=":material/menu_book:", url_path="slownik"),
+    i18n.group("analysis"): [
+        _page(stats.render, "statystyka", "science"),
+        _page(notebook.insights, "insights", "lightbulb"),
+        _page(notebook.sql, "sql", "terminal"),
+        _page(reference.render, "slownik", "menu_book"),
     ],
 }
 
@@ -95,5 +101,6 @@ page = st.navigation(PAGES, position="sidebar", expanded=True)
 
 shell.range_picker()
 shell.footer()
+shell.language_picker()
 
 page.run()

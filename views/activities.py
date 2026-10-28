@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 import bento
+import i18n
 import routing
 import shell
 import theme as tz
@@ -32,7 +33,7 @@ COLUMNS = {
 
 def render() -> None:
     activities = shell.clip(shell.table("activities"))
-    bento.header("Aktywności", "Wszystkie treningi w wybranym zakresie, każdy sport.")
+    bento.header(i18n.page("aktywnosci"), "Wszystkie treningi w wybranym zakresie, każdy sport.")
     if activities.empty:
         st.caption("Brak aktywności w tym zakresie.")
         return
@@ -66,7 +67,7 @@ def render() -> None:
     with bento.panel("Dziennik", key="activities_log",
                      caption="Najnowsze na górze; tabelę można sortować. Kliknij wiersz, żeby otworzyć trasę."):
         event = st.dataframe(frame, width="stretch", hide_index=True, height=440,
-                             column_config=shell.ACTIVITY_COLUMNS, on_select="rerun", selection_mode="single-row",
+                             column_config=shell.activity_columns(), on_select="rerun", selection_mode="single-row",
                              key="activities_log_table")
         rows = getattr(getattr(event, "selection", None), "rows", None) or []
         if rows:

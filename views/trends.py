@@ -7,6 +7,7 @@ import streamlit as st
 
 import bento
 import glossary
+import i18n
 import shell
 import theme as tz
 
@@ -14,7 +15,7 @@ import theme as tz
 def render() -> None:
     daily = shell.daily()
     view = shell.clip(daily)
-    bento.header("Trendy", "Metryki, które zmieniają się w skali miesięcy — dzień do dnia nic tu nie znaczy.")
+    bento.header(i18n.page("trendy"), "Metryki, które zmieniają się w skali miesięcy — dzień do dnia nic tu nie znaczy.")
     bento.kpis(shell.latest_day(), shell.week_before(daily), [
         ("vo2max", "VO2max", ""),
         ("sleep_h", "Sen", "h"),

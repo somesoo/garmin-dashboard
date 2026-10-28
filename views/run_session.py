@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 import bento
+import i18n
 import routing
 import shell
 import theme as tz
@@ -23,7 +24,7 @@ SEGMENT_LABELS = {
 
 
 def render() -> None:
-    bento.header("Trening", "Jeden bieg w szczegółach: splity, przebieg, strefy, struktura i porównanie z podobnymi.")
+    bento.header(i18n.page("bieg"), "Jeden bieg w szczegółach: splity, przebieg, strefy, struktura i porównanie z podobnymi.")
     frame = rc.guard()
     if frame is None:
         return

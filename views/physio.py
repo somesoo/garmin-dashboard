@@ -9,12 +9,13 @@ import streamlit as st
 
 import bento
 import glossary
+import i18n
 import shell
 import theme as tz
 
 
 def render() -> None:
-    bento.header("Fizjologia", "Wszystko tutaj liczy się z samych treningów — bez testu na bieżni i bez laboratorium.")
+    bento.header(i18n.page("fizjologia"), "Wszystko tutaj liczy się z samych treningów — bez testu na bieżni i bez laboratorium.")
     table = shell.table("critical_speed")
     fitted = table.dropna(subset=["cs_ms"]) if not table.empty else table
     _cs_kpis(fitted)
@@ -187,7 +188,7 @@ def _economy_chart(t, efficiency) -> None:
         )
     figure.update_layout(**tz.base_layout(legend=False, height=200, hover="closest"))
     figure.update_yaxes(title_text="m / uderzenie")
-    t.chart(tz.polish_dates(tz.style_axes(figure), view["day"]),
+    t.chart(tz.local_dates(tz.style_axes(figure), view["day"]),
             table=view[["day", "distance_km", "avg_hr", "ef", "ef_roll10"]].tail(30))
 
 

@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 import bento
+import i18n
 import routing
 import shell
 import theme as tz
@@ -20,11 +21,11 @@ WINDOWS = {"7 dni": 7, "30 dni": 30, "90 dni": 90}
 def render() -> None:
     frame = rc.guard()
     if frame is None:
-        st.title("Bieganie")
+        st.title(i18n.page("bieganie"))
         return
     end = frame["day"].max()
     bento.header(
-        "Bieganie",
+        i18n.page("bieganie"),
         f"{len(frame)} biegów od {frame['day'].min():%d.%m.%Y}; spacery i nagrania < 1 km albo wolniejsze niż "
         f"12 min/km pominięte. Ostatni bieg: {end:%d.%m.%Y} ({(pd.Timestamp(dt.date.today()) - end).days} dni temu).",
     )

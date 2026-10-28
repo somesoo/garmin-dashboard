@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 import bento
+import i18n
 import routing
 import shell
 import theme as tz
@@ -15,7 +16,7 @@ from views import run_common as rc
 
 def render() -> None:
     bento.header(
-        "Obciążenie biegowe",
+        i18n.page("obciazenie-biegowe"),
         "Wskaźniki pomagają zdecydować, czy dołożyć, czy odpuścić — nie diagnozują przetrenowania ani kontuzji. "
         "Ból, który zmienia sposób biegania, jest ważniejszy niż każdy wykres tutaj.",
     )

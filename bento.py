@@ -33,6 +33,7 @@ import pandas as pd
 import streamlit as st
 
 import glossary
+import i18n
 import routing
 import theme as tz
 
@@ -60,7 +61,8 @@ def table_height(count: int) -> int:
 def row(*spans: int) -> list[Any]:
     """Columns of one grid row; spans are in quarters of the canvas (sum 4)."""
     if sum(spans) != 4:
-        raise ValueError(f"rząd siatki musi sumować się do 4 kolumn, jest {spans}")
+        raise ValueError(i18n.tr(pl=f"rząd siatki musi sumować się do 4 kolumn, jest {spans}",
+                                 en=f"a grid row must add up to 4 columns, got {spans}"))
     return st.columns(list(spans), gap="small")
 
 
@@ -73,11 +75,11 @@ class Tile:
         self.header = header
         self.key = key
 
-    def chart(self, fig: Any, *, table: pd.DataFrame | None = None, empty: str = "Brak danych w tym zakresie.",
+    def chart(self, fig: Any, *, table: pd.DataFrame | None = None, empty: str | None = None,
               key: str | None = None) -> None:
         """The widget's figure at the grid's height, table twin in the header."""
         if fig is None:
-            st.caption(empty)
+            st.caption(empty or i18n.tr(pl="Brak danych w tym zakresie.", en="No data in this range."))
             return
         fig.update_layout(height=chart_height(self.rows))
         st.plotly_chart(fig, width="stretch", key=key or f"{self.key}_chart", config={"displayModeBar": False})
@@ -91,15 +93,17 @@ class Tile:
         st.dataframe(shown, width="stretch", hide_index=True, height=table_height(len(shown)), **kwargs)
         rest = full if full is not None else frame
         if len(rest) > len(shown):
-            st.markdown(f"<div class='tile-caption'>pierwsze {len(shown)} z {len(rest)} — całość pod ikoną "
-                        "tabeli</div>", unsafe_allow_html=True)
+            note = i18n.tr(pl=f"pierwsze {len(shown)} z {len(rest)} — całość pod ikoną tabeli",
+                           en=f"first {len(shown)} of {len(rest)} — all of it behind the table icon")
+            st.markdown(f"<div class='tile-caption'>{note}</div>", unsafe_allow_html=True)
             self.data(rest)
 
     def data(self, table: pd.DataFrame | None) -> None:
         if table is None or table.empty:
             return
         with self.header:
-            with st.popover("", icon=":material/table_view:", type="tertiary", help="Dane"):
+            with st.popover("", icon=":material/table_view:", type="tertiary",
+                            help=i18n.tr(pl="Dane", en="Data")):
                 st.dataframe(tz.readable_paces(table), width="stretch", hide_index=True)
 
 
@@ -142,7 +146,8 @@ def _header(title: str, terms: tuple | list, how: str | None, key: str) -> Any:
 def _help(terms: tuple | list, how: str | None) -> None:
     if not terms and not how:
         return
-    with st.popover("", icon=":material/help_outline:", type="tertiary", help="Co to jest?"):
+    with st.popover("", icon=":material/help_outline:", type="tertiary",
+                    help=i18n.tr(pl="Co to jest?", en="What is this?")):
         for index, key in enumerate(terms):
             if index:
                 st.divider()
@@ -150,10 +155,11 @@ def _help(terms: tuple | list, how: str | None) -> None:
         if how:
             if terms:
                 st.divider()
-            st.markdown(f"**Jak czytać wykres** — {how}")
+            st.markdown(f"**{i18n.tr(pl='Jak czytać wykres', en='How to read the chart')}** — {how}")
         target = routing.page("slownik")
         if target is not None:
-            st.page_link(target, label="Wszystkie pojęcia — Słownik", icon=":material/menu_book:")
+            st.page_link(target, label=i18n.tr(pl="Wszystkie pojęcia — Słownik", en="All terms — Glossary"),
+                         icon=":material/menu_book:")
 
 
 def bullets(items: list[str]) -> None:
@@ -176,7 +182,7 @@ def kpis(current: pd.Series | None, previous: pd.Series | None, specs: list[tupl
     is bad (resting HR, stress), "off" when direction alone means nothing.
     """
     if len(specs) != 4:
-        raise ValueError("pasek KPI ma zawsze 4 kafle")
+        raise ValueError(i18n.tr(pl="pasek KPI ma zawsze 4 kafle", en="a KPI strip always has 4 tiles"))
     for column, spec in zip(row(1, 1, 1, 1), specs):
         field, label, unit = spec[:3]
         delta_color = spec[3] if len(spec) > 3 else "normal"

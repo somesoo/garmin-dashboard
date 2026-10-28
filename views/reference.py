@@ -6,11 +6,12 @@ import streamlit as st
 
 import bento
 import glossary
+import i18n
 
 
 def render() -> None:
     bento.header(
-        "Słownik",
+        i18n.page("slownik"),
         "Co oznacza każdy wskaźnik, po co jest i jak go czytać. To samo objaśnienie jest pod „?” w nagłówku "
         "każdego kafla i w podpowiedziach liczb.",
     )

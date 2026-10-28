@@ -6,6 +6,7 @@ import streamlit as st
 
 import bento
 import db
+import i18n
 import insights as insights_mod
 import shell
 import theme as tz
@@ -13,7 +14,7 @@ import theme as tz
 
 def insights() -> None:
     bento.header(
-        "Insights",
+        i18n.page("insights"),
         "Notatki z `insights/`: proza plus bloki SQL liczone na świeżych danych przy każdym wejściu — wniosek nie "
         "zestarzeje się po cichu. Nowy dodaje `/garmin-insight` w Claude Code.",
     )
@@ -84,7 +85,7 @@ def _render_sql_block(insight, index: int, block) -> None:
 
 def sql() -> None:
     schema = db.schema()
-    bento.header("SQL", "Hurtownia jest otwarta (DuckDB na plikach parquet); zapytania tylko czytają.")
+    bento.header(i18n.page("sql"), "Hurtownia jest otwarta (DuckDB na plikach parquet); zapytania tylko czytają.")
     default = (
         "SELECT p.day, p.ctl, p.atl, p.tsb, d.hrv_last_night, d.rhr, d.readiness\n"
         "FROM pmc p LEFT JOIN daily d USING (day)\n"

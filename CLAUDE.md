@@ -22,6 +22,7 @@ garmin-dashboard/
   bento.py           siatka stron: kafle, KPI, panele (układ każdej strony)
   insights.py        parser notatek z insights/
   glossary.py        słownik pojęć: co to jest, po co, jak czytać (pomoc na stronach)
+  i18n.py            język interfejsu (pl/en): tr(pl=, en=), plural, miesiące, tytuły stron
   app.py             router (st.navigation) — bez logiki widoków
   routing.py         rejestr stron: przejście z widoku do widoku bez reloadu
   globe.py           opakowanie komponentu globu (dane + motyw + klik)
@@ -175,6 +176,32 @@ osie wykresów przez `scatter(pace_y=True)` / panel `"pace": True` /
 - `~/.garminconnect/garmin_tokens.json` ma wartość hasła — nie wypisuj go
   w logach ani nie kopiuj do repo.
 
+## Języki (`i18n.py`)
+
+Interfejs jest po polsku (domyślnie) i po angielsku; przełącznik PL/EN na dole
+szyny, wybór pamiętany w `data/ui.json`. **Każda nowa funkcja od razu w obu
+językach** — tekst, który ktoś czyta, idzie przez `i18n.tr(pl=..., en=...)`
+(oba argumenty obowiązkowe), rzeczownik przy liczbie przez
+`i18n.plural(n, pl=(1, 2–4, 5+), en=(1, wiele))`, daty przez `i18n.day_month` /
+`months()` / `weekdays()`, tytuł strony przez `i18n.page(url_path)`.
+
+- Tłumaczenie stoi przy wywołaniu, nie w katalogu kluczy: f-string z liczbami
+  zostaje jednym czytelnym zdaniem w każdym języku.
+- `tr` liczy się w chwili wywołania — stała modułu zbudowana z `tr` zamarza
+  w języku pierwszego importu. Tabele etykiet buduj w funkcji
+  (`shell.activity_columns()`, `theme.sleep_stage_labels()`).
+- W sesji trzymaj klucz, nie etykietę (`shell.WINDOWS`: `"90d"`, etykieta przez
+  `format_func`), inaczej zmiana języka resetuje wybór.
+- `url_path` stron zostają polskie w obu językach — to adresy.
+- `i18n.BILINGUAL` to moduły już w pełni dwujęzyczne; `tests/test_i18n.py`
+  oblewa polski literał poza `pl=` (docstringi i linie z `# i18n: key` — nazwy
+  kolumn — są pominięte). Po przetłumaczeniu modułu dopisz go do listy.
+  Strażnik widzi tylko polskie znaki; „Zakres” bez ogonków przejdzie.
+- **Kolejny język (trzeci i dalsze) nie wchodzi bez zgody użytkownika.** Gdy
+  pojawi się potrzeba, nie implementuj — dopisz go do `TASKS.md` w sekcji
+  „Czeka na zgodę” i zapytaj.
+- Postęp tłumaczenia reszty aplikacji (etapy 2–4) jest w `TASKS.md`.
+
 ## Tabele pochodne (analytics.py)
 
 Liczone po każdym `etl/load.py` (wywołuje je `fetch.rebuild`). Wszystkie
@@ -278,7 +305,7 @@ to, co sprawiało, że dashboard wyglądał jak arkusz z 2005 roku. Kolejne zasa
 - Fazy snu → `sleep_stage_colors()`, intensywność → `intensity_colors()`
   (łatwo / środek / mocno). Pięć sąsiednich odcieni niebieskiego jest nie do
   odróżnienia — nie wracaj do `ordinal_colors` dla tych dwóch zbiorów.
-- Daty na osiach są po polsku (`polish_dates`, wołane przez buildery samo);
+- Daty na osiach są w języku interfejsu (`local_dates`, wołane przez buildery samo);
   wykres zbudowany ręcznie przez `go.Figure` trzeba przepuścić przez nie jawnie.
 - Kafelki KPI (`bento.kpis`) porównują z `shell.week_before(frame)` i mają
   czwarte pole `delta_color`: `"inverse"` dla tętna spoczynkowego / stresu,

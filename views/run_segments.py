@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 import bento
+import i18n
 import routing
 import theme as tz
 from running import sessions, store, units, workouts
@@ -13,7 +14,7 @@ from views import run_common as rc
 
 
 def render() -> None:
-    bento.header("Segmenty", "Rekordy na dystansach i na odcinkach interwałów, a pod nimi segmenty — "
+    bento.header(i18n.page("segmenty"), "Rekordy na dystansach i na odcinkach interwałów, a pod nimi segmenty — "
                              "Twoje i znalezione na trasach, które biegasz najczęściej.")
     frame = rc.guard()
     if frame is None:

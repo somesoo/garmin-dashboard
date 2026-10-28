@@ -12,6 +12,7 @@ import pandas as pd
 import streamlit as st
 
 import bento
+import i18n
 import routing
 import shell
 import theme as tz
@@ -31,7 +32,7 @@ ACTION_ICONS = {
 
 def render() -> None:
     today = dt.date.today()
-    bento.header("Dziś", f"{DAY_NAMES[today.weekday()].capitalize()}, {today:%d.%m.%Y}")
+    bento.header(i18n.page("dzis"), f"{DAY_NAMES[today.weekday()].capitalize()}, {today:%d.%m.%Y}")
 
     days = shell.daily().sort_values("day")
     row = shell.latest_day()

@@ -12,6 +12,7 @@ import pandas as pd
 import streamlit as st
 
 import bento
+import i18n
 import routing
 import shell
 import theme as tz
@@ -34,7 +35,7 @@ def render() -> None:
     routes = shell.table("routes")
     activities = shell.table("activities")
 
-    bento.header("Trasy", "Jeden ślad GPS naraz. Wszystkie ślady (mapa ciepła) są na globie w Atlasie.")
+    bento.header(i18n.page("trasy"), "Jeden ślad GPS naraz. Wszystkie ślady (mapa ciepła) są na globie w Atlasie.")
     if routes.empty:
         st.caption(
             "Brak śladów GPS. `etl/run.py` pobiera je automatycznie — jeden request "

@@ -34,6 +34,8 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+import i18n
+
 LIGHT: dict[str, Any] = {
     "surface": "#fcfcfb",
     "ink": "#0b0b0b",
@@ -83,12 +85,17 @@ FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'
 
 # Stage and zone orders are meaningful, so they carry the ordinal ramp.
 SLEEP_STAGE_ORDER = ["deep", "light", "rem", "awake"]
-SLEEP_STAGE_LABELS = {
-    "deep": "głęboki",
-    "light": "lekki",
-    "rem": "REM",
-    "awake": "czuwanie",
-}
+
+
+def sleep_stage_labels() -> dict[str, str]:
+    return {
+        "deep": i18n.tr(pl="głęboki", en="deep"),
+        "light": i18n.tr(pl="lekki", en="light"),
+        "rem": "REM",
+        "awake": i18n.tr(pl="czuwanie", en="awake"),
+    }
+
+
 ZONE_ORDER = ["hr_z1", "hr_z2", "hr_z3", "hr_z4", "hr_z5"]
 
 
@@ -494,8 +501,9 @@ def scatter(
         groups = list(dict.fromkeys(frame[color].dropna()))
         if len(groups) > 3:
             top = groups[:2]
-            data[color] = data[color].where(data[color].isin(top), "pozostałe")
-            groups = top + ["pozostałe"]
+            other = i18n.tr(pl="pozostałe", en="other")
+            data[color] = data[color].where(data[color].isin(top), other)
+            groups = top + [other]
         for group, hue in zip(groups, series_colors(len(groups))):
             subset = data[data[color] == group]
             if subset.empty:
@@ -582,9 +590,9 @@ def heatmap(
     colorscale = [[i / (len(ramp) - 1), c] for i, c in enumerate(ramp)]
     rows = list(grid.index)
     if rows and all(hasattr(i, "month") and hasattr(i, "day") for i in rows):
-        # Date rows as "26 lip" text: plotly would otherwise parse them into an
-        # English date axis.
-        rows = [f"{i.day} {MONTHS_PL[i.month - 1]}" for i in rows]
+        # Date rows as "26 lip" text: plotly would otherwise parse them into its
+        # own (English-only) date axis.
+        rows = [i18n.day_month(i) for i in rows]
     trace = go.Heatmap(
         z=grid.values,
         x=list(grid.columns),
@@ -794,7 +802,8 @@ def periods(fig: go.Figure, spans: Sequence[tuple[Any, Any, str]], *, today: Any
     if today is not None:
         fig.add_vline(x=today, line_width=1.5, line_color=t["ink_secondary"])
         fig.add_annotation(x=today, xanchor="left", xshift=4, y=0, yref="paper", yanchor="bottom",
-                           text="dziś", showarrow=False, font=dict(family=FONT, size=11, color=t["ink_secondary"]))
+                           text=i18n.tr(pl="dziś", en="today"), showarrow=False,
+                           font=dict(family=FONT, size=11, color=t["ink_secondary"]))
     return fig
 
 
@@ -923,11 +932,9 @@ def _hover_template(x: str, y: str, hover: Sequence[str], name: str | None) -> s
 # series drawn as a full-strength line is what made every chart look like a
 # 2005 spreadsheet: ninety jagged segments shouting over the trend.
 
-MONTHS_PL = ["sty", "lut", "mar", "kwi", "maj", "cze", "lip", "sie", "wrz", "paź", "lis", "gru"]
-
-
-def polish_dates(fig: go.Figure, values: pd.Series, *, row: int | None = None) -> go.Figure:
-    """Polish tick labels on a date axis; plotly only ships English months.
+def local_dates(fig: go.Figure, values: pd.Series, *, row: int | None = None) -> go.Figure:
+    """Tick labels on a date axis in the interface language (i18n.py); plotly
+    only ships English months, and its own ticks ignore the language anyway.
 
     Ticks are chosen for the span: Mondays under ~7 weeks, month starts under
     ~8 months, every other month beyond. The year is written on the first tick
@@ -948,15 +955,16 @@ def polish_dates(fig: go.Figure, values: pd.Series, *, row: int | None = None) -
     span = (last - first).days
     if span <= 50:
         ticks = pd.date_range(first, last, freq="W-MON")
-        text = [f"{d.day} {MONTHS_PL[d.month - 1]}" for d in ticks]
+        text = [i18n.day_month(d) for d in ticks]
     else:
         step = "MS" if span <= 240 else ("2MS" if span <= 550 else "3MS")
         ticks = pd.date_range(first + pd.offsets.MonthBegin(0), last, freq=step)
         text = []
         for index, d in enumerate(ticks):
-            label = MONTHS_PL[d.month - 1]
+            label = i18n.months()[d.month - 1]
             text.append(f"{label} {d.year}" if index == 0 or d.month == 1 else label)
-    kwargs = dict(tickmode="array", tickvals=list(ticks), ticktext=text, hoverformat="%d.%m.%Y")
+    kwargs = dict(tickmode="array", tickvals=list(ticks), ticktext=text,
+                  hoverformat=i18n.tr(pl="%d.%m.%Y", en="%b %d, %Y"))
     if row is not None:
         fig.update_xaxes(row=row, col=1, **kwargs)
     else:
@@ -965,10 +973,10 @@ def polish_dates(fig: go.Figure, values: pd.Series, *, row: int | None = None) -
 
 
 def _dates(fig: go.Figure, values: Any) -> go.Figure:
-    """Polish date ticks when the x values are dates; anything else untouched."""
+    """Localised date ticks when the x values are dates; anything else untouched."""
     series = pd.Series(values)
     if pd.api.types.is_datetime64_any_dtype(series):
-        return polish_dates(fig, series)
+        return local_dates(fig, series)
     return fig
 
 
@@ -994,7 +1002,7 @@ def trend(
     unit: str = "",
     decimals: int = 0,
     height: int = 210,
-    smooth_label: str = "średnia 7 d",
+    smooth_label: str | None = None,
 ) -> go.Figure | None:
     """Daily dots + rolling-mean line (+ normal band) on one value axis.
 
@@ -1010,6 +1018,7 @@ def trend(
         return None
     data = data.sort_values(x)
     t = tokens()
+    smooth_label = smooth_label or i18n.tr(pl="średnia 7 d", en="7-day mean")
     fig = go.Figure()
 
     if band and all(c in keep for c in band):
@@ -1020,7 +1029,7 @@ def trend(
                         hoverinfo="skip", showlegend=False)
         fig.add_scatter(
             x=edge[x], y=edge[high], mode="lines", line=dict(width=0), fill="tonexty",
-            fillcolor=_alpha(t["muted"], 0.16), name="norma",
+            fillcolor=_alpha(t["muted"], 0.16), name=i18n.tr(pl="norma", en="normal"),
             customdata=edge[[low]].to_numpy(),
             hovertemplate=f"%{{customdata[0]:.{decimals}f}}–%{{y:.{decimals}f}}<extra>norma</extra>",
             showlegend=False,
@@ -1030,11 +1039,12 @@ def trend(
     for color, label in zip(series_colors(len(labels)), labels):
         raw, smooth = series[label]
         prefix = "" if len(labels) == 1 else f"{label}: "
+        day = i18n.tr(pl="dzień", en="day")
         if raw in keep:
             fig.add_scatter(
-                x=data[x], y=data[raw], mode="markers", name=f"{prefix}dzień",
+                x=data[x], y=data[raw], mode="markers", name=f"{prefix}{day}",
                 marker=dict(size=6, color=_alpha(color, 0.38), line=dict(width=0)),
-                hovertemplate=f"%{{y:.{decimals}f}}{suffix}<extra>{prefix}dzień</extra>",
+                hovertemplate=f"%{{y:.{decimals}f}}{suffix}<extra>{prefix}{day}</extra>",
                 showlegend=False,
             )
         if smooth in keep:
@@ -1056,7 +1066,7 @@ def trend(
     fig.update_layout(margin=dict(l=8, r=78, t=10, b=8))
     fig = style_axes(fig)
     fig.update_yaxes(nticks=4)
-    return polish_dates(fig, data[x])
+    return local_dates(fig, data[x])
 
 
 def spark(
@@ -1186,7 +1196,7 @@ def range_bars(
             range=[bottom, top], tickmode="array",
             tickvals=hours[::step], ticktext=[_clock_text(h) for h in hours[::step]],
         )
-    return polish_dates(fig, data[x])
+    return local_dates(fig, data[x])
 
 
 def _clock_text(hours: float) -> str:
@@ -1231,13 +1241,13 @@ def trail(
     for adder in (fig.add_hline, fig.add_vline):
         adder(0, line_width=1, line_color=t["axis"])
     fig.add_scatter(
-        x=history[x], y=history[y], mode="markers", name="wcześniej",
+        x=history[x], y=history[y], mode="markers", name=i18n.tr(pl="wcześniej", en="earlier"),
         marker=dict(size=8, color=_alpha(t["muted"], 0.35), line=dict(width=0)),
         customdata=history[[when, *hover]].to_numpy() if hover else history[[when]].to_numpy(),
         hovertemplate=_trail_hover(hover), showlegend=False,
     )
     fig.add_scatter(
-        x=latest[x], y=latest[y], mode="lines+markers", name=f"ostatnie {recent} dni",
+        x=latest[x], y=latest[y], mode="lines+markers", name=i18n.tr(pl=f"ostatnie {recent} dni", en=f"last {recent} days"),
         line=dict(width=1.6, color=_alpha(accent, 0.55)),
         marker=dict(size=9, color=accent, line=dict(width=2, color=t["surface"])),
         customdata=latest[[when, *hover]].to_numpy() if hover else latest[[when]].to_numpy(),
@@ -1250,7 +1260,7 @@ def trail(
         hoverinfo="skip", showlegend=False,
     )
     fig.add_annotation(
-        x=today[x], y=today[y], text="<b>dziś</b>", showarrow=False, xanchor="left", xshift=12,
+        x=today[x], y=today[y], text=f"<b>{i18n.tr(pl='dziś', en='today')}</b>", showarrow=False, xanchor="left", xshift=12,
         font=dict(family=FONT, size=12, color=t["ink"]),
     )
     spots = {"tl": (0.01, 0.99, "left", "top"), "tr": (0.99, 0.99, "right", "top"),
@@ -1565,7 +1575,7 @@ def route_map(
     # markers land on top of each other, so the labels go to opposite corners.
     endpoints = (
         ("start", track.iloc[0], "top right"),
-        ("koniec", track.iloc[-1], "bottom left"),
+        (i18n.tr(pl="koniec", en="finish"), track.iloc[-1], "bottom left"),
     )
     for label, row, position in endpoints:
         fig.add_trace(
@@ -1590,7 +1600,7 @@ def profile(
     x: str = "distance_km",
     y: str = "elevation_m",
     height: int = 220,
-    y_title: str = "m n.p.m.",
+    y_title: str | None = None,
 ) -> go.Figure | None:
     """Elevation (or any stream) against distance, as a filled profile."""
     data, keep = _numeric(track, [x, y])
@@ -1612,8 +1622,8 @@ def profile(
         )
     )
     fig.update_layout(**base_layout(legend=False, height=height))
-    fig.update_yaxes(title_text=y_title)
-    fig.update_xaxes(title_text="dystans (km)")
+    fig.update_yaxes(title_text=y_title or i18n.tr(pl="m n.p.m.", en="m a.s.l."))
+    fig.update_xaxes(title_text=i18n.tr(pl="dystans (km)", en="distance (km)"))
     fig = style_axes(fig)
     low = float(data[y].min())
     high = float(data[y].max())

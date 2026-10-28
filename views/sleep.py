@@ -8,13 +8,14 @@ import streamlit as st
 
 import bento
 import glossary
+import i18n
 import shell
 import theme as tz
 
 
 def render() -> None:
     bento.header(
-        "Rytm i sen",
+        i18n.page("sen"),
         "Długość snu to jedna liczba; regularność, struktura nocy i moment wyciszenia organizmu mówią więcej.",
     )
     _headline()
@@ -172,18 +173,18 @@ def _hypnogram(night: pd.DataFrame) -> tuple[go.Figure, pd.DataFrame]:
         figure.add_scatter(
             x=[row.start_local, row.end_local], y=[level, level], mode="lines",
             line=dict(width=14, color=colours.get(row.stage, tokens["muted"])),
-            name=tz.SLEEP_STAGE_LABELS.get(row.stage, row.stage), showlegend=False,
-            hovertemplate=f"{tz.SLEEP_STAGE_LABELS.get(row.stage, row.stage)}: {row.minutes} min<extra></extra>",
+            name=tz.sleep_stage_labels().get(row.stage, row.stage), showlegend=False,
+            hovertemplate=f"{tz.sleep_stage_labels().get(row.stage, row.stage)}: {row.minutes} min<extra></extra>",
         )
     figure.update_layout(**tz.base_layout(legend=False, height=200, hover="closest"))
     figure.update_yaxes(tickmode="array", tickvals=[0, 1, 2, 3],
-                        ticktext=[tz.SLEEP_STAGE_LABELS[s] for s in tz.SLEEP_STAGE_ORDER], showgrid=False)
+                        ticktext=[tz.sleep_stage_labels()[s] for s in tz.SLEEP_STAGE_ORDER], showgrid=False)
     summary = (
         night.groupby("stage")["minutes"].sum().reindex(tz.SLEEP_STAGE_ORDER).dropna()
         .rename_axis("faza").reset_index(name="minuty")
     )
-    summary["faza"] = summary["faza"].map(tz.SLEEP_STAGE_LABELS)
-    return tz.polish_dates(tz.style_axes(figure), night["start_local"]), summary
+    summary["faza"] = summary["faza"].map(tz.sleep_stage_labels())
+    return tz.local_dates(tz.style_axes(figure), night["start_local"]), summary
 
 
 def _night_panels(day) -> go.Figure | None:
@@ -215,7 +216,7 @@ def _stage_share(frame: pd.DataFrame) -> None:
         share = share.rolling(7, min_periods=3).mean().dropna().round(1)
         share.index = pd.to_datetime(share.index)
         share = shell.clip(share.rename_axis("day").reset_index())
-        t.chart(tz.stacked(share, "day", columns, tz.SLEEP_STAGE_LABELS, y_title="% nocy",
+        t.chart(tz.stacked(share, "day", columns, tz.sleep_stage_labels(), y_title="% nocy",
                            colors=tz.sleep_stage_colors(), area=True),
                 table=share.tail(30))
 

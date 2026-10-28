@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 import bento
+import i18n
 import routing
 import shell
 import theme as tz
@@ -28,7 +29,7 @@ DAY_NAMES = ["poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota
 
 def render() -> None:
     bento.header(
-        "Plan treningowy",
+        i18n.page("plan"),
         "Startuje od tego, co faktycznie biegasz, rośnie do szczytu dystansu (≤ 1,3× średniej z 4 tygodni), co "
         "3.–4. tydzień odpuszcza i kończy się taperem. Tempa z aktualnej formy, nie z celu.",
     )

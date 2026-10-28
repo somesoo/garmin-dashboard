@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import bento
+import i18n
 import routing
 import theme as tz
 from running import forecast, plan as planning, store, units
@@ -19,7 +20,7 @@ PRIORITY_HELP = "A — start docelowy sezonu, B — ważny sprawdzian, C — sta
 
 def render() -> None:
     bento.header(
-        "Zawody i cele",
+        i18n.page("zawody"),
         "Starty zapisane tutaj trafiają do prognozy („po planie”), do planu i do briefu dla asystenta. "
         "Dane leżą w `data/coach/races.json` — prywatnie, poza gitem.",
     )
@@ -133,7 +134,7 @@ def _trend(race: dict, item) -> None:
     fig.update_yaxes(range=[high + pad, low - pad], tickformat=".0f", title_text="min")
     st.markdown("<div class='tile-caption'>Prognoza z ostatnich 6 miesięcy; wyżej = szybciej.</div>",
                 unsafe_allow_html=True)
-    st.plotly_chart(tz.polish_dates(tz.style_axes(fig), view["day"]), width="stretch",
+    st.plotly_chart(tz.local_dates(tz.style_axes(fig), view["day"]), width="stretch",
                     key=f"race_trend_{race['id']}", config={"displayModeBar": False})
 
 

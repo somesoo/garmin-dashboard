@@ -16,6 +16,7 @@ import streamlit as st
 import globe
 import bento
 import glossary
+import i18n
 import routing
 import shell
 import theme as tz
@@ -36,7 +37,7 @@ def render() -> None:
     info = shell.state()
 
     bento.header(
-        "Atlas",
+        i18n.page("atlas"),
         f"{info.get('activities', 0)} aktywności · {info.get('days', 0)} dni pomiarów · "
         f"ostatni dzień z danymi: {row['day']:%d.%m.%Y}" if row is not None else "Brak danych dziennych.",
     )
@@ -250,7 +251,7 @@ def _recent(activities: pd.DataFrame) -> None:
     shown = recent[[c for c in columns if c in recent.columns]].rename(columns=columns)
     with bento.tile("Ostatnie aktywności", rows=2, key="atlas_recent",
                     caption="Wszystkie sporty, najnowsze na górze.") as t:
-        t.table(shown, column_config=shell.ACTIVITY_COLUMNS)
+        t.table(shown, column_config=shell.activity_columns())
 
 
 @st.dialog("Który trening otworzyć?")
