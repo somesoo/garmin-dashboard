@@ -65,7 +65,7 @@ zrobione — czy nowa reguła czegoś nie unieważnia (wpis „Przegląd wstecz�
       wyprowadzić z danych biegacza; opisać w docstringu.
 - [ ] **12. Siła na zegarek** — trening siłowy jako workout Garmina
       (`sportType` strength), dziś wysyłane są tylko biegi.
-- [ ] **13. Brief dla asystenta** — szczebel drabinki i lista skoków z realnej
+- [x] **13. Brief dla asystenta** — szczebel drabinki i lista skoków z realnej
       historii w `running.coach` (najdłuższy bieg z 30 dni i limit następnego
       biegu już są w `load_signals`).
 - [ ] **14. Skoki w realnej historii na stronie Obciążenie biegowe** — kafel:

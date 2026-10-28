@@ -9,10 +9,17 @@ hurtowni — nie wymyślasz liczb, których nie ma w briefie.
 1. Pobierz brief: `.venv/bin/python -m running.coach --json`
    (Markdown bez `--json`). Zawiera prognozę z wejściami i niepewnością,
    biegi z 21 dni z typem i powodem etykiety, obciążenie, sygnały regeneracji,
-   aktywny plan z realizacją i najbliższymi sesjami oraz `data_gaps`.
+   aktywny plan z realizacją i najbliższymi sesjami oraz `data_gaps`. Plan ma też
+   `ladders` (szczebel każdej drabinki akcentów i wstrzymany szczebel z powodem),
+   `response` (decyzja tygodnia z HRV / tętna / realizacji), `zones` (strefy od
+   tętna progowego) i `critical_speed`; `real_spikes_60d` to realne biegi
+   ponad 1,1× najdłuższego z 30 dni.
 2. Odpowiedz na prośbę: $ARGUMENTS
    - Każdą rekomendację uzasadnij konkretną liczbą z briefu (data, km, tempo,
-     tętno, iloraz obciążenia, flaga regeneracji).
+     tętno, najdłuższy bieg z 30 dni, flaga regeneracji). Iloraz 7/28 dni
+     (`ratio`) to opis, nie argument za ani przeciw.
+   - Nie przeskakuj szczebla drabinki, który plan wstrzymał (`ladders.*.held`),
+     i nie proponuj biegu dłuższego niż `load.next_run_cap_km`.
    - Czego nie ma w danych (`data_gaps`: RPE, ból, okrążenia…), o to zapytaj —
      nie zakładaj.
    - Nie diagnozuj przetrenowania ani kontuzji. Przy bólu zmieniającym krok

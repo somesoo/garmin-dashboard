@@ -445,7 +445,13 @@ def brief(
             ] if not matched.empty else [],
             "upcoming": [_session_brief(s) for s in active.get("sessions", []) if s["date"] >= today.isoformat()][:10],
             "warnings": text.warnings(active),
+            # How the engine set this plan (running/library.py, plan.response, physio zones).
+            "ladders": planning.ladders(active, today),
+            "response": active.get("response"),
+            "zones": active.get("zones"),
+            "critical_speed": active.get("cs"),
         }
+    out["real_spikes_60d"] = planning.real_spikes(runs, today)
     suggestion = next_session(active, runs, daily, result, today)
     out["next_session"] = {**suggestion, "session": _session_brief(suggestion["session"]) if suggestion.get("session") else None}
     return out
@@ -544,6 +550,28 @@ def markdown(data: dict[str, Any]) -> str:
                   tr(pl="- realizacja: ", en="- completion: ") + json.dumps(plan["compliance"], ensure_ascii=False)]
         for session in plan["upcoming"]:
             lines.append(f"- {session['date']} {session['type']}: {session['title']} — {session['main']}")
+    if data["plan"]:
+        plan = data["plan"]
+        if plan.get("response"):
+            decision, signals = plan["response"]["decision"], plan["response"]["signals"]
+            lines.append(tr(pl="- najbliższy tydzień: ", en="- the coming week: ") + decision
+                         + (" — " + "; ".join(text.signal_line(x) for x in signals) if signals else ""))
+        for family, rung in plan.get("ladders", {}).items():
+            held = f" — {text.why_line(rung['held'])}" if rung.get("held") else ""
+            where = tr(pl=f"finisz {rung['part_km']:g} km", en=f"finish {rung['part_km']:g} km") \
+                if "part_km" in rung else tr(pl=f"szczebel {rung.get('level')}", en=f"rung {rung.get('level')}")
+            lines.append(tr(pl=f"- drabinka {text.family_label(family)}: {where}, {rung['date']} {rung['title']}{held}",
+                            en=f"- ladder {text.family_label(family)}: {where}, {rung['date']} {rung['title']}{held}"))
+        zones = plan.get("zones") or {}
+        if zones.get("basis"):
+            bands = ", ".join(f"{k} {v[0]}–{v[1]}" for k, v in zones.items() if k in ("E", "M", "T", "I"))
+            lines.append(tr(pl=f"- strefy tętna ({zones['basis']}): {bands}", en=f"- HR zones ({zones['basis']}): {bands}"))
+    if data.get("real_spikes_60d"):
+        lines += ["", tr(pl="## Skoki pojedynczego biegu (60 dni, reguła 1,1× najdłuższego z 30 dni)",
+                         en="## Single-run spikes (60 days, the 1.1× longest-of-30-days rule)")]
+        lines += [tr(pl=f"- {x['date']}: {x['km']:g} km wobec {x['longest']:g} km (+{x['over_pct']}%)".replace(".", ","),
+                     en=f"- {x['date']}: {x['km']:g} km against {x['longest']:g} km (+{x['over_pct']}%)")
+                  for x in data["real_spikes_60d"]]
     nxt = data["next_session"]
     if nxt and nxt.get("session"):
         lines += ["", tr(pl="## Następny trening", en="## Next session"),

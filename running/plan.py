@@ -1117,6 +1117,38 @@ def strength_done(activities: pd.DataFrame | None, before: dt.date | None = None
     return int(mask.sum())
 
 
+def real_spikes(runs: pd.DataFrame | None, today: dt.date, days: int = 60) -> list[dict[str, Any]]:
+    """Real runs of the last ``days`` that were over 1.1x the longest of the 30 days before them."""
+    if runs is None or runs.empty:
+        return []
+    frame = runs[runs["day"] > pd.Timestamp(today - dt.timedelta(days=days + SPIKE_DAYS))].sort_values("day")
+    history = [(pd.Timestamp(d).date(), float(km)) for d, km in zip(frame["day"], frame["distance_km"])]
+    out = []
+    for date, km in history:
+        if date <= today - dt.timedelta(days=days):
+            continue
+        longest = longest_before(history, date)
+        if longest and km > SPIKE * longest + 0.05:
+            out.append({"date": date.isoformat(), "km": round(km, 1), "longest": round(longest, 1),
+                        "over_pct": round((km / longest - 1) * 100)})
+    return out
+
+
+def ladders(plan: dict[str, Any], today: dt.date) -> dict[str, Any]:
+    """Where each workout ladder stands: the next session's rung, and a held rung with its reason."""
+    out: dict[str, Any] = {}
+    for session in sorted(plan.get("sessions", []), key=lambda s: s["date"]):
+        family = _family(session)
+        if session["date"] < today.isoformat() or family not in FAMILIES or family in out:
+            continue
+        spec = session.get("text") or {}
+        held = next((w for w in session.get("why") or [] if w.get("key") == "rung_hold"), None)
+        out[family] = {"date": session["date"], "level": spec.get("level"), "title": session.get("title"),
+                       **({"part_km": spec["part"]} if family == "long_finish" else {}),
+                       **({"held": held} if held else {})}
+    return out
+
+
 def _strength_sessions(
     week: dict[str, Any],
     built: list[dict[str, Any]],

@@ -405,3 +405,18 @@ class Constants(unittest.TestCase):
         for name in ("SPIKE", "LONG_TARGET_KM", "PEAK_KM", "MAX_STEP_KM", "TAPER_WEEKS", "LONG_GAP_DAYS",
                      "QUALITY_ROOM_KM", "ON_PACE_SHARE", "HR_MARGIN"):
             self.assertIn(name, doc)
+
+
+
+class Brief(unittest.TestCase):
+    def test_real_spikes_and_ladders(self):
+        runs = pd.DataFrame([{"day": pd.Timestamp(d), "distance_km": km} for d, km in
+                             (("2026-02-01", 5.0), ("2026-02-08", 6.0), ("2026-02-15", 10.0), ("2026-02-22", 10.5))])
+        spikes = planning.real_spikes(runs, dt.date(2026, 3, 1))
+        self.assertEqual([x["date"] for x in spikes], ["2026-02-08", "2026-02-15"])
+        self.assertEqual(spikes[1]["over_pct"], 67)
+        plan, _, _ = make()
+        ladders = planning.ladders(plan, dt.date(2026, 3, 2))
+        self.assertIn("threshold", ladders)
+        self.assertIn("long_finish", ladders)
+        self.assertIn("part_km", ladders["long_finish"])
