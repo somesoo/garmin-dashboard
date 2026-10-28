@@ -39,12 +39,15 @@ def render() -> None:
     upcoming = [r for r in races if r["date"] >= today.isoformat()]
     past = [r for r in races if r["date"] < today.isoformat()]
 
+    plan = rc.active_plan(today)  # first: a changed race rebuilds the plan before the forecast reads it
     result = rc.current_forecast()
+    if upcoming and plan is None:
+        _no_plan(upcoming, result, today)
     if not upcoming:
         st.info(i18n.tr(pl="Brak nadchodzących startów. Dodaj pierwszy poniżej.",
                         en="No upcoming races. Add the first one below."))
     for race in upcoming:
-        _race_card(race, result, today)
+        _race_card(race, result, today, plan)
     if past:
         left, right = bento.row(2, 2)
         with left:
@@ -55,7 +58,32 @@ def render() -> None:
         _add_form()
 
 
-def _race_card(race: dict, result: dict, today: dt.date) -> None:
+def _no_plan(upcoming: list[dict], result: dict, today: dt.date) -> None:
+    """Without a plan the race-day numbers only extend today's training: say so once, with the way out."""
+    tr = i18n.tr
+    gaps = []
+    for race in upcoming:
+        item = rc.race_forecast(race, result, today)
+        if item is not None and item.target_s and race.get("goal_s") and race["goal_s"] < item.target_s:
+            gaps.append(f"{race['name']} {units.fmt_delta(item.target_s - race['goal_s'])}")
+    with bento.panel(tr(pl="Bez planu", en="No plan"), key="races_no_plan"):
+        st.markdown(tr(
+            pl="Liczby „na dzień startu” zakładają, że trenujesz dalej tak jak w ostatnich tygodniach: ta sama "
+               "objętość i długi bieg, więc przygotowanie do dystansu zostaje na dzisiejszym poziomie, a forma rośnie "
+               "wolno i po ~6 tygodniach przestaje. **Ułóż spersonalizowany plan** — jeden, przez wszystkie starty z "
+               "tej strony; zmiany startów same go przebudują.",
+            en="The race-day numbers assume you keep training as in recent weeks: the same volume and long run, so "
+               "the preparation for the distance stays at today's level, and fitness grows slowly and stops after "
+               "~6 weeks. **Build a personalised plan** — one, through every race on this page; changes to the races "
+               "rebuild it on their own."))
+        if gaps:
+            st.caption(tr(pl="Brakuje do celu przy obecnym treningu: ", en="Short of the goal with the current "
+                                                                         "training: ") + " · ".join(gaps))
+        if st.button(tr(pl="Ułóż plan →", en="Build the plan →"), key="races_build_plan", type="primary"):
+            routing.goto("plan")
+
+
+def _race_card(race: dict, result: dict, today: dt.date, plan: dict | None) -> None:
     date = dt.date.fromisoformat(race["date"])
     days = (date - today).days
     priority = race.get("priority", "A")
@@ -67,14 +95,13 @@ def _race_card(race: dict, result: dict, today: dt.date) -> None:
     ):
         left, right = st.columns(2, gap="medium")
         with left:
-            _race_numbers(race, result)
+            _race_numbers(race, result, today, plan)
         with right:
-            item = result["distances"].get(race["distance"]) if result.get("status") == "ok" else None
-            _trend(race, item)
+            _trend(race, rc.race_forecast(race, result, today))
 
 
-def _race_numbers(race: dict, result: dict) -> None:
-    item = result["distances"].get(race["distance"]) if result.get("status") == "ok" else None
+def _race_numbers(race: dict, result: dict, today: dt.date, plan: dict | None) -> None:
+    item = rc.race_forecast(race, result, today)
     goal = race.get("goal_s")
     tr = i18n.tr
     columns = st.columns(4)
@@ -86,12 +113,20 @@ def _race_numbers(race: dict, result: dict) -> None:
         columns[1].metric(tr(pl="Prognoza dziś", en="Forecast today"), units.fmt_time(item.realistic_s),
                           tr(pl=f"{gap} do celu", en=f"{gap} to the goal") if goal else None,
                           delta_color="inverse")
-        columns[2].metric(tr(pl="Po planie", en="After the plan"), units.fmt_time(item.target_s) if item.target_s
-                          else "—",
-                          help=tr(pl="Zakłada realizację planu: ~1 VDOT na 5 tygodni i przygotowanie, które plan "
-                                     "osiąga.",
-                                  en="Assumes the plan is followed: ~1 VDOT per 5 weeks and the preparation the "
-                                     "plan reaches."))
+        if item.target_basis == "plan":
+            label, why = tr(pl="Po planie", en="After the plan"), tr(
+                pl="Zakłada realizację planu: ~1 VDOT na 5 tygodni i przygotowanie, które plan osiąga przed tym "
+                   "startem.",
+                en="Assumes the plan is followed: ~1 VDOT per 5 weeks and the preparation the plan reaches before "
+                   "this race.")
+        else:
+            label, why = tr(pl="Jak teraz", en="As now"), tr(
+                pl="Jeśli trenujesz dalej jak w ostatnich tygodniach: przygotowanie zostaje dzisiejsze, przyrost "
+                   "formy jak u Danielsa, ale pomnożony przez regularność i wygasający po ~6 tygodniach (ten sam "
+                   "bodziec przestaje działać).",
+                en="If you keep training as in recent weeks: the preparation stays at today's, the fitness gain is "
+                   "Daniels' rate times your consistency, fading after ~6 weeks (the same stimulus stops working).")
+        columns[2].metric(label, units.fmt_time(item.target_s) if item.target_s else "—", help=why)
         status = forecast.goal_status(item, goal)
         columns[3].metric(tr(pl="Status celu", en="Goal status"), text.goal_status(status))
         band, sure = f"{units.fmt_time(item.low_s)}–{units.fmt_time(item.high_s)}", rc.confidence_label(item.confidence)
@@ -109,11 +144,10 @@ def _race_numbers(race: dict, result: dict) -> None:
     else:
         st.caption(result.get("reason") or tr(pl="Brak prognozy.", en="No forecast."))
 
-    plans = store.plans_for(race["id"])
-    if plans:
-        active = plans[0]
-        summary = planning.compliance(planning.match(active, rc.runs()))
-        name, s = active.get("name"), summary
+    covered = planning.covers(plan, race)
+    if covered:
+        summary = planning.compliance(planning.match(plan, rc.runs()))
+        name, s = plan.get("name"), summary
         if s.get("due"):
             km = f"{s['actual_km']:.0f}/{s['planned_km']:.0f} km"
             quality = f"{s['quality_done']}/{s['quality_due']}"
@@ -127,9 +161,9 @@ def _race_numbers(race: dict, result: dict) -> None:
             st.caption(tr(pl=f"Plan „{name}” — pierwsza sesja jeszcze przed nami.",
                           en=f"Plan “{name}” — the first session is still ahead."))
     columns = st.columns(3)
-    if columns[0].button("Plan →" if plans else tr(pl="Utwórz plan →", en="Create a plan →"),
+    if columns[0].button("Plan →" if covered else tr(pl="Ułóż plan →", en="Build the plan →"),
                          key=f"race_plan_{race['id']}", width="stretch"):
-        routing.goto("plan", plan_race_request=race["id"])
+        routing.goto("plan")
     with columns[1].popover(tr(pl="Edytuj", en="Edit"), width="stretch"):
         _race_form(race, key=f"edit_{race['id']}")
     if columns[2].button(tr(pl="Usuń", en="Delete"), key=f"race_delete_{race['id']}", width="stretch"):

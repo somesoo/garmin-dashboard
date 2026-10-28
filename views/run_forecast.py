@@ -89,7 +89,7 @@ def _headers() -> dict[str, str]:
     return {
         "distance": tr(pl="dystans", en="distance"), "realistic": tr(pl="realistyczny", en="realistic"),
         "interval80": tr(pl="przedział 80%", en="80% range"), "pace": tr(pl="tempo", en="pace"),
-        "potential": tr(pl="potencjał", en="potential"), "after_plan": tr(pl="po planie", en="after the plan"),
+        "potential": tr(pl="potencjał", en="potential"), "after_plan": tr(pl="na dzień startu", en="on race day"),
         "confidence": tr(pl="pewność", en="confidence"), "preparation": tr(pl="przygotowanie", en="preparation"),
         "change4": tr(pl="zmiana 4 tyg.", en="change 4 wk"), "change12": tr(pl="zmiana 12 tyg.", en="change 12 wk"),
     }
@@ -110,7 +110,9 @@ def _table(result: dict, history: pd.DataFrame) -> None:
                 header["pace"]: units.fmt_pace(item.pace),
                 header["potential"]: units.fmt_time(item.potential_s),
                 header["after_plan"]: (f"{units.fmt_time(item.target_s)} ({units.fmt_time(item.target_low_s)}–"
-                                       f"{units.fmt_time(item.target_high_s)})") if item.target_s else "—",
+                                       f"{units.fmt_time(item.target_high_s)}) · " + (
+                                           tr(pl="po planie", en="after the plan") if item.target_basis == "plan"
+                                           else tr(pl="jak teraz", en="as now"))) if item.target_s else "—",
                 header["confidence"]: rc.confidence(item.confidence),
                 header["preparation"]: f"{item.prep['score']:.0%}",
                 header["change4"]: units.fmt_delta(four) if four is not None else "—",
@@ -121,10 +123,12 @@ def _table(result: dict, history: pd.DataFrame) -> None:
         tr(pl="Wszystkie liczby", en="All the numbers"), key="forecast_table",
         caption=tr(pl="Nagłówki kolumn mają podpowiedzi po najechaniu.", en="Column headers have tooltips on hover."),
         terms=["realistic", "interval80", "confidence", "potential", "preparation", "vdot", "after_plan"],
-        how=tr(pl="Zmiana 4/12 tyg.: ujemna = prognoza szybsza niż wtedy. „Po planie” pojawia się tylko dla "
-                  "dystansu z wpisanym startem (strona Zawody).",
-               en="Change 4/12 wk: negative = the forecast is faster than then. “After the plan” appears only for a "
-                  "distance with a race entered (the Races page)."),
+        how=tr(pl="Zmiana 4/12 tyg.: ujemna = prognoza szybsza niż wtedy. „Na dzień startu” pojawia się tylko dla "
+                  "dystansu z wpisanym startem (strona Zawody, najbliższy): po planie, gdy plan obejmuje start, "
+                  "inaczej przy obecnym treningu.",
+               en="Change 4/12 wk: negative = the forecast is faster than then. “On race day” appears only for a "
+                  "distance with a race entered (the Races page, the nearest one): after the plan when the plan "
+                  "covers the race, otherwise with the current training."),
     ):
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", column_config=_columns())
 
@@ -438,7 +442,9 @@ def _assumptions() -> None:
                "zwykle trening trwa dalej.\n"
                "- Tętno → VO₂max przez %HRR ≈ %VO₂R (Swain), kalibrowane osobistym współczynnikiem.\n"
                "- „Po planie”: +1 VDOT na ~5 tygodni regularnego treningu (Daniels: podnoś VDOT o 1 co 4–6 "
-               "tygodni), maks. 16 tygodni, i przygotowanie, które osiąga plan.\n"
+               "tygodni) — pełne tempo przez 16 tygodni, połowa przez kolejne 16 — i przygotowanie, które osiąga plan.\n"
+               "- „Jak teraz” (bez planu): przygotowanie zostaje dzisiejsze, a przyrost formy to ta sama stawka razy "
+               "regularność, wygasający po ~6 tygodniach.\n"
                "- Model nie widzi trasy zawodów, pogody, taktyki ani dnia startu. Upał i przewyższenia potrafią "
                "kosztować więcej niż szerokość przedziału.",
             en="- Fitness is VDOT from the Daniels and Gilbert curves (the oxygen cost of running × the fraction of "
@@ -449,7 +455,9 @@ def _assumptions() -> None:
                "usually goes on.\n"
                "- Heart rate → VO₂max via %HRR ≈ %VO₂R (Swain), calibrated with a personal factor.\n"
                "- “After the plan”: +1 VDOT per ~5 weeks of regular training (Daniels: raise VDOT by 1 every 4–6 "
-               "weeks), max. 16 weeks, and the preparation the plan reaches.\n"
+               "weeks) — full rate for 16 weeks, half rate for the next 16 — and the preparation the plan reaches.\n"
+               "- “As now” (no plan): the preparation stays at today's, and the fitness gain is the same rate times "
+               "consistency, fading after ~6 weeks.\n"
                "- The model does not see the race course, the weather, tactics or race day. Heat and elevation "
                "can cost more than the width of the range.",
         ))

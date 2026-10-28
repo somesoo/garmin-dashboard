@@ -86,8 +86,8 @@ def main(argv: list[str] | None = None) -> int:
     tr = i18n.tr
     p = argparse.ArgumentParser(description=tr(pl="Wyślij plan treningowy do kalendarza Garmin",
                                                en="Send the training plan to the Garmin calendar"))
-    p.add_argument("plan_id", nargs="?", help=tr(pl="domyślnie plan najbliższego startu",
-                                                 en="default: the plan of the nearest race"))
+    p.add_argument("plan_id", nargs="?", help=tr(pl="domyślnie bieżący plan",
+                                                 en="default: the current plan"))
     p.add_argument("--days", type=int, default=7, help=tr(pl="ile dni naprzód (domyślnie 7)",
                                                           en="how many days ahead (default 7)"))
     p.add_argument("--dry-run", action="store_true", help=tr(pl="pokaż zmiany i JSON, nic nie wysyłaj",
@@ -102,8 +102,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.plan_id:
         plan = store.plan(args.plan_id)
     else:
-        ahead = [x for x in store.plans() if x.get("request", {}).get("race_date", "") >= today.isoformat()]
-        plan = min(ahead, key=lambda x: x["request"]["race_date"]) if ahead else None
+        plan = store.current_plan()
     if plan is None:
         print(tr(pl="Brak planu (podaj id albo utwórz plan na stronie Plan treningowy).",
                  en="No plan (give an id or create a plan on the Training plan page)."))

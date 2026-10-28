@@ -69,21 +69,20 @@ def store_stamp() -> str:
     return "|".join(parts)
 
 
-def upcoming_weeks(today: dt.date) -> tuple[dict[str, float], dict[str, float]]:
-    """Weeks to the nearest future race per distance, and the prep its plan reaches."""
-    weeks: dict[str, float] = {}
-    prep: dict[str, float] = {}
-    for race in store.races():
-        if race.get("date", "") < today.isoformat():
-            continue
-        distance = race["distance"]
-        if distance in weeks:
-            continue
-        weeks[distance] = (dt.date.fromisoformat(race["date"]) - today).days / 7
-        plans = store.plans_for(race["id"])
-        if plans:
-            prep[distance] = planning.reached_prep(plans[0], distance)
-    return weeks, prep
+def upcoming_races(today: dt.date | None = None) -> list[dict[str, Any]]:
+    today = today or dt.date.today()
+    return sorted((r for r in store.races() if r.get("date", "") >= today.isoformat()), key=lambda r: r["date"])
+
+
+def race_forecast(race: dict, result: dict[str, Any], today: dt.date) -> forecast.DistanceForecast | None:
+    """The distance forecast with this race's own target: after the plan when
+    the plan covers the race, otherwise if training goes on as now."""
+    item = result["distances"].get(race["distance"]) if result.get("status") == "ok" else None
+    if item is None:
+        return None
+    frame = runs()
+    base = planning.baseline(frame, frame["day"].max(), result.get("vdot"))
+    return planning.race_outlook(item, race, store.current_plan(), base, today)
 
 
 # Cache keys are the build id (and the coach files' stamp): a rebuild or a
@@ -93,9 +92,18 @@ def upcoming_weeks(today: dt.date) -> tuple[dict[str, float], dict[str, float]]:
 @st.cache_data(show_spinner=False)
 def _forecast(build: str, stamp: str, today: str, lang: str) -> dict[str, Any]:
     frame = runs()
-    weeks, prep = upcoming_weeks(dt.date.fromisoformat(today))
-    return forecast.forecast(frame, efforts(), shell.daily(), hr_max=hr_max(frame),
-                             weeks_to_race=weeks, plan_prep=prep)
+    result = forecast.forecast(frame, efforts(), shell.daily(), hr_max=hr_max(frame))
+    if result.get("status") != "ok":
+        return result
+    # Per distance, the nearest race's target (the Forecast page's column).
+    day = dt.date.fromisoformat(today)
+    base = planning.baseline(frame, frame["day"].max(), result.get("vdot"))
+    plan = store.current_plan()
+    for race in reversed(upcoming_races(day)):
+        item = result["distances"].get(race["distance"])
+        if item is not None:
+            result["distances"][race["distance"]] = planning.race_outlook(item, race, plan, base, day)
+    return result
 
 
 def current_forecast() -> dict[str, Any]:
@@ -286,10 +294,22 @@ STATUS_ICONS = {"planned": "·", "done": "✓", "modified": "≈", "skipped": "�
 
 
 def active_plan(today: dt.date | None = None) -> dict[str, Any] | None:
-    """The plan whose race is next; None when every plan is behind us."""
+    """The plan, rebuilt from tomorrow when the races ahead are no longer its goals."""
     today = today or dt.date.today()
-    ahead = [p for p in store.plans() if p.get("request", {}).get("race_date", "") >= today.isoformat()]
-    return min(ahead, key=lambda p: p["request"]["race_date"]) if ahead else None
+    plan = store.current_plan()
+    if plan is None:
+        return None
+    races = upcoming_races(today)
+    if races and planning.stale(plan, races, today):
+        frame = runs()
+        try:
+            plan = store.save_only_plan(planning.replan(plan, frame, current_forecast(),
+                                                        today=today + dt.timedelta(days=1),
+                                                        goals=[planning.goal_of(r) for r in races]))
+        except ValueError as error:
+            st.warning(i18n.tr(pl=f"Nie udało się dopasować planu do nowych celów: {error}",
+                               en=f"Could not fit the plan to the new goals: {error}"))
+    return plan if planning.next_goal(plan, today) else None
 
 
 def forecast_tiles(result: dict[str, Any], keys: list[str] | None = None, compact: bool = False) -> None:

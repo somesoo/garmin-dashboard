@@ -15,6 +15,7 @@ by the assistant -- is kept as ``{"key": "custom", "pl": {...}, "en": {...}}``.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import re
 from typing import Any
@@ -137,7 +138,7 @@ def history_action(code: Any) -> str:
         "replan": tr(pl="przebudowa", en="rebuild"), "soften": tr(pl="zmiękczenie", en="softened"),
         "postpone": tr(pl="przesunięcie", en="moved"), "fatigue": tr(pl="zmęczenie", en="fatigue"),
         "sick": tr(pl="choroba", en="illness"), "busy": tr(pl="mniej czasu", en="less time"),
-        "assistant": tr(pl="asystent", en="assistant"),
+        "assistant": tr(pl="asystent", en="assistant"), "goals": tr(pl="zmiana celów", en="goals changed"),
     }.get(str(code), str(code))
 
 
@@ -380,7 +381,8 @@ def warning(item: Any) -> str:
     key = item.get("key")
     if key == "goal_too_fast":
         goal, low = units.fmt_time(item.get("goal_s")), units.fmt_time(item.get("low_s"))
-        return tr(pl=f"Cel {goal} jest szybszy niż optymistyczny kraniec dzisiejszej prognozy ({low}). Odcinki "
+        race = f"{item['race']}: " if item.get("race") else ""
+        return race + tr(pl=f"Cel {goal} jest szybszy niż optymistyczny kraniec dzisiejszej prognozy ({low}). Odcinki "
                      "startowe w planie idą w tempie prognozy; przebuduj plan po kolejnym teście.",
                   en=f"The goal {goal} is faster than the optimistic end of today's forecast ({low}). Race-pace "
                      "stretches in the plan follow the forecast pace; rebuild the plan after the next test.")
@@ -395,6 +397,68 @@ def warning(item: Any) -> str:
     if key == "custom":
         return str(item.get(i18n.lang()) or item.get("pl") or "")
     return str(item)
+
+
+def why(session: dict[str, Any]) -> list[str]:
+    """``session["why"]``: why the plan put this session here instead of the usual pattern."""
+    return [why_line(item) for item in session.get("why") or []]
+
+
+def why_line(item: dict[str, Any]) -> str:
+    tr = i18n.tr
+    key = item.get("key")
+    when = _day(item.get("date"))
+    name = f" ({item['name']})" if item.get("name") else ""
+    if key == "week_quality_done":
+        return tr(pl=f"Akcent tego tygodnia już był: {when}{name}. Przy Twoich dniach biegowych i objętości tydzień "
+                     "niesie jeden akcent plus długi bieg, więc reszta tygodnia jest spokojna.",
+                  en=f"This week's quality session is done: {when}{name}. With your running days and volume a week "
+                     "carries one quality session plus the long run, so the rest of the week is easy.")
+    if key == "week_long_done":
+        return tr(pl=f"Długi bieg tego tygodnia już był: {when}{name}.",
+                  en=f"This week's long run is done: {when}{name}.")
+    if key == "after_hard":
+        return tr(pl=f"Mocny trening {when}{name} — akcent nie ląduje dzień przed ani dzień po mocnym dniu.",
+                  en=f"A hard session on {when}{name} — quality never lands the day before or after a hard day.")
+    if key == "pre_race_long":
+        days = item.get("days")
+        return tr(pl=f"Start za {days} dni: zamiast długiego biegu spokojna objętość. Długi bieg najpóźniej "
+                     f"{item.get('gap', 7)} dni przed startem — inaczej startujesz na zmęczonych nogach.",
+                  en=f"Race in {days} days: easy volume instead of the long run. The long run comes at least "
+                     f"{item.get('gap', 7)} days before a race — otherwise you race on tired legs.")
+    if key == "pre_race_quality":
+        days = item.get("days")
+        return tr(pl=f"Start za {days} dni: bez akcentu, świeżość ważniejsza niż ostatni bodziec.",
+                  en=f"Race in {days} days: no quality session, freshness matters more than one last stimulus.")
+    if key == "shakeout":
+        days = item.get("run_days")
+        return tr(pl=f"Dzień przed startem to Twój zwykły dzień biegowy, a biegasz {days} dni w tygodniu — wolne "
+                     "zmieniłoby rytm, więc krótki rozruch: 15–20 min bardzo spokojnie i 4 przebieżki po 20 s. To za "
+                     "mało, żeby zmęczyć, wystarczy, żeby nogi nie były „zastane”. Przy 3 i mniej dniach biegowych "
+                     "albo gdy dzień przed startem nie jest dniem biegowym, plan daje wolne.",
+                  en=f"The day before the race is one of your usual running days, and you run {days} days a week — a "
+                     "day off would break the rhythm, so a short shakeout: 15–20 min very easy and 4 strides of 20 s. "
+                     "Too little to tire you, enough to keep the legs from going stale. With 3 or fewer running days, "
+                     "or when the day before is not a running day, the plan gives a rest day.")
+    if key == "post_race_easy":
+        days, need, race = item.get("days"), item.get("easy_days"), race_label(item.get("distance"))
+        return tr(pl=f"{days}. dzień po starcie ({race}): bez akcentu i długiego biegu przez {need} dni — reguła "
+                     "Danielsa, jeden spokojny dzień na każde 3 km startu. Mięśnie po starcie regenerują się dłużej, "
+                     "niż mówi samopoczucie.",
+                  en=f"Day {days} after the race ({race}): no quality and no long run for {need} days — Daniels' "
+                     "rule, one easy day per 3 km raced. Muscles recover from a race longer than it feels.")
+    if key == "post_race":
+        days = item.get("days")
+        return tr(pl=f"{days} dni po starcie: krótko i bardzo spokojnie, nogi się odbudowują.",
+                  en=f"{days} days after the race: short and very easy, the legs are rebuilding.")
+    return str(key)
+
+
+def _day(value: Any) -> str:
+    if not value:
+        return ""
+    date = dt.date.fromisoformat(str(value))
+    return f"{i18n.weekdays()[date.weekday()]} {date:%d.%m}"
 
 
 def warnings(plan: dict[str, Any]) -> list[str]:

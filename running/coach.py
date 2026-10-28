@@ -151,14 +151,18 @@ def next_session(
                    "wyraźnie wyższe niż zwykle, zrób wersję spokojną.",
                 en="One signal of weaker recovery. Start the warm-up; if your heart rate on an easy jog is clearly "
                    "higher than usual, do the easy version."))
-        elif load.get("days_since_hard") == 0 and hard:
+        elif load.get("days_since_hard") in (0, 1) and hard:
             action = "przesuń"  # i18n: key
-            reasons.append(tr(pl="Mocny trening był dziś — dwa mocne dni pod rząd to kumulacja zmęczenia.",
-                              en="There was a hard session today — two hard days in a row pile up fatigue."))
+            when = tr(pl="dziś", en="today") if load["days_since_hard"] == 0 else tr(pl="wczoraj", en="yesterday")
+            reasons.append(tr(pl=f"Mocny trening był {when} — dwa mocne dni pod rząd to kumulacja zmęczenia, nie "
+                                 "więcej formy.",
+                              en=f"There was a hard session {when} — two hard days in a row pile up fatigue, not "
+                                 "fitness."))
         else:
             action = "jak w planie"
             reasons.append(tr(pl="Brak sygnałów przeciw: regeneracja i obciążenie w normie.",
                               en="No signals against: recovery and load are normal."))
+        reasons = text.why(session) + reasons
         return {"source": "plan", "session": session, "today": session["date"] == today.isoformat(),
                 "action": action, "reasons": reasons, "flags": flags,
                 "recovery": recovery, "load": load}
@@ -303,6 +307,8 @@ def _session_brief(session: dict[str, Any]) -> dict[str, Any]:
     out = {k: session.get(k) for k in keys}
     out["pace"] = (f"{units.fmt_pace(session.get('pace_lo'), False)}–{units.fmt_pace(session.get('pace_hi'))}"
                    if session.get("pace_lo") else None)
+    if session.get("why"):
+        out["why"] = text.why(session)
     return out
 
 
@@ -318,16 +324,13 @@ def brief(
     """Everything an assistant needs, as plain JSON-serialisable data."""
     today = today or dt.date.today()
     hr_max = float(runs["hr_max_used"].dropna().iloc[0]) if "hr_max_used" in runs and runs["hr_max_used"].notna().any() else None
-    races = [r for r in store.races() if r.get("date", "") >= today.isoformat()]
-    weeks_to = {}
-    for item in races:
-        weeks = (dt.date.fromisoformat(item["date"]) - today).days / 7
-        weeks_to.setdefault(item["distance"], weeks)
-    result = forecast.forecast(runs, efforts, daily, hr_max=hr_max, weeks_to_race=weeks_to)
+    races = sorted((r for r in store.races() if r.get("date", "") >= today.isoformat()), key=lambda r: r["date"])
+    result = forecast.forecast(runs, efforts, daily, hr_max=hr_max)
 
-    plans = store.plans()
-    active = store.plan(plan_id) if plan_id else next(
-        (p for p in plans if p["request"].get("race_date", "") >= today.isoformat()), None)
+    active = store.plan(plan_id) if plan_id else store.current_plan()
+    if active is not None and planning.next_goal(active, today) is None and not plan_id:
+        active = None
+    base = planning.baseline(runs, runs["day"].max(), result.get("vdot")) if not runs.empty else {}
 
     out: dict[str, Any] = {
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
@@ -359,7 +362,7 @@ def brief(
         ],
         "load": load_signals(runs, today),
         "recovery": recovery_signals(daily, today),
-        "races": races,
+        "races": [{**race, **_race_target(race, result, active, base, today)} for race in races],
         "plan": None,
         "next_session": None,
         "data_gaps": data_gaps(runs, daily, result, laps),
@@ -385,9 +388,9 @@ def brief(
         out["plan"] = {
             "id": active["id"],
             "name": active.get("name"),
-            "race_date": active["request"].get("race_date"),
-            "distance": active["request"].get("distance"),
-            "goal_s": active["request"].get("goal_s"),
+            "goals": planning.plan_goals(active),
+            "next_goal": planning.next_goal(active, today),
+            "goals_out_of_date": planning.stale(active, races, today),
             "compliance": planning.compliance(matched),
             "last_14_days": [
                 {k: (v.isoformat() if isinstance(v, dt.date) else v) for k, v in row.items()
@@ -402,6 +405,17 @@ def brief(
     suggestion = next_session(active, runs, daily, result, today)
     out["next_session"] = {**suggestion, "session": _session_brief(suggestion["session"]) if suggestion.get("session") else None}
     return out
+
+
+def _race_target(race: dict[str, Any], result: dict[str, Any], plan: dict[str, Any] | None,
+                 base: dict[str, Any], today: dt.date) -> dict[str, Any]:
+    """Race-day target: after the plan when it covers the race ("plan"), else
+    with the current training going on ("steady")."""
+    item = result["distances"].get(race["distance"]) if result.get("status") == "ok" else None
+    if item is None or not base:
+        return {"target": None, "target_basis": None}
+    item = planning.race_outlook(item, race, plan, base, today)
+    return {"target": units.fmt_time(item.target_s) if item.target_s else None, "target_basis": item.target_basis}
 
 
 def _forecast_brief(result: dict[str, Any]) -> dict[str, Any]:
@@ -427,7 +441,6 @@ def _forecast_brief(result: dict[str, Any]) -> dict[str, Any]:
                 "realistic": units.fmt_time(item.realistic_s),
                 "range_80": [units.fmt_time(item.low_s), units.fmt_time(item.high_s)],
                 "potential": units.fmt_time(item.potential_s),
-                "target_after_plan": units.fmt_time(item.target_s) if item.target_s else None,
                 "pace": units.fmt_pace(item.pace, False),
                 "confidence": item.confidence,
                 "preparation": item.prep,
@@ -464,6 +477,17 @@ def markdown(data: dict[str, Any]) -> str:
         lines += [tr(pl=f"- uwaga: {note}", en=f"- note: {note}") for note in fc["notes"]]
     else:
         lines.append(tr(pl=f"- brak: {fc['reason']}", en=f"- none: {fc['reason']}"))
+    if data["races"]:
+        lines += ["", tr(pl="## Starty (cele planu)", en="## Races (the plan's goals)")]
+        for race in data["races"]:
+            goal = race.get("goal_s") and units.fmt_time(race["goal_s"])
+            basis = {"plan": tr(pl="po planie", en="after the plan"),
+                     "steady": tr(pl="przy obecnym treningu", en="with the current training")}.get(race["target_basis"])
+            target = f"{race['target']} ({basis})" if race["target"] else "—"
+            lines.append(tr(pl=f"- {race['date']} {race['name']} — {text.race_label(race['distance'])}, priorytet "
+                               f"{race.get('priority', 'A')}, cel {goal or '—'}, na dzień startu {target}",
+                            en=f"- {race['date']} {race['name']} — {text.race_label(race['distance'])}, priority "
+                               f"{race.get('priority', 'A')}, goal {goal or '—'}, on race day {target}"))
     lines += ["", tr(pl="## Obciążenie i regeneracja", en="## Load and recovery"),
               f"- {json.dumps(data['load'], ensure_ascii=False)}",
               f"- {json.dumps(data['recovery'], ensure_ascii=False, default=str)}", "",
@@ -508,8 +532,8 @@ def main(argv: list[str] | None = None) -> int:
                                                     en="The training brief for the assistant"))
     parser.add_argument("--json", action="store_true", help=tr(pl="wypisz JSON zamiast Markdown",
                                                                en="print JSON instead of Markdown"))
-    parser.add_argument("--plan", help=tr(pl="id planu (domyślnie: najbliższy aktywny)",
-                                          en="plan id (default: the nearest active one)"))
+    parser.add_argument("--plan", help=tr(pl="id planu (domyślnie: bieżący plan)",
+                                          en="plan id (default: the current plan)"))
     parser.add_argument("--validate", metavar="PLAN_ID", help=tr(pl="sprawdź plik planu i zakończ",
                                                                  en="check a plan file and exit"))
     parser.add_argument("--lang", choices=list(i18n.LANGS),

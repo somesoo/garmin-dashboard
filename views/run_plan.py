@@ -13,7 +13,7 @@ import routing
 import shell
 import theme as tz
 import config
-from running import coach, garmin_workout as gw, plan as planning, store, text, units
+from running import coach, forecast, garmin_workout as gw, plan as planning, store, text, units
 from views import run_common as rc
 
 STATUS_ICONS = rc.STATUS_ICONS
@@ -34,39 +34,22 @@ def render() -> None:
     tr = i18n.tr
     bento.header(
         i18n.page("plan"),
-        tr(pl="Startuje od tego, co faktycznie biegasz, rośnie do szczytu dystansu (≤ 1,3× średniej z 4 tygodni), co "
-              "3.–4. tydzień odpuszcza i kończy się taperem. Tempa z aktualnej formy, nie z celu.",
-           en="It starts from what you actually run, grows to the distance's peak (≤ 1.3× the 4-week average), backs "
-              "off every 3rd–4th week and ends with a taper. Paces from your current form, not from the goal."),
+        tr(pl="Jeden plan przez wszystkie starty ze strony Zawody. Startuje od tego, co faktycznie biegasz, rośnie do "
+              "szczytu dystansu (≤ 1,3× średniej z 4 tygodni), co 3.–4. tydzień odpuszcza i przed każdym startem "
+              "schodzi z objętości. Tempa z aktualnej formy, nie z celu.",
+           en="One plan through every race on the Races page. It starts from what you actually run, grows to the "
+              "distance's peak (≤ 1.3× the 4-week average), backs off every 3rd–4th week and eases off before each "
+              "race. Paces from your current form, not from the goal."),
     )
     frame = rc.guard()
     if frame is None:
         return
+    active = rc.active_plan()  # first: rebuilt here when the races changed
     result = rc.current_forecast()
-    plans = store.plans()
-
-    requested_race = st.session_state.pop("plan_race_request", None)
-    if requested_race:
-        existing = store.plans_for(requested_race)
-        if existing:
-            st.session_state["plan_choice"] = existing[0]["id"]
-        else:
-            st.session_state["plan_new_race"] = requested_race
-
-    with st.expander(tr(pl="Nowy plan", en="New plan"),
-                     expanded=not plans or bool(st.session_state.get("plan_new_race"))):
-        _create(frame, result)
-
-    if not plans:
-        return
-    ids = [p["id"] for p in plans]
-    if st.session_state.get("plan_choice") not in ids:
-        st.session_state["plan_choice"] = ids[0]
-    chosen = st.selectbox("Plan", ids, format_func=lambda i: next(p.get("name", i) for p in plans if p["id"] == i),
-                          key="plan_choice", label_visibility="collapsed")
-    active = store.plan(chosen)
+    with st.expander(tr(pl="Ustawienia planu", en="Plan settings") if active else tr(pl="Nowy plan", en="New plan"),
+                     expanded=active is None):
+        _create(frame, result, active)
     if active is None:
-        st.error(tr(pl="Plik planu nie istnieje albo jest uszkodzony.", en="The plan file is missing or damaged."))
         return
     errors = store.validate_plan(active)
     if errors:
@@ -76,6 +59,7 @@ def render() -> None:
 
     matched = planning.match(active, frame, laps=shell.table("run_laps"))
     _header(active, result, matched)
+    _explain(active, result)
     left, right = bento.row(2, 2)
     with left:
         _weekly_chart(active, frame)
@@ -104,50 +88,48 @@ def render() -> None:
 # creation
 
 
-def _create(frame: pd.DataFrame, result: dict) -> None:
+def _create(frame: pd.DataFrame, result: dict, active: dict | None) -> None:
+    """One plan through every race ahead; here only what holds for the whole plan."""
     tr = i18n.tr
     if result.get("status") != "ok":
         st.warning(tr(pl="Bez prognozy formy nie da się dobrać temp: ",
                       en="Without a fitness forecast the paces cannot be set: ") + str(result.get("reason", "")))
         return
-    races = [r for r in store.races() if r["date"] > dt.date.today().isoformat()]
-    race_ids = [None] + [r["id"] for r in races]
-    preselect = st.session_state.pop("plan_new_race", None)
+    races = rc.upcoming_races(dt.date.today() + dt.timedelta(days=1))
+    if not races:
+        st.info(tr(pl="Plan buduje się do startów — dodaj pierwszy na stronie Zawody.",
+                   en="The plan builds toward races — add the first one on the Races page."))
+        if st.button(tr(pl="Zawody →", en="Races →"), key="plan_to_races"):
+            routing.goto("zawody")
+        return
+    st.markdown(tr(pl="**Cele** (ze strony Zawody; dodanie, zmiana albo usunięcie startu przebudowuje plan od jutra):",
+                   en="**Goals** (from the Races page; adding, changing or removing a race rebuilds the plan from "
+                      "tomorrow):"))
+    st.markdown("\n".join(
+        f"- **{r['name']}** · {rc.race_label(r['distance'])} · {dt.date.fromisoformat(r['date']):%d.%m.%Y} · "
+        + tr(pl=f"priorytet {r.get('priority', 'A')}", en=f"priority {r.get('priority', 'A')}")
+        + (tr(pl=" · cel ", en=" · goal ") + units.fmt_time(r["goal_s"]) if r.get("goal_s") else "")
+        for r in races))
+    st.caption(tr(pl="A — pełny taper i tydzień regeneracji po starcie; B i C — tylko lżejszy tydzień startu, "
+                     "budowa idzie dalej.",
+                  en="A — a full taper and a recovery week after the race; B and C — only a lighter race week, the "
+                     "build goes on."))
+    request = (active or {}).get("request", {})
     day_names = i18n.weekdays(long=True)
-
-    def describe(race_id):
-        if race_id is None:
-            return tr(pl="— bez zapisanego startu —", en="— no saved race —")
-        race = next(r for r in races if r["id"] == race_id)
-        return f"{race['name']} · {rc.race_label(race['distance'])} · {race['date']}"
-
     with st.form("plan_create"):
-        race_id = st.selectbox(tr(pl="Start", en="Race"), race_ids, format_func=describe,
-                               index=race_ids.index(preselect) if preselect in race_ids else 0,
-                               help=tr(pl="Starty dodajesz na stronie Zawody.", en="Races are added on the Races page."))
-        race = next((r for r in races if r["id"] == race_id), None)
         columns = st.columns(3)
-        distance = columns[0].selectbox(tr(pl="Dystans", en="Distance"), list(units.RACES), format_func=rc.race_label,
-                                        index=list(units.RACES).index(race["distance"]) if race else 1,
-                                        disabled=race is not None)
-        date = columns[1].date_input(
-            tr(pl="Data startu", en="Race date"),
-            dt.date.fromisoformat(race["date"]) if race else dt.date.today() + dt.timedelta(weeks=10),
-            format="DD.MM.YYYY", disabled=race is not None)
-        goal_text = columns[2].text_input(
-            tr(pl="Cel (czas lub tempo /km)", en="Goal (time or pace /km)"),
-            units.fmt_time(race["goal_s"]) if race and race.get("goal_s") else "",
-            placeholder=tr(pl="np. 49:30 albo 4:55/km", en="e.g. 49:30 or 4:55/km"))
-        columns = st.columns(3)
-        days = columns[0].multiselect(tr(pl="Dni biegowe", en="Running days"), list(range(7)), default=[1, 3, 5, 6],
+        days = columns[0].multiselect(tr(pl="Dni biegowe", en="Running days"), list(range(7)),
+                                      default=request.get("run_days") or [1, 3, 5, 6],
                                       format_func=lambda d: day_names[d])
-        long_day = columns[1].selectbox(tr(pl="Dzień długiego biegu", en="Long run day"), list(range(7)), index=6,
-                                        format_func=lambda d: day_names[d])
+        long_day = columns[1].selectbox(tr(pl="Dzień długiego biegu", en="Long run day"), list(range(7)),
+                                        index=int(request.get("long_day", 6)), format_func=lambda d: day_names[d])
         cap = columns[2].number_input(tr(pl="Maks. km/tydz. (0 = auto)", en="Max km/week (0 = auto)"), min_value=0,
-                                      max_value=200, value=0, step=5,
+                                      max_value=200, value=int(request.get("max_weekly_km") or 0), step=5,
                                       help=tr(pl="Górna granica wynikająca z czasu, zdrowia, doświadczenia.",
                                               en="An upper limit set by time, health, experience."))
-        submitted = st.form_submit_button(tr(pl="Wygeneruj plan", en="Generate the plan"))
+        submitted = st.form_submit_button(
+            tr(pl="Przebuduj plan z tymi ustawieniami", en="Rebuild the plan with these settings") if active
+            else tr(pl="Wygeneruj plan", en="Generate the plan"))
     if not submitted:
         base = planning.baseline(frame, frame["day"].max(), result.get("vdot"))
         weekly, runs, long_run = f"{base['weekly_km_4w']:.0f}", f"{base['runs_per_week_4w']:.1f}", f"{base['long_km_6w']:.0f}"
@@ -159,38 +141,25 @@ def _create(frame: pd.DataFrame, result: dict) -> None:
                f"{long_run} km, 8-week consistency {regular}, VDOT {base['vdot']}.",
         ))
         return
-    distance = race["distance"] if race else distance
-    date = dt.date.fromisoformat(race["date"]) if race else date
-    goal = _parse_goal(goal_text, distance)
-    if goal_text.strip() and goal is None:
-        st.error(tr(pl="Nie rozumiem celu — wpisz czas (49:30, 1:52:00) albo tempo (4:55/km).",
-                    en="I cannot read the goal — enter a time (49:30, 1:52:00) or a pace (4:55/km)."))
+    if not 2 <= len(set(days)) <= 7:
+        st.error(tr(pl="Wybierz od 2 do 7 dni biegowych w tygodniu.", en="Pick 2 to 7 running days a week."))
         return
-    request = planning.PlanRequest(
-        distance=distance, race_date=date, goal_s=goal, run_days=sorted(days), long_day=long_day,
-        start=dt.date.today() + dt.timedelta(days=1), max_weekly_km=cap or None,
-        race_id=race_id, name=f"{race['name'] if race else rc.race_label(distance)} — {date:%d.%m.%Y}",
-    )
+    tomorrow = dt.date.today() + dt.timedelta(days=1)
+    settings = planning.PlanSettings(run_days=sorted(days), long_day=long_day, start=tomorrow,
+                                     max_weekly_km=cap or None)
+    goals = [planning.goal_of(r) for r in races]
     try:
-        payload = planning.generate(request, frame, result)
-        store.save_plan(payload)
+        if active:
+            active = {**active, "request": {**active["request"], "run_days": sorted(days), "long_day": long_day,
+                                            "max_weekly_km": cap or None}}
+            payload = planning.replan(active, frame, result, today=tomorrow, goals=goals)
+        else:
+            payload = planning.generate_goals(settings, goals, frame, result)
+        store.save_only_plan(payload)
     except ValueError as error:
         st.error(str(error))
         return
-    st.session_state["plan_choice"] = payload["id"]
     st.rerun()
-
-
-def _parse_goal(text: str, distance: str) -> float | None:
-    text = text.strip()
-    if not text:
-        return None
-    # Under ten minutes no race distance here is possible, so "4:55" is a pace.
-    seconds = units.parse_time(text.replace("/km", "").strip())
-    if "/km" in text or (seconds is not None and seconds < 600):
-        pace = units.parse_pace(text.replace(" ", ""))
-        return units.time_from(pace, units.RACES[distance]) if pace else None
-    return units.parse_time(text)
 
 
 # --------------------------------------------------------------------------
@@ -198,8 +167,8 @@ def _parse_goal(text: str, distance: str) -> float | None:
 
 
 def _header(active: dict, result: dict, matched: pd.DataFrame) -> None:
-    request = active["request"]
-    race_date = dt.date.fromisoformat(request["race_date"])
+    goal = planning.next_goal(active)
+    race_date = dt.date.fromisoformat(goal["date"])
     days = (race_date - dt.date.today()).days
     weeks = planning.week_table(active)
     build = weeks[weeks["phase"].isin(("base", "build", "peak"))] if not weeks.empty else weeks
@@ -208,7 +177,8 @@ def _header(active: dict, result: dict, matched: pd.DataFrame) -> None:
     summary = planning.compliance(matched)
     left = (f"{days} {i18n.plural(days, pl=('dzień', 'dni', 'dni'), en=('day', 'days'))}" if days >= 0
             else tr(pl="po starcie", en="after the race"))
-    bento.stat(columns[0], tr(pl="Do startu", en="To the race"), left, key="p_days", note=f"{race_date:%d.%m.%Y}")
+    bento.stat(columns[0], tr(pl="Do startu", en="To the race"), left, key="p_days",
+               note=f"{goal.get('name') or rc.race_label(goal['distance'])} · {race_date:%d.%m.%Y}")
     bento.stat(columns[1], tr(pl="Szczyt objętości", en="Peak volume"),
                f"{build['planned_km'].max():.0f} km" if len(build) else "—", key="p_peak")
     bento.stat(columns[2], tr(pl="Najdłuższy bieg", en="Longest run"),
@@ -224,18 +194,108 @@ def _header(active: dict, result: dict, matched: pd.DataFrame) -> None:
                                      en="Sessions done or modified / sessions so far."),
                note=note)
     created = active.get("forecast", {})
-    now = result["distances"].get(request["distance"]) if result.get("status") == "ok" else None
+    now = result["distances"].get(goal["distance"]) if result.get("status") == "ok" else None
     then = f"{units.fmt_time(created.get('realistic_s'))} (VDOT {created.get('vdot')})"
     line = tr(pl=f"Prognoza przy tworzeniu planu: {then}", en=f"Forecast when the plan was made: {then}")
     if now:
         today = f"{units.fmt_time(now.realistic_s)} (VDOT {result['vdot']:.1f})"
         line += tr(pl=f" · dziś: {today}", en=f" · today: {today}")
-    if request.get("goal_s"):
-        goal = units.fmt_time(request["goal_s"])
-        line += tr(pl=f" · cel: {goal}", en=f" · goal: {goal}")
+    if goal.get("goal_s"):
+        time = units.fmt_time(goal["goal_s"])
+        line += tr(pl=f" · cel: {time}", en=f" · goal: {time}")
     st.caption(line + ".")
     for warning in text.warnings(active):
         st.warning(warning)
+
+
+def _explain(active: dict, result: dict) -> None:
+    """The rules, each with the runner's own numbers: what the plan does and why."""
+    tr = i18n.tr
+    base, weeks = active.get("baseline", {}), active.get("weeks", [])
+    request = active["request"]
+    built = [w for w in weeks if w["phase"] in ("base", "build", "peak")]
+    if not built:
+        return
+    days = len(request.get("run_days") or [])
+    first, peak = built[0], max(built, key=lambda w: w["volume_km"])
+    longest = max(w["long_km"] for w in weeks)
+    two = [w["week"] for w in weeks if planning.quality_count(days, w) == 2]
+    lines = [
+        tr(pl=f"**Start od Twojej realnej objętości.** Pierwszy tydzień budowy: {first['volume_km']:.0f} km; średnia "
+              f"z Twoich ostatnich 4 tygodni: {base.get('weekly_km_4w', 0):.0f} km. Szczyt {peak['volume_km']:.0f} km "
+              f"w tygodniu {peak['week']}; żaden tydzień nie przekracza 1,3× średniej z 4 poprzednich (ACWR — powyżej "
+              "rośnie ryzyko kontuzji), co 3.–4. tydzień jest lżejszy.",
+           en=f"**It starts from your real volume.** First build week: {first['volume_km']:.0f} km; your average over "
+              f"the last 4 weeks: {base.get('weekly_km_4w', 0):.0f} km. Peak {peak['volume_km']:.0f} km in week "
+              f"{peak['week']}; no week exceeds 1.3× the average of the 4 before it (ACWR — above that the injury risk "
+              "rises), every 3rd–4th week is lighter."),
+        tr(pl=f"**Jeden akcent + długi bieg w tygodniu.** Długi bieg to też mocny dzień (u Danielsa jeden z akcentów "
+              f"tygodnia). Drugi akcent dopiero przy 5+ dniach biegowych i {planning.QUALITY_ROOM_KM:.0f}+ km — "
+              f"biegasz {days} dni, więc inaczej 3 z {days} dni byłyby mocne"
+              + (f" (dwa akcenty w tygodniach: {', '.join(map(str, two))})." if two else ".")
+              + " Akcenty nigdy nie sąsiadują ze sobą ani z długim biegiem.",
+           en="**One quality session + the long run a week.** The long run is a hard day too (Daniels counts it as one "
+              f"of the week's quality sessions). A second one only with 5+ running days and "
+              f"{planning.QUALITY_ROOM_KM:.0f}+ km — you run {days} days, otherwise 3 of {days} days would be hard"
+              + (f" (two quality sessions in weeks: {', '.join(map(str, two))})." if two else ".")
+              + " Quality sessions never sit next to each other or to the long run."),
+        tr(pl="**Plan czyta Twoje biegi.** Akcent albo długi bieg zrobiony już w tym tygodniu liczy się do tygodnia, "
+              "a akcent nie ląduje obok mocnego dnia, który naprawdę się odbył. Każda sesja, którą reguła zmieniła, "
+              "ma przy sobie powód („Dlaczego tu”).",
+           en="**The plan reads your runs.** A quality session or long run already done this week counts toward the "
+              "week, and quality never lands next to a hard day that really happened. Every session a rule changed "
+              "carries its reason (“Why here”)."),
+        tr(pl=f"**Długi bieg** rośnie od {base.get('long_km_6w', 0):.0f} do {longest:.0f} km o 1–2 km na tydzień, "
+              "maks. ~2,5 h.",
+           en=f"**The long run** grows from {base.get('long_km_6w', 0):.0f} to {longest:.0f} km by 1–2 km a week, "
+              "max. ~2.5 h."),
+        tr(pl=f"**Wokół startów.** Długi bieg najpóźniej {planning.LONG_GAP_DAYS + 1} dni przed startem, akcent "
+              f"najpóźniej {planning.QUALITY_GAP_DAYS + 1} dni przed. Dzień przed startem: "
+              + (f"rozruch, jeśli to Twój dzień biegowy (biegasz {days} dni w tygodniu, wolne zmieniłoby rytm), "
+                 "inaczej wolne." if days >= planning.SHAKEOUT_MIN_DAYS else
+                 f"wolne — biegasz {days} dni w tygodniu, więc dzień przerwy przed startem to Twój zwykły rytm "
+                 f"(rozruch dopiero przy {planning.SHAKEOUT_MIN_DAYS}+ dniach).")
+              + " Po starcie krótkie biegi regeneracyjne, a akcent i długi bieg dopiero po jednym spokojnym dniu na "
+              "każde 3 km startu. A: pełny taper dystansu i tydzień regeneracji po; B/C: lżejszy tydzień startu.",
+           en=f"**Around races.** The long run at least {planning.LONG_GAP_DAYS + 1} days before a race, quality at "
+              f"least {planning.QUALITY_GAP_DAYS + 1} days before. The day before: "
+              + (f"a shakeout if it is one of your running days (you run {days} days a week, a day off would break "
+                 "the rhythm), otherwise rest." if days >= planning.SHAKEOUT_MIN_DAYS else
+                 f"rest — you run {days} days a week, so a day off before the race is your usual rhythm (a shakeout "
+                 f"only with {planning.SHAKEOUT_MIN_DAYS}+ days).")
+              + " After the race short recovery runs, and quality and the long run only after one easy day per 3 km "
+              "raced. A: the distance's full taper and a recovery week after; B/C: a lighter race week."),
+        tr(pl=f"**Tempa z dzisiejszej formy** (VDOT {active.get('forecast', {}).get('vdot')}), nie z celu. "
+              "„Przebuduj od jutra” przelicza je z nowych danych; samopoczucie dnia ocenia rano decyzja na stronie "
+              "Dziś (HRV, sen, tętno spoczynkowe).",
+           en=f"**Paces from today's form** (VDOT {active.get('forecast', {}).get('vdot')}), not from the goal. "
+              "“Rebuild from tomorrow” recalculates them from new data; how you feel on the day is judged each "
+              "morning by the decision on the Today page (HRV, sleep, resting HR)."),
+    ]
+    frame = rc.runs()
+    base_now = planning.baseline(frame, frame["day"].max(), result.get("vdot")) if result.get("status") == "ok" else None
+    gains = []
+    for race in rc.upcoming_races():
+        item = result["distances"].get(race["distance"]) if base_now else None
+        if item is None or not planning.covers(active, race):
+            continue
+        weeks_to = (dt.date.fromisoformat(race["date"]) - dt.date.today()).days / 7
+        planned = planning.race_outlook(item, race, active, base_now, dt.date.today())
+        steady = forecast.steady(item, weeks_to, base_now["consistency_8w"])
+        if planned.target_s and steady.target_s:
+            gains.append(f"{race['name']}: {units.fmt_time(planned.target_s)} "
+                         + tr(pl=f"vs {units.fmt_time(steady.target_s)} jak teraz",
+                              en=f"vs {units.fmt_time(steady.target_s)} as now"))
+    if gains:
+        lines.append(tr(pl="**Co daje plan** (prognoza na dzień startu): ", en="**What the plan adds** (race-day "
+                                                                               "forecast): ") + " · ".join(gains)
+                     + ".")
+    with bento.panel(tr(pl="Jak działa ten plan", en="How this plan works"), key="plan_explain",
+                     caption=tr(pl="Reguły z Twoimi liczbami — jeśli któraś nie pasuje, zmień ustawienia albo "
+                                   "powiedz asystentowi (/trener).",
+                                en="The rules with your numbers — if one does not fit, change the settings or tell "
+                                   "the assistant (/trener).")):
+        st.markdown("\n".join(f"- {line}" for line in lines))
 
 
 def _next(active: dict, frame: pd.DataFrame, result: dict) -> None:
@@ -370,6 +430,8 @@ def _week(active: dict, matched: pd.DataFrame) -> None:
                 st.caption(tr(pl=f"Tempo {band} · tętno {hr} · ok. {minutes} min",
                               en=f"Pace {band} · HR {hr} · about {minutes} min"))
             st.caption(tr(pl="Po co: ", en="Why: ") + session.get("purpose", "—"))
+            for line in text.why(session):
+                st.caption(tr(pl="Dlaczego tu: ", en="Why here: ") + line)
             if row.activity_id:
                 kind, auto = rc.kind_label(row.actual_kind), labels.get(row.auto, row.auto)
                 done_km, pace = f"{row.actual_km:.1f} km", units.fmt_pace(row.actual_pace)
@@ -447,8 +509,9 @@ def _actions_body(active: dict, frame: pd.DataFrame, result: dict) -> None:
                          help=tr(pl="Po pominiętych treningach, po teście, po zmianie formy.",
                                  en="After skipped sessions, after a test, after a change in form.")):
         try:
-            fresh = planning.replan(active, frame, result, today=dt.date.today() + dt.timedelta(days=1))
-            store.save_plan(fresh)
+            fresh = planning.replan(active, frame, result, today=dt.date.today() + dt.timedelta(days=1),
+                                    goals=[planning.goal_of(r) for r in rc.upcoming_races()])
+            store.save_only_plan(fresh)
         except ValueError as error:
             st.error(str(error))
         else:
@@ -464,7 +527,6 @@ def _actions_body(active: dict, frame: pd.DataFrame, result: dict) -> None:
                                                                       "statuses."))
         if st.button(tr(pl="Usuń plan", en="Delete the plan"), key="plan_delete", type="primary"):
             store.delete_plan(active["id"])
-            st.session_state.pop("plan_choice", None)
             st.rerun()
     _garmin(active)
     history = active.get("history", [])

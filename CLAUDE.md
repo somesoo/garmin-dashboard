@@ -674,6 +674,35 @@ i *Segmenty*) — porównanie biegów bez okrążeń z zegarka, tylko z GPS:
 - Kolumna tabeli z „tempo”/„pace” w nazwie i typem float przechodzi przez
   `readable_paces` jako m:ss — różnice tempa w sekundach nazywaj `Δ s/km`.
 
+Plan i cele:
+
+- **Plan jest jeden** (`store.current_plan`, zapis przez `store.save_only_plan`
+  usuwa inne pliki) i prowadzi przez **wszystkie** nadchodzące starty z
+  `races.json` (`plan["goals"]`). `plan.generate_goals` składa bloki: każdy
+  start ma własny, budowany od miejsca, gdzie skończył się poprzedni; A — pełny
+  taper dystansu, B/C — tylko lżejszy tydzień startu; po starcie A albo HM/M
+  tydzień regeneracji. `request.race_date` to ostatni cel; najbliższy daje
+  `plan.next_goal`.
+- **Reguły tygodnia** (`plan._block_sessions`, stałe w `plan.py`): jeden akcent
+  + długi bieg, drugi akcent dopiero przy 5+ dniach i 35+ km (`quality_count`);
+  plan czyta biegi z 7 dni przed startem planu (`already_run`) — akcent/długi
+  zrobiony w tym tygodniu zmniejsza przydział, akcent nie ląduje obok realnego
+  mocnego dnia; długi ≥ 7 dni przed startem, akcent ≥ 4 dni; dzień przed
+  startem rozruch tylko dla dnia biegowego przy 4+ dniach w tygodniu, inaczej
+  wolne; po starcie bez akcentu/długiego przez 1 dzień na 3 km startu
+  (`easy_days_after`, także w kolejnym bloku). Każda zmiana wzorca zostawia na
+  sesji kod `why` (`text.why`) — strona Plan pokazuje go jako „Dlaczego tu”,
+  a panel „Jak działa ten plan” wypisuje reguły z liczbami biegacza.
+  `planned_km` tygodnia liczy też start.
+- **Zmiana startów przebudowuje plan od jutra**: `rc.active_plan` porównuje
+  cele planu z `races.json` (`plan.stale`) i woła `replan(..., goals=...)`
+  (historia: `goals`). Strony wołają `rc.active_plan()` przed prognozą.
+- **Cel na dzień startu** jest per start (`plan.race_outlook`): plan obejmuje
+  start → `forecast.target` (`target_basis = "plan"`, przygotowanie z 8 tyg.
+  przed startem, w pełni dopiero przy ≥ 6 tyg.); bez planu →
+  `forecast.steady` („jak teraz”: dzisiejsze przygotowanie, przyrost × regularność,
+  wygasa po ~6 tyg.) i strona Zawody poleca ułożenie planu.
+
 Treningi na zegarek:
 
 - Każda sesja planu ma `steps` (rozgrzewka / odcinki / przerwy / schłodzenie,

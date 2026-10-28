@@ -84,10 +84,11 @@ def _week_note(active: dict | None) -> str:
     tr = i18n.tr
     if active is None:
         return tr(pl="Bez planu — pokazuję, co faktycznie przebiegłeś.", en="No plan — showing what you actually ran.")
-    race = dt.date.fromisoformat(active["request"]["race_date"])
-    name, left = active.get("name", active["id"]), (race - dt.date.today()).days
-    return tr(pl=f"Plan „{name}” — start za {left} dni. ✓ wykonany · ≈ zmodyfikowany · ✗ pominięty · · zaplanowany.",
-              en=f"Plan “{name}” — race in {left} days. ✓ done · ≈ modified · ✗ skipped · · planned.")
+    goal = planning.next_goal(active)
+    race = dt.date.fromisoformat(goal["date"])
+    name, left = goal.get("name") or rc.race_label(goal["distance"]), (race - dt.date.today()).days
+    return tr(pl=f"Plan — „{name}” za {left} dni. ✓ wykonany · ≈ zmodyfikowany · ✗ pominięty · · zaplanowany.",
+              en=f"Plan — “{name}” in {left} days. ✓ done · ≈ modified · ✗ skipped · · planned.")
 
 
 def _decision(active: dict | None, suggestion: dict | None, today: dt.date) -> None:
@@ -202,13 +203,14 @@ def _forecast(tile, result: dict, active: dict | None) -> None:
         if st.button("", icon=":material/arrow_forward:", type="tertiary", key="today_to_forecast",
                      help=i18n.page("prognoza")):
             routing.goto("prognoza")
-    keys = [active["request"]["distance"]] if active else ["5k", "10k"]
+    goal = planning.next_goal(active)
+    keys = [goal["distance"]] if goal else ["5k", "10k"]
     if result.get("status") == "ok" and active is None:
         keys = [k for k in ("5k", "10k") if k in result["distances"]]
     rc.forecast_tiles(result, keys, compact=True)
-    if active and active["request"].get("goal_s"):
-        goal = units.fmt_time(active["request"]["goal_s"])
-        st.caption(i18n.tr(pl=f"Cel: {goal}", en=f"Goal: {goal}"))
+    if goal and goal.get("goal_s"):
+        time = units.fmt_time(goal["goal_s"])
+        st.caption(i18n.tr(pl=f"Cel: {time}", en=f"Goal: {time}"))
 
 
 def _recent(frame: pd.DataFrame) -> None:

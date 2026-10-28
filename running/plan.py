@@ -58,6 +58,7 @@ class PlanRequest:
     max_weekly_km: float | None = None
     race_id: str | None = None
     name: str | None = None
+    priority: str = "A"
 
     def validate(self) -> list[str]:
         tr = i18n.tr
@@ -75,6 +76,16 @@ class PlanRequest:
         if self.goal_s is not None and self.goal_s <= 0:
             errors.append(tr(pl="Cel czasowy musi być dodatni.", en="The time goal must be positive."))
         return errors
+
+
+@dataclass
+class PlanSettings:
+    """What holds for the whole plan, whatever the goals."""
+
+    run_days: list[int] = field(default_factory=lambda: [1, 3, 5, 6])  # Mon=0
+    long_day: int = 6
+    start: dt.date | None = None
+    max_weekly_km: float | None = None
 
 
 # --------------------------------------------------------------------------
@@ -116,12 +127,14 @@ def baseline(runs: pd.DataFrame, anchor: pd.Timestamp, vdot: float | None) -> di
 # week skeleton
 
 
-def _weeks(request: PlanRequest, start: dt.date) -> list[dict[str, Any]]:
-    """Monday-based weeks from the start week to the race week, with phases."""
+def _weeks(request: PlanRequest, start: dt.date, offset: int = 0) -> list[dict[str, Any]]:
+    """Monday-based weeks from the start week to the race week, with phases
+    (numbered from ``offset + 1``: a block after an earlier race)."""
     first_monday = start - dt.timedelta(days=start.weekday())
     race_monday = request.race_date - dt.timedelta(days=request.race_date.weekday())
     count = (race_monday - first_monday).days // 7 + 1
-    taper = min(TAPER_WEEKS[request.distance], max(0, count - 1))
+    full = TAPER_WEEKS[request.distance] if request.priority == "A" else 1
+    taper = min(full, max(0, count - 1))
     out = []
     for index in range(count):
         from_end = count - 1 - index
@@ -133,7 +146,7 @@ def _weeks(request: PlanRequest, start: dt.date) -> list[dict[str, Any]]:
             build_total = count - 1 - taper
             position = index / max(1, build_total)
             phase = "base" if build_total >= 8 and position < 0.34 else ("peak" if position >= 0.67 else "build")
-        out.append({"week": index + 1, "monday": first_monday + dt.timedelta(days=7 * index), "phase": phase})
+        out.append({"week": offset + index + 1, "monday": first_monday + dt.timedelta(days=7 * index), "phase": phase})
     return out
 
 
@@ -163,7 +176,11 @@ def _volumes(weeks: list[dict[str, Any]], base: dict[str, Any], request: PlanReq
         if week["phase"] in ("base", "build", "peak"):
             position = build.index(week)
             recovery = (position + 1) % cycle == 0 and position != len(build) - 1
-            if recovery:
+            if position == 0 and base.get("after_race"):
+                # The week after a goal race: recover before building again.
+                volume, long_km = 0.7 * start_km, 0.7 * long_now
+                recovery = True
+            elif recovery:
                 volume = 0.75 * last_build
                 long_km = 0.75 * last_long
             else:
@@ -178,7 +195,7 @@ def _volumes(weeks: list[dict[str, Any]], base: dict[str, Any], request: PlanReq
             volume, long_km = last_build * factor, last_long * (factor - 0.1)
             week["recovery"] = False
         else:  # race week: volume before the race, the race itself is extra
-            volume, long_km = last_build * 0.45, 0.0
+            volume, long_km = last_build * (0.45 if request.priority == "A" else 0.6), 0.0
             week["recovery"] = False
         long_km = min(long_km, volume * long_share) if long_km else 0.0
         week["volume_km"] = round(volume, 1)
@@ -384,86 +401,368 @@ def generate(
     anchor: pd.Timestamp | None = None,
     keep: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Build a plan dict (store.validate_plan-compatible) from data and request.
-
-    ``result`` is a ``forecast.forecast`` output; ``keep`` holds sessions that
-    already happened (re-planning keeps them unchanged).
-    """
+    """A plan toward one race (``generate_goals`` with a single goal)."""
     errors = request.validate()
     if errors:
         raise ValueError(" ".join(errors))
+    settings = PlanSettings(run_days=list(request.run_days), long_day=request.long_day, start=request.start,
+                            max_weekly_km=request.max_weekly_km)
+    goal = {"race_id": request.race_id, "name": request.name, "distance": request.distance,
+            "date": request.race_date.isoformat(), "goal_s": request.goal_s, "priority": request.priority}
+    plan = generate_goals(settings, [goal], runs, result, anchor=anchor, keep=keep)
+    if request.name:
+        plan["name"] = request.name
+    return plan
+
+
+def goal_of(race: dict[str, Any]) -> dict[str, Any]:
+    """The part of a saved race the plan depends on."""
+    return {"race_id": race.get("id"), "name": race.get("name"), "distance": race["distance"], "date": race["date"],
+            "goal_s": race.get("goal_s"), "priority": race.get("priority", "A")}
+
+
+def plan_goals(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    """The goals a plan was built for (a plan from before goals: its one race)."""
+    if plan.get("goals"):
+        return list(plan["goals"])
+    request = plan.get("request", {})
+    if not request.get("race_date"):
+        return []
+    return [{"race_id": plan.get("race_id") or request.get("race_id"), "name": request.get("name"),
+             "distance": request.get("distance"), "date": request["race_date"], "goal_s": request.get("goal_s"),
+             "priority": request.get("priority", "A")}]
+
+
+def _signature(goals: list[dict[str, Any]], today: dt.date) -> list[tuple]:
+    return sorted((g.get("race_id"), g["date"], g["distance"], g.get("goal_s"), g.get("priority", "A"))
+                  for g in goals if g["date"] > today.isoformat())
+
+
+def stale(plan: dict[str, Any], races: list[dict[str, Any]], today: dt.date | None = None) -> bool:
+    """True when the races ahead are not the goals the plan was built for."""
+    today = today or dt.date.today()
+    return _signature(plan_goals(plan), today) != _signature([goal_of(r) for r in races], today)
+
+
+def next_goal(plan: dict[str, Any] | None, today: dt.date | None = None) -> dict[str, Any] | None:
+    """The plan's nearest goal from ``today`` on."""
+    if plan is None:
+        return None
+    today = today or dt.date.today()
+    ahead = [g for g in plan_goals(plan) if g["date"] >= today.isoformat()]
+    return min(ahead, key=lambda g: g["date"]) if ahead else None
+
+
+def covers(plan: dict[str, Any] | None, race: dict[str, Any]) -> bool:
+    return plan is not None and any(g.get("race_id") == race.get("id") for g in plan_goals(plan))
+
+
+def race_outlook(item: Any, race: dict[str, Any], plan: dict[str, Any] | None, base: dict[str, Any],
+                 today: dt.date) -> Any:
+    """The distance forecast with this race's target: after the plan when the
+    plan covers the race, otherwise what continuing the current training gives."""
+    from running import forecast
+
+    weeks = (dt.date.fromisoformat(race["date"]) - today).days / 7
+    if covers(plan, race):
+        return forecast.target(item, weeks, reached_prep(plan, race["distance"], race["date"]))
+    return forecast.steady(item, weeks, base.get("consistency_8w", 0.0))
+
+
+def generate_goals(
+    settings: PlanSettings,
+    goals: list[dict[str, Any]],
+    runs: pd.DataFrame,
+    result: dict[str, Any],
+    *,
+    anchor: pd.Timestamp | None = None,
+    keep: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build one plan (store.validate_plan-compatible) through every goal ahead.
+
+    Each race gets its own block: built from where the previous one ended,
+    tapered by the race's priority (A: the distance's taper, B/C: a lighter
+    race week only), and after an A race or a half / full marathon the next
+    block opens with a recovery week. ``result`` is a ``forecast.forecast``
+    output; ``keep`` holds sessions that already happened (kept unchanged).
+    """
+    tr = i18n.tr
     if result.get("status") != "ok":
-        raise ValueError(i18n.tr(pl="Brak prognozy formy — plan potrzebuje co najmniej jednego mierzalnego biegu. ",
-                                 en="No fitness forecast — the plan needs at least one measurable run. ")
+        raise ValueError(tr(pl="Brak prognozy formy — plan potrzebuje co najmniej jednego mierzalnego biegu. ",
+                            en="No fitness forecast — the plan needs at least one measurable run. ")
                          + str(result.get("reason", "")))
     anchor = anchor if anchor is not None else (runs["day"].max() if not runs.empty else pd.Timestamp.today())
-    start = request.start or (dt.date.today() + dt.timedelta(days=1))
+    start = settings.start or (dt.date.today() + dt.timedelta(days=1))
+    goals = sorted((g for g in goals if g["date"] >= start.isoformat()), key=lambda g: g["date"])
+    if not goals:
+        raise ValueError(tr(pl="Brak startów przed nami — dodaj cel na stronie Zawody.",
+                            en="No races ahead — add a goal on the Races page."))
     vdot = float(result["vdot"])
     hr_max = result.get("hr_max")
     paces = physio.training_paces(vdot)
-    base = baseline(runs, pd.Timestamp(anchor), vdot)
-    item = result["distances"].get(request.distance)
+    base0 = baseline(runs, pd.Timestamp(anchor), vdot)
     warnings: list[dict[str, Any]] = []
+    if base0["weekly_km_4w"] < 5:
+        warnings.append({"key": "no_running"})
+    kept_dates = {s["date"] for s in keep or []}
+    done = already_run(runs, start)
 
-    race_pace = None
+    weeks: list[dict[str, Any]] = []
+    sessions: list[dict[str, Any]] = []
+    base, block_start = base0, start
+    last_race: dict[str, Any] | None = None
+    for index, goal in enumerate(goals):
+        request = PlanRequest(
+            distance=goal["distance"], race_date=dt.date.fromisoformat(goal["date"]), goal_s=goal.get("goal_s"),
+            run_days=list(settings.run_days), long_day=settings.long_day, start=block_start,
+            max_weekly_km=settings.max_weekly_km, race_id=goal.get("race_id"), name=goal.get("name"),
+            priority=goal.get("priority", "A"),
+        )
+        item = result["distances"].get(request.distance)
+        race_pace = _race_pace(request, item, warnings, len(goals) > 1)
+        if request.race_date < block_start:
+            # Two races in one week: the later one goes into the week already built.
+            week = next((w for w in weeks if w["monday"] <= request.race_date < w["monday"] + dt.timedelta(days=7)),
+                        None)
+            if week is not None and goal["date"] not in kept_dates:
+                sessions.append({**_session("race", request.race_date, week, 0.0, paces, hr_max, request.distance,
+                                            race_pace), "race_id": request.race_id})
+            continue
+        errors = request.validate()
+        if errors:
+            raise ValueError(" ".join(errors))
+        block = _weeks(request, block_start, offset=len(weeks))
+        if index == 0 and len(block) < 3:
+            warnings.append({"key": "short"})
+        _volumes(block, base, request)
+        sessions.extend(_block_sessions(block, request, settings, base, paces, hr_max, race_pace, kept_dates,
+                                        done if index == 0 else None, last_race))
+        last_race = goal
+        weeks.extend(block)
+        base = _carried(base0, weeks, goal)
+        race_monday = request.race_date - dt.timedelta(days=request.race_date.weekday())
+        block_start = max(block_start, race_monday + dt.timedelta(days=7))
+
+    sessions = sorted((keep or []) + sessions, key=lambda s: s["date"])
+    first, last = goals[0], goals[-1]
+    item = result["distances"].get(first["distance"])
+    names = [g.get("name") or f"{text.race_label(g['distance'])} — {g['date']}" for g in goals]
+    return {
+        "id": store.new_id("plan"),
+        "name": " → ".join(names),
+        "race_id": first.get("race_id") if len(goals) == 1 else None,
+        "goals": goals,
+        "created": dt.datetime.now().isoformat(timespec="seconds"),
+        "request": {
+            "distance": last["distance"], "goal_s": last.get("goal_s"), "run_days": sorted(set(settings.run_days)),
+            "long_day": settings.long_day, "max_weekly_km": settings.max_weekly_km, "race_id": last.get("race_id"),
+            "name": last.get("name"), "priority": last.get("priority", "A"), "race_date": last["date"],
+            "start": start.isoformat(),
+        },
+        "baseline": base0,
+        "forecast": {
+            "vdot": round(vdot, 1),
+            "distance": first["distance"],
+            "realistic_s": round(item.realistic_s) if item else None,
+            "low_s": round(item.low_s) if item else None,
+            "high_s": round(item.high_s) if item else None,
+            "confidence": item.confidence if item else None,
+        },
+        "paces": {name: [round(a, 3), round(b, 3)] for name, (a, b) in paces.items()},
+        "weeks": [
+            {**{k: v for k, v in w.items() if k != "monday"}, "monday": w["monday"].isoformat()} for w in weeks
+        ],
+        "sessions": sessions,
+        "warnings": warnings,
+    }
+
+
+def _race_pace(request: PlanRequest, item: Any, warnings: list[dict[str, Any]], named: bool) -> float | None:
+    """Goal pace when the goal is within reach of the forecast, else the forecast pace."""
     if request.goal_s and item is not None:
-        reach = item.low_s * 0.98
-        if request.goal_s >= reach:
-            race_pace = units.pace_from(request.goal_s, units.RACES[request.distance])
-        else:
-            warnings.append({"key": "goal_too_fast", "goal_s": round(request.goal_s), "low_s": round(item.low_s)})
-    if race_pace is None and item is not None:
-        race_pace = units.pace_from(item.realistic_s, units.RACES[request.distance])
+        if request.goal_s >= item.low_s * 0.98:
+            return units.pace_from(request.goal_s, units.RACES[request.distance])
+        warnings.append({"key": "goal_too_fast", "goal_s": round(request.goal_s), "low_s": round(item.low_s),
+                         **({"race": request.name} if named and request.name else {})})
+    return units.pace_from(item.realistic_s, units.RACES[request.distance]) if item is not None else None
 
-    weeks = _weeks(request, start)
-    if len(weeks) < 3:
-        warnings.append({"key": "short"})
-    _volumes(weeks, base, request)
+
+def _carried(base0: dict[str, Any], weeks: list[dict[str, Any]], goal: dict[str, Any]) -> dict[str, Any]:
+    """The next block's starting point: where the plan stands after this race,
+    assuming it was followed (a rebuild replaces it with what was actually run)."""
+    built = [w["volume_km"] for w in weeks if w["phase"] in ("base", "build", "peak") and not w.get("recovery")]
+    level = 0.9 * built[-1] if built else base0["weekly_km_4w"]
+    return {
+        **base0,
+        "weekly_km_4w": round(level, 1),
+        "weekly_km_8w": round(level, 1),
+        "long_km_6w": max([w["long_km"] for w in weeks[-6:]] + [0.0]) or base0["long_km_6w"],
+        "consistency_8w": max(base0["consistency_8w"], 0.5),
+        "history_km": (list(base0["history_km"]) + [w["volume_km"] for w in weeks])[-8:],
+        "after_race": goal.get("priority", "A") == "A" or goal["distance"] in ("hm", "m"),
+    }
+
+
+# A long run lands at least a week before a race, quality at least 4 days.
+LONG_GAP_DAYS = 6
+QUALITY_GAP_DAYS = 3
+QUALITY_ROOM_KM = 35.0
+SHAKEOUT_MIN_DAYS = 4
+
+
+def easy_days_after(distance: str) -> int:
+    """Daniels: one easy day per 3 km raced before the next quality session or long run."""
+    return max(2, round(units.RACES[distance] / 3))
+
+
+def quality_count(run_days: int, week: dict[str, Any]) -> int:
+    """Quality sessions in a week, on top of the long run.
+
+    The long run is a hard day too (Daniels counts it as one of the week's
+    quality sessions). Two more need room around them: five running days and
+    35+ km, otherwise the week is three hard days out of four and nothing easy
+    to absorb them.
+    """
+    if week["phase"] == "race":
+        return 0
+    if run_days <= 4 or week["volume_km"] < QUALITY_ROOM_KM or week.get("recovery") or week["phase"] == "taper":
+        return 1
+    return 2
+
+
+def already_run(runs: pd.DataFrame, start: dt.date) -> dict[str, Any]:
+    """What was run in the 7 days before ``start``: this week's km, quality and
+    long run, and every hard day (the plan keeps its quality off their neighbours)."""
+    monday = start - dt.timedelta(days=start.weekday())
+    out: dict[str, Any] = {"monday": monday, "km": 0.0, "quality": [], "long": [], "hard": []}
+    if runs is None or runs.empty or "kind" not in runs:
+        return out
+    recent = runs[(runs["day"] >= pd.Timestamp(start - dt.timedelta(days=7))) & (runs["day"] < pd.Timestamp(start))]
+
+    def rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
+        return [{"date": str(pd.Timestamp(r["day"]).date()), "name": str(r.get("name") or ""),
+                 "kind": str(r["kind"]), "km": round(float(r["distance_km"]), 1)}
+                for r in frame.sort_values("day").to_dict("records")]
+
+    week = recent[recent["day"] >= pd.Timestamp(monday)]
+    out["km"] = round(float(week["distance_km"].sum()), 1)
+    out["quality"] = rows(week[week["kind"].isin(("tempo", "threshold", "intervals", "race"))])
+    out["long"] = rows(week[week["kind"] == "long"])
+    out["hard"] = rows(recent[recent["kind"].isin((*HARD_KINDS, "long"))])
+    return out
+
+
+def _block_sessions(
+    weeks: list[dict[str, Any]],
+    request: PlanRequest,
+    settings: PlanSettings,
+    base: dict[str, Any],
+    paces: dict[str, tuple[float, float]],
+    hr_max: float | None,
+    race_pace: float | None,
+    kept_dates: set[str],
+    done: dict[str, Any] | None = None,
+    last_race: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Sessions of one block, in place of its weeks' volumes.
+
+    ``done`` (``already_run``) is what was run before the start: this week's
+    quality and long run count toward the week, and no quality session lands
+    next to a hard day that really happened. Every change a rule makes to the
+    pattern leaves a ``why`` code on the session (text.why writes it out).
+    """
+    start = request.start or dt.date.today()
     # Long runs are capped by time on feet, not only by distance: past ~2.5 h
     # (2:45 for the marathon) the run costs more recovery than it builds.
     if "E" in paces:
         limit = (165 if request.distance == "m" else 150) / (sum(paces["E"]) / 2)
         for week in weeks:
             week["long_km"] = round(min(week["long_km"], limit), 1)
-    if base["weekly_km_4w"] < 5:
-        warnings.append({"key": "no_running"})
 
-    run_days = sorted(set(request.run_days))
-    long_day = request.long_day if request.long_day in run_days else run_days[-1]
+    run_days = sorted(set(settings.run_days))
+    long_day = settings.long_day if settings.long_day in run_days else run_days[-1]
     sessions: list[dict[str, Any]] = []
-    kept_dates = {s["date"] for s in keep or []}
     for week in weeks:
+        week["race_id"] = request.race_id
         phase = week["phase"]
-        quality_wanted = 0 if phase == "race" else 1 if (len(run_days) <= 3 or week.get("recovery") or phase == "taper") else 2
+        quality_wanted = quality_count(len(run_days), week)
         types = QUALITY_BY_PHASE[request.distance].get(phase if phase in ("base", "build", "peak") else "peak")
         if phase == "taper":
             types = ["intervals" if request.distance in ("5k", "10k") else "threshold"]
-        quality_days = place_hard_days(run_days, long_day, quality_wanted)
+        why: dict[str, list[dict[str, Any]]] = {}
+        this_week = done is not None and done["monday"] == week["monday"]
+        done_km, long_done = (done["km"], bool(done["long"])) if this_week else (0.0, False)
+        pattern = place_hard_days(run_days, long_day, quality_wanted)
+        quality_days = pattern
+        if this_week and done["quality"]:
+            quality_days = place_hard_days(run_days, long_day, max(0, quality_wanted - len(done["quality"])))
+        hard_done = done["hard"] if done else []
         week_sessions: list[tuple[int, str]] = []
         for day in run_days:
             date = week["monday"] + dt.timedelta(days=day)
-            if date < start or date > request.race_date or date.isoformat() in kept_dates:
+            days_to = (request.race_date - date).days
+            if date < start or date.isoformat() in kept_dates:
+                continue
+            if date > request.race_date:
+                # After a race in the same week: short recovery runs, not before 2 (A: 3) days.
+                if -days_to >= 2:
+                    week_sessions.append((day, "recovery"))
+                    why.setdefault(date.isoformat(), []).append({"key": "post_race", "days": -days_to})
                 continue
             if date == request.race_date:
                 week_sessions.append((day, "race"))
-            elif phase == "race" and (request.race_date - date).days <= 1:
-                continue  # rest the day before the race
-            elif day == long_day and week["long_km"] > 0:
-                week_sessions.append((day, "long"))
+                continue
+            if days_to == 1:
+                # The day before: a shakeout only when it is a usual running day of a
+                # runner who runs often (a day off would break the rhythm); otherwise rest.
+                if len(run_days) >= SHAKEOUT_MIN_DAYS:
+                    week_sessions.append((day, "easy"))
+                    why.setdefault(date.isoformat(), []).append({"key": "shakeout", "run_days": len(run_days)})
+                continue
+            kind = "easy"
+            if day == long_day and week["long_km"] > 0:
+                kind = "long"
             elif day in quality_days:
-                week_sessions.append((day, types[quality_days.index(day) % len(types)]))
-            else:
-                week_sessions.append((day, "easy"))
+                kind = types[quality_days.index(day) % len(types)]
+            note = None
+            if kind == "long" and long_done:
+                kind, note = "easy", {"key": "week_long_done", **done["long"][0]}
+            elif kind == "long" and days_to <= LONG_GAP_DAYS:
+                kind, note = "easy", {"key": "pre_race_long", "days": days_to, "gap": LONG_GAP_DAYS + 1}
+            elif kind not in ("easy", "long") and days_to <= QUALITY_GAP_DAYS:
+                kind, note = "easy", {"key": "pre_race_quality", "days": days_to}
+            elif kind != "easy" and last_race and 0 < (date - dt.date.fromisoformat(last_race["date"])).days \
+                    <= easy_days_after(last_race["distance"]):
+                kind, note = "easy", {"key": "post_race_easy",
+                                      "days": (date - dt.date.fromisoformat(last_race["date"])).days,
+                                      "easy_days": easy_days_after(last_race["distance"]),
+                                      "distance": last_race["distance"]}
+            elif kind not in ("easy", "long"):
+                near = next((h for h in hard_done if abs((date - dt.date.fromisoformat(h["date"])).days) < 2), None)
+                if near:
+                    kind, note = "easy", {"key": "after_hard", **near}
+            if note:
+                why.setdefault(date.isoformat(), []).append(note)
+            week_sessions.append((day, kind))
         if request.race_date >= week["monday"] and request.race_date < week["monday"] + dt.timedelta(days=7) \
                 and request.race_date.weekday() not in run_days and request.race_date >= start:
             week_sessions.append((request.race_date.weekday(), "race"))
+        if len(quality_days) < len(pattern):
+            # The week's quality was already run: the first session left says so.
+            first = next((day for day, kind in week_sessions if kind == "easy"), None)
+            if first is not None:
+                why.setdefault((week["monday"] + dt.timedelta(days=first)).isoformat(), []).insert(
+                    0, {"key": "week_quality_done", **done["quality"][0]})
 
         built = []
         for day, kind in week_sessions:
             date = week["monday"] + dt.timedelta(days=day)
             km = week["long_km"] if kind == "long" else 0.0
-            built.append(_session(kind, date, week, km if kind == "long" else 6.0, paces, hr_max,
-                                  request.distance, race_pace))
+            session = _session(kind, date, week, km if kind == "long" else 6.0, paces, hr_max,
+                               request.distance, race_pace)
+            if kind == "race":
+                session["race_id"] = request.race_id
+            built.append(session)
         # A low-volume week cannot carry two quality sessions plus a long run:
         # drop quality (the later one first) rather than overshoot the volume.
         def fixed_km() -> float:
@@ -482,7 +781,7 @@ def generate(
         fixed = fixed_km()
         easy = [s for s in built if s["type"] == "easy"]
         if easy:
-            share = max(0.0, week["volume_km"] - fixed) / len(easy)
+            share = max(0.0, week["volume_km"] - fixed - done_km) / len(easy)
             cap = max(4.0, min(12.0, 0.8 * week["long_km"] if week["long_km"] else 10.0))
             share = min(max(share, 3.0), cap)
             # The day after a long run or hard session is the recovery run.
@@ -495,44 +794,31 @@ def generate(
                                        request.distance, race_pace)
                 s.clear()
                 s.update(replacement)
-        week["planned_km"] = round(sum(s["distance_km"] for s in built if s["type"] != "race"), 1)
+        for s in built:
+            if s["date"] in why and any(w["key"] == "shakeout" for w in why[s["date"]]):
+                s.update(_session("easy", dt.date.fromisoformat(s["date"]), {**week, "phase": "build"}, 3.0, paces,
+                                  hr_max, request.distance, race_pace))
+                s["phase"] = week["phase"]
+            if s["type"] == "recovery" and s["date"] > request.race_date.isoformat():
+                s.update(_session("recovery", dt.date.fromisoformat(s["date"]), week,
+                                  min(s["distance_km"], 5.0), paces, hr_max, request.distance, race_pace))
+            if s["date"] in why:
+                s["why"] = why[s["date"]]
+        week["planned_km"] = round(sum(s["distance_km"] or 0 for s in built), 1)  # the race counts too
         sessions.extend(built)
-
-    sessions = sorted((keep or []) + sessions, key=lambda s: s["date"])
-    plan = {
-        "id": store.new_id("plan"),
-        "name": request.name or f"{text.race_label(request.distance)} — {request.race_date.isoformat()}",
-        "race_id": request.race_id,
-        "created": dt.datetime.now().isoformat(timespec="seconds"),
-        "request": {
-            **{k: v for k, v in asdict(request).items() if k not in ("race_date", "start")},
-            "race_date": request.race_date.isoformat(),
-            "start": start.isoformat(),
-        },
-        "baseline": base,
-        "forecast": {
-            "vdot": round(vdot, 1),
-            "realistic_s": round(item.realistic_s) if item else None,
-            "low_s": round(item.low_s) if item else None,
-            "high_s": round(item.high_s) if item else None,
-            "confidence": item.confidence if item else None,
-        },
-        "paces": {name: [round(a, 3), round(b, 3)] for name, (a, b) in paces.items()},
-        "weeks": [
-            {**{k: v for k, v in w.items() if k != "monday"}, "monday": w["monday"].isoformat()} for w in weeks
-        ],
-        "sessions": sessions,
-        "warnings": warnings,
-    }
-    return plan
+    return sessions
 
 
-def reached_prep(plan: dict[str, Any], distance: str) -> float:
-    """Preparation score the plan reaches at its peak (for the target forecast)."""
+def reached_prep(plan: dict[str, Any], distance: str, race_date: str | None = None) -> float:
+    """Preparation score the plan reaches at its peak (for the target forecast);
+    with ``race_date`` only the 8 weeks before that race count."""
     from running.forecast import REQUIREMENTS
 
     need = REQUIREMENTS[distance]
     weeks = [w for w in plan.get("weeks", []) if w.get("phase") in ("build", "peak", "base")]
+    if race_date:
+        race = dt.date.fromisoformat(race_date)
+        weeks = [w for w in weeks if race - dt.timedelta(weeks=8) <= dt.date.fromisoformat(w["monday"]) <= race]
     if not weeks:
         return 0.0
     peak_volume = max(w.get("planned_km", w.get("volume_km", 0)) for w in weeks)
@@ -716,24 +1002,26 @@ def replan(
     runs: pd.DataFrame,
     result: dict[str, Any],
     today: dt.date | None = None,
+    goals: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Rebuild everything from ``today`` on with fresh data; the past stays as it was."""
+    """Rebuild everything from ``today`` on with fresh data; the past stays as it was.
+
+    ``goals`` replaces the plan's goals (the races saved now); without it the
+    plan keeps the goals it has.
+    """
     today = today or dt.date.today()
     request_data = dict(plan["request"])
-    request = PlanRequest(
-        distance=request_data["distance"],
-        race_date=dt.date.fromisoformat(request_data["race_date"]),
-        goal_s=request_data.get("goal_s"),
+    settings = PlanSettings(
         run_days=list(request_data.get("run_days") or [1, 3, 5, 6]),
         long_day=int(request_data.get("long_day", 6)),
         start=today,
         max_weekly_km=request_data.get("max_weekly_km"),
-        race_id=plan.get("race_id"),
-        name=plan.get("name"),
     )
     keep = [s for s in plan.get("sessions", []) if s["date"] < today.isoformat()]
-    fresh = generate(request, runs, result, keep=keep)
+    fresh = generate_goals(settings, plan_goals(plan) if goals is None else goals, runs, result, keep=keep)
     fresh["id"] = plan["id"]
+    if goals is None and plan.get("name"):
+        fresh["name"] = plan["name"]
     fresh["created"] = plan.get("created", fresh["created"])
     fresh["request"]["start"] = plan["request"].get("start", fresh["request"]["start"])
     # What was pushed to Garmin outlives the session ids; the next push uses
@@ -741,7 +1029,7 @@ def replan(
     if plan.get("garmin"):
         fresh["garmin"] = dict(plan["garmin"])
     fresh["history"] = list(plan.get("history", [])) + [
-        {"at": dt.datetime.now().isoformat(timespec="seconds"), "action": "replan",
+        {"at": dt.datetime.now().isoformat(timespec="seconds"), "action": "replan" if goals is None else "goals",
          "vdot": fresh["forecast"]["vdot"]}
     ]
     return fresh

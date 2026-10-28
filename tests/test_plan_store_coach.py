@@ -58,13 +58,19 @@ class Generator(unittest.TestCase):
         self.assertEqual(store.validate_plan(plan), [])
         json.dumps(plan)  # serialisable as-is
 
-    def test_race_on_race_day_and_rest_the_day_before(self):
+    def test_race_on_race_day_and_shakeout_or_rest_the_day_before(self):
         plan = self.make()
         race = [s for s in plan["sessions"] if s["type"] == "race"]
         self.assertEqual(len(race), 1)
         self.assertEqual(race[0]["date"], "2026-06-14")
-        self.assertNotIn("2026-06-13", {s["date"] for s in plan["sessions"]})
+        before = next(s for s in plan["sessions"] if s["date"] == "2026-06-13")  # Saturday, a running day of 4
+        self.assertEqual((before["type"], before["distance_km"], before["why"][0]["key"]), ("easy", 3.0, "shakeout"))
+        self.assertTrue(before["text"]["strides"])
+        rare = self.make(days=(1, 3, 6))
+        self.assertNotIn("2026-06-13", {s["date"] for s in rare["sessions"]})  # 3 days a week: rest
         self.assertLessEqual(max(s["date"] for s in plan["sessions"]), "2026-06-14")
+        race_week = next(w for w in plan["weeks"] if w["phase"] == "race")
+        self.assertGreaterEqual(race_week["planned_km"], units.RACES["hm"])  # the race counts in the week
 
     def test_no_two_hard_days_in_a_row(self):
         for days in ((1, 3, 5, 6), (0, 1, 2, 3, 4, 5, 6), (4, 5, 6), (0, 2, 4, 6)):
@@ -158,6 +164,99 @@ class Generator(unittest.TestCase):
         self.assertEqual(planning.place_hard_days([1, 3, 5, 6], 6, 2), [1, 3])
         self.assertEqual(planning.place_hard_days([4, 5, 6], 6, 2), [4])  # Sat would touch Sun
         self.assertEqual(planning.place_hard_days([5, 6], 6, 1), [])
+
+
+class Goals(unittest.TestCase):
+    """One plan through several races."""
+
+    def setUp(self):
+        self.runs, _, _, self.result = fixture()
+        self.races = [
+            {"id": "r10", "name": "Dziesiątka", "distance": "10k", "date": "2026-03-22", "priority": "B"},
+            {"id": "rh1", "name": "Półmaraton 1", "distance": "hm", "date": "2026-05-31", "priority": "A",
+             "goal_s": 6600.0},
+            {"id": "rh2", "name": "Półmaraton 2", "distance": "hm", "date": "2026-07-05", "priority": "A"},
+        ]
+        settings = planning.PlanSettings(run_days=[1, 3, 5, 6], long_day=6, start=dt.date(2026, 3, 2))
+        self.plan = planning.generate_goals(settings, [planning.goal_of(r) for r in self.races], self.runs,
+                                            self.result, anchor=pd.Timestamp("2026-03-01"))
+
+    def test_one_plan_races_every_goal(self):
+        self.assertEqual(store.validate_plan(self.plan), [])
+        races = [s for s in self.plan["sessions"] if s["type"] == "race"]
+        self.assertEqual([(s["date"], s["race_id"]) for s in races],
+                         [(r["date"], r["id"]) for r in self.races])
+        numbers = [w["week"] for w in self.plan["weeks"]]
+        self.assertEqual(numbers, list(range(1, len(numbers) + 1)))
+        mondays = [w["monday"] for w in self.plan["weeks"]]
+        self.assertEqual(len(set(mondays)), len(mondays))
+        self.assertEqual(self.plan["request"]["race_date"], "2026-07-05")
+
+    def test_priority_sets_the_taper_and_the_recovery_after(self):
+        by_race = {}
+        for week in self.plan["weeks"]:
+            by_race.setdefault(week["race_id"], []).append(week)
+        self.assertNotIn("taper", [w["phase"] for w in by_race["r10"]])  # B: lighter race week only
+        self.assertEqual([w["phase"] for w in by_race["rh1"]][-2:], ["taper", "race"])
+        self.assertTrue(by_race["rh2"][0]["recovery"])  # the week after an A half marathon
+
+    def test_rules_around_races_and_what_was_already_run(self):
+        sessions = {s["date"]: s for s in self.plan["sessions"]}
+        for race in self.races:
+            day = dt.date.fromisoformat(race["date"])
+            for s in sessions.values():
+                gap = (day - dt.date.fromisoformat(s["date"])).days
+                if 0 < gap <= planning.LONG_GAP_DAYS:
+                    self.assertNotEqual(s["type"], "long", s["date"])
+                if 0 < gap <= planning.QUALITY_GAP_DAYS:
+                    self.assertNotIn(s["type"], ("tempo", "threshold", "intervals"), s["date"])
+        for race in self.races:  # one easy day per 3 km raced
+            end = (dt.date.fromisoformat(race["date"]) + dt.timedelta(days=planning.easy_days_after(race["distance"])))
+            after = [s for s in self.plan["sessions"] if race["date"] < s["date"] <= end.isoformat()]
+            self.assertTrue(all(s["type"] in ("easy", "recovery") for s in after), race["name"])
+        # A hard Tuesday already run: Thursday's quality becomes easy, with the reason.
+        runs = pd.concat([self.runs, self.runs.tail(1).assign(
+            activity_id=999, day=pd.Timestamp("2026-03-03"), kind="intervals", name="3x2km")], ignore_index=True)
+        settings = planning.PlanSettings(run_days=[1, 3, 5, 6], long_day=6, start=dt.date(2026, 3, 4))
+        plan = planning.generate_goals(settings, [planning.goal_of(r) for r in self.races], runs, self.result)
+        week = [s for s in plan["sessions"] if s["date"] < "2026-03-09"]
+        self.assertFalse([s for s in week if s["type"] in ("tempo", "threshold", "intervals")])
+        thursday = next(s for s in week if s["date"] == "2026-03-05")
+        self.assertEqual(thursday["why"][0]["key"], "week_quality_done")
+        self.assertEqual(thursday["why"][0]["date"], "2026-03-03")
+
+    def test_quality_count_leaves_room(self):
+        build = {"phase": "build", "volume_km": 30.0}
+        self.assertEqual(planning.quality_count(4, build), 1)
+        self.assertEqual(planning.quality_count(5, {**build, "volume_km": 40.0}), 2)
+        self.assertEqual(planning.quality_count(5, {**build, "volume_km": 40.0, "recovery": True}), 1)
+        self.assertEqual(planning.quality_count(6, {"phase": "race", "volume_km": 40.0}), 0)
+
+    def test_targets_differ_per_race(self):
+        item = self.result["distances"]["hm"]
+        base = planning.baseline(self.runs, pd.Timestamp("2026-03-01"), self.result["vdot"])
+        first, second = (planning.race_outlook(item, r, self.plan, base, dt.date(2026, 3, 1)) for r in self.races[1:])
+        self.assertEqual((first.target_basis, second.target_basis), ("plan", "plan"))
+        self.assertLess(second.target_s, first.target_s)
+        loose = planning.race_outlook(item, self.races[1], None, base, dt.date(2026, 3, 1))
+        self.assertEqual(loose.target_basis, "steady")
+        self.assertGreater(loose.target_s, first.target_s)
+
+    def test_changed_races_make_the_plan_stale_and_replan_follows(self):
+        today = dt.date(2026, 3, 1)
+        self.assertFalse(planning.stale(self.plan, self.races, today))
+        self.assertEqual(planning.next_goal(self.plan, today)["race_id"], "r10")
+        self.assertEqual(planning.next_goal(self.plan, dt.date(2026, 3, 23))["race_id"], "rh1")
+        moved = [*self.races[:2], {**self.races[2], "date": "2026-07-12"}]
+        self.assertTrue(planning.stale(self.plan, moved, today))
+        self.assertTrue(planning.stale(self.plan, self.races[:2], today))
+        fresh = planning.replan(self.plan, self.runs, self.result, today=dt.date(2026, 3, 9),
+                                goals=[planning.goal_of(r) for r in moved])
+        self.assertFalse(planning.stale(fresh, moved, dt.date(2026, 3, 8)))
+        self.assertEqual(fresh["history"][-1]["action"], "goals")
+        self.assertEqual(fresh["id"], self.plan["id"])
+        kept = [s for s in self.plan["sessions"] if s["date"] < "2026-03-09"]
+        self.assertEqual([s for s in fresh["sessions"] if s["date"] < "2026-03-09"], kept)
 
 
 class Tracking(unittest.TestCase):

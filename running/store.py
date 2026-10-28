@@ -264,6 +264,21 @@ def plans_for(race_id: str) -> list[dict[str, Any]]:
     return [p for p in plans() if p.get("race_id") == race_id]
 
 
+def current_plan() -> dict[str, Any] | None:
+    """The plan. There is one (with several goals); of older plan files the newest wins."""
+    found = plans()
+    return found[0] if found else None
+
+
+def save_only_plan(payload: dict[str, Any]) -> dict[str, Any]:
+    """Save ``payload`` as the one plan, removing every other plan file."""
+    saved = save_plan(payload)
+    for other in plans():
+        if other["id"] != saved["id"]:
+            delete_plan(other["id"])
+    return saved
+
+
 # --------------------------------------------------------------------------
 # segments (private Strava: stretches cut out of a run, see running/segments.py)
 
