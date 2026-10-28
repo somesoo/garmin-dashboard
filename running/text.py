@@ -358,7 +358,7 @@ def session_text(session: dict[str, Any]) -> dict[str, str]:
             warmup=tr(pl="2 km spokojnie + 4 przebieżki", en="2 km easy + 4 strides"),
             main=tr(pl=f"{_rep(spec['rep'])} km ciągle w tempie {band}", en=f"{spec['rep']:g} km continuous at {band}")
             if spec.get("reps") == 1 else
-            tr(pl=f"{spec['reps']}×{spec['rep']:g} km w tempie {band}, przerwa {rest} truchtu",
+            tr(pl=f"{spec['reps']}×{_rep(spec['rep'])} km w tempie {band}, przerwa {rest} truchtu",
                en=f"{spec['reps']}×{spec['rep']:g} km at {band}, {rest} jog recovery"),
             cooldown=tr(pl="1,5 km spokojnie", en="1.5 km easy"),
             purpose=tr(pl="Próg mleczanowy: najszybsze tempo, które utrzymasz ok. godziny. Podnosi tempo dla 10 km i "
