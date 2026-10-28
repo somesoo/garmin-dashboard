@@ -715,8 +715,7 @@ Plan i cele:
   rotują (`ROTATION`: slot A, slot B przy dwóch). `type` sesji to dalej
   `threshold`/`intervals`/`tempo` (dopasowanie do klasyfikacji biegów), rodzina
   siedzi w `text.key`. Przebieżki są krokami zegarka w obrębie dystansu biegu.
-- **Siła** (`type: strength`, `distance_km: 0`, bez `steps` — na zegarek nie
-  idzie): 2×/tydz. w bazie i budowie, 1× w szczycie, taperze i tygodniu lżejszym,
+- **Siła** (`type: strength`, `distance_km: 0`, bez `steps`): 2×/tydz. w bazie i budowie, 1× w szczycie, taperze i tygodniu lżejszym,
   0 w tygodniu startu; pierwsze 6 sesji `adapt`, potem `strength`/`maintain`/
   `light`. Licznik startuje od treningów `strength_training` z 120 dni
   (`plan.strength_done`). Najpierw dzień akcentu (po biegu), potem dzień
@@ -725,6 +724,12 @@ Plan i cele:
   `postpone` przesuwa siłę razem z biegiem tego dnia, `soften` ją odwołuje
   (`rest_strength`), `match(..., activities=)` dopasowuje ją do aktywności
   siłowej z zegarka. Przełącznik w ustawieniach planu (`request.strength`).
+  Na zegarek idzie jako trening siłowy Garmina (`sportType` 5): ćwiczenia
+  etapu z `library.STRENGTH_PROGRAMMES`, nazwane jak w katalogu
+  `garminconnect.exercises` (`resolve` — test pilnuje, że każde istnieje),
+  jedna grupa powtórzeń na ćwiczenie (serie × powtórzenia/czas + odpoczynek).
+  ID typów jak w `garminconnect.workout`; format sprawdzony testem i
+  `--dry-run`, nie na zegarku.
 - **Tydzień startu** (Bosquet 2007, Mujika): jeden krótki akcent 4–6 dni przed
   startem (`library.SHARPENER`, `text.sharpen`), spokojne biegi tego tygodnia
   ≤ 0,35× dystansu startu (4–8 km) — objętość przed startem ~40–60% szczytu.

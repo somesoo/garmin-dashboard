@@ -262,6 +262,43 @@ PER_WEEK = {"base": 2, "build": 2, "peak": 1, "taper": 1, "race": 0}
 BEFORE_RACE_DAYS = {"A": 8, "B": 4, "C": 4}
 
 
+# What each stage contains on the watch: (exercise as named in Garmin's catalogue
+# -- garminconnect.exercises -- , sets, reps or None, seconds or None, rest s, note).
+# The same content as text._strength_text writes out.
+STRENGTH_PROGRAMMES: dict[str, list[tuple[str, int, int | None, int | None, int, str | None]]] = {
+    "adapt": [
+        ("Goblet Squat", 3, 12, None, 60, None),
+        ("Romanian Deadlift", 3, 10, None, 60, None),
+        ("Dumbbell Reverse Lunge", 3, 10, None, 60, None),
+        ("Barbell Hip Thrust on Floor", 3, 12, None, 60, None),
+        ("Standing Calf Raise", 3, 15, None, 45, None),
+        ("Single-leg Bent-knee Calf Raise", 3, 15, None, 45, None),
+        ("Plank", 3, None, 40, 30, None),
+        ("Side Plank", 2, None, 30, 30, None),
+    ],
+    "strength": [
+        ("Barbell Back Squat", 4, 5, None, 150, "2-3 reps in reserve"),
+        ("Dumbbell Bulgarian Split Squat", 4, 6, None, 120, "2-3 reps in reserve"),
+        ("Weighted Standing Calf Raise", 4, 6, None, 90, None),
+        ("Plyo", 3, 10, None, 60, "pogo jumps"),
+        ("Box Jump", 3, 5, None, 90, None),
+        ("Plank", 2, None, 45, 30, None),
+    ],
+    "maintain": [
+        ("Barbell Back Squat", 3, 4, None, 150, "heavy, 2-3 reps in reserve"),
+        ("Dumbbell Bulgarian Split Squat", 2, 5, None, 120, None),
+        ("Plyo", 2, 10, None, 60, "pogo jumps"),
+        ("Box Jump", 2, 5, None, 90, None),
+        ("Standing Calf Raise", 2, 10, None, 45, None),
+    ],
+    "light": [
+        ("Barbell Back Squat", 2, 5, None, 90, "half the usual load"),
+        ("Romanian Deadlift", 2, 5, None, 90, "half the usual load"),
+        ("Standing Calf Raise", 2, 10, None, 45, None),
+    ],
+}
+
+
 def strength_stage(phase: str, done: int, recovery: bool) -> str:
     if phase == "taper" or recovery:
         return "light"

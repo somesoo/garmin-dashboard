@@ -63,7 +63,7 @@ zrobione — czy nowa reguła czegoś nie unieważnia (wpis „Przegląd wstecz�
 - [x] **11. Stałe bez źródła** (`PEAK_KM`, `LONG_TARGET_KM`, udział długiego,
       granice faz, `QUALITY_ROOM_KM`, `keep_one`) — każdą uzasadnić źródłem albo
       wyprowadzić z danych biegacza; opisać w docstringu.
-- [ ] **12. Siła na zegarek** — trening siłowy jako workout Garmina
+- [x] **12. Siła na zegarek** — trening siłowy jako workout Garmina
       (`sportType` strength), dziś wysyłane są tylko biegi.
 - [x] **13. Brief dla asystenta** — szczebel drabinki i lista skoków z realnej
       historii w `running.coach` (najdłuższy bieg z 30 dni i limit następnego
@@ -119,6 +119,11 @@ etykietę [S] źródło / [C] konwencja / [H] heurystyka; test pilnuje, że szcz
 objętości i długi bieg nie spadną poniżej tego, co prognoza uznaje za pełne
 przygotowanie. Heurystyki zostają heurystykami — najsłabsze to udział długiego
 biegu (42–50% przy 3–4 dniach) i granice faz.
+
+**Przegląd wstecz po 8b, 12, 13, 14 (2026-10-28):** wysyłka na zegarek obejmuje
+teraz siłę — licznik zmian przy przycisku na stronie Plan liczy ją razem z
+biegami. Do sprawdzenia przez użytkownika: pierwszy wysłany trening siłowy
+i pierwszy bieg z celem tętna na zegarku (format z biblioteki, nie z próby).
 
 ## Czeka na zgodę
 

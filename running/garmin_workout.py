@@ -23,6 +23,8 @@ import i18n
 
 
 RUNNING = {"sportTypeId": 1, "sportTypeKey": "running", "displayOrder": 1}
+# IDs as garminconnect.workout lists them (/workout-service/workout/types).
+STRENGTH = {"sportTypeId": 5, "sportTypeKey": "strength_training", "displayOrder": 5}
 STEP_TYPES = {
     "warmup": (1, "warmup"),
     "cooldown": (2, "cooldown"),
@@ -132,9 +134,59 @@ def _seconds(steps: list[dict[str, Any]]) -> float:
     return total
 
 
+def _strength_steps(stage: str) -> list[dict[str, Any]]:
+    """One repeat group per exercise: N x (the exercise for reps or time, then rest)."""
+    from garminconnect import exercises
+
+    from running import library
+
+    order = _Order()
+    out = []
+    for name, sets, reps, seconds, rest, note in library.STRENGTH_PROGRAMMES[stage]:
+        entry = exercises.resolve(name)
+        order.child += 1
+        group = {
+            "type": "RepeatGroupDTO", "stepOrder": order.next(), "stepType": _step_type("repeat"),
+            "childStepId": order.child, "numberOfIterations": sets, "endCondition": _condition("iterations"),
+            "endConditionValue": float(sets), "smartRepeat": False, "skipLastRestStep": True,
+        }
+        exercise = {
+            "type": "ExecutableStepDTO", "stepOrder": order.next(),
+            "stepType": {"stepTypeId": 3, "stepTypeKey": "interval", "displayOrder": 3},
+            "endCondition": ({"conditionTypeId": 10, "conditionTypeKey": "reps", "displayOrder": 10,
+                              "displayable": True} if reps else _condition("time")),
+            "endConditionValue": float(reps or seconds),
+            "targetType": {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target", "displayOrder": 1},
+            "category": entry["category"], "exerciseName": entry["exercise"], "childStepId": order.child,
+        }
+        if note:
+            exercise["description"] = note
+        pause = {
+            "type": "ExecutableStepDTO", "stepOrder": order.next(),
+            "stepType": {"stepTypeId": 5, "stepTypeKey": "rest", "displayOrder": 5},
+            "endCondition": _condition("time"), "endConditionValue": float(rest),
+            "targetType": {"workoutTargetTypeId": 1, "workoutTargetTypeKey": "no.target", "displayOrder": 1},
+            "childStepId": order.child,
+        }
+        group["workoutSteps"] = [exercise, pause]
+        out.append(group)
+    return out
+
+
 def to_garmin(session: dict[str, Any]) -> dict[str, Any] | None:
     """The workout for one plan session; None for rest days and sessions
-    without structured steps (older plan files)."""
+    without structured steps (older plan files). A strength session becomes a
+    strength workout from ``library.STRENGTH_PROGRAMMES``."""
+    if session.get("type") == "strength" and (session.get("text") or {}).get("stage"):
+        date = dt.date.fromisoformat(session["date"])
+        return {
+            "workoutName": f"{NAME_PREFIX}{session.get('title', 'strength')} ({date:%d.%m})"[:80],
+            "description": " ".join(filter(None, [session.get("main"), session.get("purpose")]))[:1000],
+            "sportType": STRENGTH,
+            "estimatedDurationInSecs": int((session.get("duration_min") or 30) * 60),
+            "workoutSegments": [{"segmentOrder": 1, "sportType": STRENGTH,
+                                 "workoutSteps": _strength_steps(session["text"]["stage"])}],
+        }
     steps = session.get("steps") or []
     if session.get("type") == "rest" or not steps:
         return None

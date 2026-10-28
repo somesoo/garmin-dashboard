@@ -135,3 +135,35 @@ class Sync(TempStore):
         removed = {a["session_id"] for a in actions if a["action"] == "remove"}
         self.assertEqual(removed, old_ids)  # every old workout goes, nothing is left as a duplicate
         self.assertTrue(any(a["action"] == "upload" for a in actions))
+
+
+class StrengthWorkout(unittest.TestCase):
+    def test_every_exercise_is_in_garmins_catalogue(self):
+        from garminconnect import exercises
+
+        from running import library
+
+        for stage, blocks in library.STRENGTH_PROGRAMMES.items():
+            self.assertIn(stage, library.STAGES)
+            for name, sets, reps, seconds, rest, _ in blocks:
+                self.assertIsNotNone(exercises.resolve(name), name)
+                self.assertTrue((reps is None) != (seconds is None), name)
+                self.assertGreater(sets, 0)
+                self.assertGreater(rest, 0)
+
+    def test_strength_session_becomes_a_strength_workout(self):
+        session = {"id": "s1", "date": "2026-03-05", "type": "strength", "title": "Siła — adaptacja",
+                   "text": {"key": "strength", "stage": "adapt", "n": 1}, "duration_min": 35, "steps": []}
+        workout = gw.to_garmin(session)
+        self.assertEqual(workout["sportType"]["sportTypeKey"], "strength_training")
+        groups = workout["workoutSegments"][0]["workoutSteps"]
+        self.assertEqual(len(groups), 8)
+        first, plank = groups[0], groups[6]
+        self.assertEqual(first["numberOfIterations"], 3)
+        exercise, rest = first["workoutSteps"]
+        self.assertEqual((exercise["category"], exercise["exerciseName"]), ("SQUAT", "GOBLET_SQUAT"))
+        self.assertEqual(exercise["endCondition"]["conditionTypeKey"], "reps")
+        self.assertEqual(rest["stepType"]["stepTypeKey"], "rest")
+        self.assertEqual(plank["workoutSteps"][0]["endCondition"]["conditionTypeKey"], "time")
+        orders = [g["stepOrder"] for g in groups] + [s["stepOrder"] for g in groups for s in g["workoutSteps"]]
+        self.assertEqual(len(orders), len(set(orders)))  # Garmin numbers every step once
