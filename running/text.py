@@ -683,6 +683,12 @@ def signal_line(item: dict[str, Any]) -> str:
     if key == "rhr_up":
         return tr(pl=f"tętno spoczynkowe z 7 dni {item['now']:g} vs {item['base']:g} bpm",
                   en=f"7-day resting heart rate {item['now']:g} vs {item['base']:g} bpm")
+    if key == "ef_down":
+        change = f"{item['change_pct']:.1f}"
+        return tr(pl=f"efektywność spokojnych biegów przy tym samym tętnie {change.replace('.', ',')}% wobec 8 tygodni "
+                     f"wcześniej ({item['runs']} biegów)",
+                  en=f"efficiency of easy runs at the same heart rate {change}% against the 8 weeks before "
+                     f"({item['runs']} runs)")
     if key == "not_run":
         return tr(pl=f"z ostatnich 2 tygodni przebiegnięte {item['actual']:.0f} z {item['planned']:.0f} km",
                   en=f"{item['actual']:.0f} of {item['planned']:.0f} km of the last 2 weeks were run")

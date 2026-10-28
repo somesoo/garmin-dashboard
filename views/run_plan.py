@@ -163,7 +163,8 @@ def _create(frame: pd.DataFrame, result: dict, active: dict | None) -> None:
                                             "max_weekly_km": cap or None, "strength": strength}}
             payload = planning.replan(active, frame, result, today=tomorrow, goals=goals,
                                       strength_history=rc.strength_done(), laps=shell.table("run_laps"),
-                                    activities=shell.table("activities"), daily=shell.daily())
+                                    activities=shell.table("activities"), daily=shell.daily(),
+                                    efficiency=shell.table("efficiency"))
         else:
             payload = planning.generate_goals(settings, goals, frame, result, strength_history=rc.strength_done(),
                                               adapt=planning.response(shell.daily(), dt.date.today()))
@@ -644,7 +645,8 @@ def _actions_body(active: dict, frame: pd.DataFrame, result: dict) -> None:
             fresh = planning.replan(active, frame, result, today=dt.date.today() + dt.timedelta(days=1),
                                     goals=[planning.goal_of(r) for r in rc.upcoming_races()],
                                     strength_history=rc.strength_done(), laps=shell.table("run_laps"),
-                                    activities=shell.table("activities"), daily=shell.daily())
+                                    activities=shell.table("activities"), daily=shell.daily(),
+                                    efficiency=shell.table("efficiency"))
             store.save_only_plan(fresh)
         except ValueError as error:
             st.error(str(error))

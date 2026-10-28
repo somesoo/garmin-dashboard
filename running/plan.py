@@ -100,6 +100,11 @@ HRV_SWC = 0.5
 HRV_BASE_DAYS = 60
 RHR_RISE_BPM = 3.0
 DONE_SHARE = 0.7
+# Efficiency at the same effort [H]: median EF of easy runs inside the E heart-rate zone,
+# the last 28 days against the 56 before; a 3% fall counts as a signal unless the recent
+# runs were 5+ degrees hotter (heat lowers EF without any loss of fitness).
+EF_DROP = 0.03
+EF_HEAT_C = 5.0
 
 
 @dataclass
@@ -206,12 +211,47 @@ def _weeks(request: PlanRequest, start: dt.date, offset: int = 0) -> list[dict[s
     return out
 
 
-def response(daily: pd.DataFrame | None, today: dt.date, done: dict[str, Any] | None = None) -> dict[str, Any]:
+def efficiency_signal(efficiency: pd.DataFrame | None, runs: pd.DataFrame | None, zones: dict[str, Any] | None,
+                      today: dt.date) -> dict[str, Any] | None:
+    """EF of easy runs at an easy heart rate, now against before (``EF_DROP``).
+
+    Only runs labelled easy / long / recovery whose average heart rate sits in
+    the E zone count -- EF also rises when running faster at a higher heart
+    rate, so comparing across efforts would call that progress.
+    """
+    band = (zones or {}).get("E")
+    if efficiency is None or efficiency.empty or runs is None or runs.empty or not band:
+        return None
+    frame = efficiency.merge(runs[["activity_id", "kind"]], on="activity_id", how="inner") \
+        if "kind" not in efficiency else efficiency
+    frame = frame.assign(day=pd.to_datetime(frame["day"]))
+    frame = frame[frame["kind"].isin(("easy", "long", "recovery")) & frame["avg_hr"].between(band[0], band[1])
+                  & frame["ef"].notna()]
+    end = pd.Timestamp(today)
+    recent = frame[(frame["day"] > end - pd.Timedelta(days=28)) & (frame["day"] <= end)]
+    before = frame[(frame["day"] > end - pd.Timedelta(days=84)) & (frame["day"] <= end - pd.Timedelta(days=28))]
+    if len(recent) < 3 or len(before) < 3:
+        return None
+    now, then = float(recent["ef"].median()), float(before["ef"].median())
+    change = now / then - 1
+    hotter = None
+    if "temperature_max" in frame and recent["temperature_max"].notna().any() and before["temperature_max"].notna().any():
+        hotter = float(recent["temperature_max"].median() - before["temperature_max"].median())
+    return {"key": "ef_down" if change <= -EF_DROP else "ef_up" if change >= EF_DROP else "ef_flat",
+            "change_pct": round(change * 100, 1), "now": round(now, 3), "before": round(then, 3),
+            "runs": int(len(recent)), "heat": bool(hotter is not None and hotter >= EF_HEAT_C),
+            "hotter_c": None if hotter is None else round(hotter, 1)}
+
+
+def response(daily: pd.DataFrame | None, today: dt.date, done: dict[str, Any] | None = None,
+             efficiency: dict[str, Any] | None = None) -> dict[str, Any]:
     """How the body is taking the training, for the week ahead.
 
     ``grow`` -- as planned; ``hold`` -- one signal: no step up this week;
     ``lighter`` -- two or more: this week becomes the lighter one. ``done`` is
-    ``compliance`` of the last two weeks (None for a new plan).
+    ``compliance`` of the last two weeks (None for a new plan); ``efficiency``
+    is ``efficiency_signal`` -- a fall at the same heart rate counts against
+    (not in the heat), a rise is reported but never pushes the plan faster.
     """
     signals: list[dict[str, Any]] = []
     if daily is not None and not daily.empty and "hrv_last_night" in daily:
@@ -237,8 +277,11 @@ def response(daily: pd.DataFrame | None, today: dt.date, done: dict[str, Any] | 
     if done and done.get("due", 0) >= 3 and done.get("km_ratio") is not None and done["km_ratio"] < DONE_SHARE:
         signals.append({"key": "not_run", "ratio": done["km_ratio"], "actual": done["actual_km"],
                         "planned": done["planned_km"]})
+    if efficiency and efficiency["key"] == "ef_down" and not efficiency["heat"]:
+        signals.append(efficiency)
     decision = "lighter" if len(signals) >= 2 else "hold" if signals else "grow"
-    return {"decision": decision, "signals": signals, "day": today.isoformat()}
+    return {"decision": decision, "signals": signals, "day": today.isoformat(),
+            **({"efficiency": efficiency} if efficiency else {})}
 
 
 def _volumes(weeks: list[dict[str, Any]], base: dict[str, Any], request: PlanRequest,
@@ -1077,6 +1120,10 @@ def outcomes(plan: dict[str, Any], runs: pd.DataFrame, today: dt.date, laps: pd.
     return out
 
 
+def _zones(result: dict[str, Any]) -> dict[str, Any]:
+    return physio.hr_zones(result.get("hr_max"), (result.get("lthr") or {}).get("bpm"))
+
+
 def _last_weeks(plan: dict[str, Any], runs: pd.DataFrame, today: dt.date, days: int = 14) -> dict[str, Any]:
     """``compliance`` of the plan's last ``days`` before ``today``."""
     since = (today - dt.timedelta(days=days)).isoformat()
@@ -1549,6 +1596,7 @@ def replan(
     laps: pd.DataFrame | None = None,
     activities: pd.DataFrame | None = None,
     daily: pd.DataFrame | None = None,
+    efficiency: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """Rebuild everything from ``today`` on with fresh data; the past stays as it was.
 
@@ -1572,7 +1620,8 @@ def replan(
     fresh = generate_goals(settings, plan_goals(plan) if goals is None else goals, runs, result, keep=keep,
                            strength_history=strength_history,
                            done_as_planned=outcomes(plan, runs, today, laps=laps, activities=activities),
-                           adapt=response(daily, today - dt.timedelta(days=1), _last_weeks(plan, runs, today))
+                           adapt=response(daily, today - dt.timedelta(days=1), _last_weeks(plan, runs, today),
+                                          efficiency_signal(efficiency, runs, _zones(result), today))
                            if daily is not None else None)
     fresh["id"] = plan["id"]
     if goals is None and plan.get("name"):

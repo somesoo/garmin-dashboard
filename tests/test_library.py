@@ -420,3 +420,29 @@ class Brief(unittest.TestCase):
         self.assertIn("threshold", ladders)
         self.assertIn("long_finish", ladders)
         self.assertIn("part_km", ladders["long_finish"])
+
+
+class Efficiency(unittest.TestCase):
+    def frames(self, recent_ef, recent_temp=20.0, recent_hr=145.0):
+        rows, kinds = [], []
+        for i, day in enumerate(pd.date_range("2026-01-01", "2026-02-28", freq="4D")):
+            recent = day > pd.Timestamp("2026-02-01")
+            rows.append({"activity_id": i, "day": day, "avg_hr": recent_hr if recent else 145.0,
+                         "ef": recent_ef if recent else 1.00, "temperature_max": recent_temp if recent else 20.0})
+            kinds.append({"activity_id": i, "kind": "easy"})
+        return pd.DataFrame(rows), pd.DataFrame(kinds)
+
+    def test_fall_at_the_same_heart_rate_is_a_signal(self):
+        zones = {"E": (140, 159)}
+        today = dt.date(2026, 3, 1)
+        ef, runs = self.frames(0.95)
+        signal = planning.efficiency_signal(ef, runs, zones, today)
+        self.assertEqual((signal["key"], signal["heat"]), ("ef_down", False))
+        self.assertEqual(planning.response(None, today, efficiency=signal)["decision"], "hold")
+        hot = planning.efficiency_signal(*self.frames(0.95, recent_temp=28.0), zones, today)
+        self.assertTrue(hot["heat"])
+        self.assertEqual(planning.response(None, today, efficiency=hot)["decision"], "grow")  # heat explains it
+        up = planning.efficiency_signal(*self.frames(1.05), zones, today)
+        self.assertEqual(planning.response(None, today, efficiency=up)["decision"], "grow")  # never pushes faster
+        outside = planning.efficiency_signal(*self.frames(0.95, recent_hr=170.0), zones, today)
+        self.assertIsNone(outside)  # runs outside the E zone are not the same effort

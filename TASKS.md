@@ -94,7 +94,7 @@ okrążenia i aktywności, żeby też liczył szczeble z wykonania. Akcent tygod
 startu (`sharpen`) nie przesuwa drabinki. Do zrobienia przy 8: ta sama
 ocena wykonania (`outcomes`) może sterować wzrostem tygodnia.
 
-- [ ] **8b. EF przy stałym tętnie jako sygnał postępu** — w 8 weszły HRV,
+- [x] **8b. EF przy stałym tętnie jako sygnał postępu** — w 8 weszły HRV,
       tętno spoczynkowe i realizacja; EF (`efficiency`) wymaga grupowania po
       przedziale tętna (pułapka z CLAUDE.md), więc osobno.
 

@@ -753,6 +753,10 @@ Plan i cele:
   niego). Decyzja w `plan["response"]`, na pierwszej sesji tygodnia `why:
   response`. Dalsze tygodnie zostają w rytmie 3–4 tyg. — przyszłej reakcji nie
   znamy, więc każda przebudowa decyduje na nowo.
+  Czwarty sygnał (`plan.efficiency_signal`): mediana EF spokojnych biegów
+  (easy/long/recovery) ze średnim tętnem w strefie E, 28 d vs 56 d wcześniej,
+  spadek ≥ 3% — chyba że ostatnie biegi były ≥ 5 °C cieplejsze. Wzrost EF jest
+  raportowany, ale nigdy nie przyspiesza planu.
 - **Długi bieg z finiszem** (`library.LONG_FINISH`, rodzina `long_finish`):
   w szczycie HM/M odcinek w tempie startowym na końcu długiego biegu idzie po
   drabince (HM 3 → 8 km, M 6 → 14 km, ≤ 40% biegu). Szczebel rośnie, gdy bieg
