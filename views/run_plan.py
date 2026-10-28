@@ -163,9 +163,10 @@ def _create(frame: pd.DataFrame, result: dict, active: dict | None) -> None:
                                             "max_weekly_km": cap or None, "strength": strength}}
             payload = planning.replan(active, frame, result, today=tomorrow, goals=goals,
                                       strength_history=rc.strength_done(), laps=shell.table("run_laps"),
-                                    activities=shell.table("activities"))
+                                    activities=shell.table("activities"), daily=shell.daily())
         else:
-            payload = planning.generate_goals(settings, goals, frame, result, strength_history=rc.strength_done())
+            payload = planning.generate_goals(settings, goals, frame, result, strength_history=rc.strength_done(),
+                                              adapt=planning.response(shell.daily(), dt.date.today()))
         store.save_only_plan(payload)
     except ValueError as error:
         st.error(str(error))
@@ -262,6 +263,23 @@ def _explain(active: dict, result: dict) -> None:
             en="**Heart rate as % of HRmax** — no continuous near-maximal effort of 18–60 min in 120 days, so the "
                "threshold heart rate cannot be found. A test: 30 min even and hard on your own; the zones will "
                "update themselves.")
+    state = active.get("response") or {}
+    decision = {"grow": tr(pl="rośnie zgodnie z planem", en="grows as planned"),
+                "hold": tr(pl="stoi (bez przyrostu)", en="holds (no step up)"),
+                "lighter": tr(pl="jest lżejszy", en="is lighter")}.get(state.get("decision"))
+    signals = "; ".join(text.signal_line(x) for x in state.get("signals") or []) or \
+        tr(pl="brak sygnałów przeciw", en="no signals against")
+    response_line = tr(
+        pl=f"**Najbliższy tydzień {decision}** ({signals}). Przy każdej przebudowie plan patrzy na HRV z 7 dni wobec "
+           "Twojej normy z 60 dni (najmniejsza istotna zmiana: 0,5 SD), tętno spoczynkowe (≥ +3 bpm) i to, ile z 2 "
+           "ostatnich tygodni przebiegłeś: jeden sygnał — tydzień bez przyrostu, dwa — tydzień lżejszy teraz, a nie "
+           "z kalendarza.",
+        en=f"**The coming week {decision}** ({signals}). At every rebuild the plan looks at 7-day HRV against your "
+           "60-day norm (smallest worthwhile change: 0.5 SD), resting heart rate (≥ +3 bpm) and how much of the last "
+           "2 weeks you ran: one signal — a week without a step up, two — a lighter week now rather than by the "
+           "calendar.") if decision else tr(
+        pl="**Tydzień według reakcji organizmu** — włączy się przy pierwszej przebudowie planu.",
+        en="**The week by the body's response** — it switches on at the first rebuild of the plan.")
     cs = active.get("cs")
     if cs:
         cs_line = tr(pl=f"**Prędkość krytyczna {units.fmt_pace(cs['pace'])}** (z {cs['efforts']} czystych wysiłków "
@@ -357,6 +375,7 @@ def _explain(active: dict, result: dict) -> None:
                  f"only with {planning.SHAKEOUT_MIN_DAYS}+ days).")
               + " After the race short recovery runs, and quality and the long run only after one easy day per 3 km "
               "raced. A: the distance's full taper and a recovery week after; B/C: a lighter race week."),
+        response_line,
         zone_line,
         cs_line,
         tr(pl=f"**Tempa z dzisiejszej formy** (VDOT {active.get('forecast', {}).get('vdot')}), nie z celu. "
@@ -608,7 +627,7 @@ def _actions_body(active: dict, frame: pd.DataFrame, result: dict) -> None:
             fresh = planning.replan(active, frame, result, today=dt.date.today() + dt.timedelta(days=1),
                                     goals=[planning.goal_of(r) for r in rc.upcoming_races()],
                                     strength_history=rc.strength_done(), laps=shell.table("run_laps"),
-                                    activities=shell.table("activities"))
+                                    activities=shell.table("activities"), daily=shell.daily())
             store.save_only_plan(fresh)
         except ValueError as error:
             st.error(str(error))

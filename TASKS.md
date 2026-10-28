@@ -53,7 +53,7 @@ zrobione — czy nowa reguła czegoś nie unieważnia (wpis „Przegląd wstecz�
 - [x] **7. Progresja z wykonania** — szczebel drabinki z tego, co faktycznie
       zrobione (okrążenia `run_laps`: odcinki w tempie, tętno na odcinkach),
       nie z liczby zaplanowanych sesji.
-- [ ] **8. Adaptacja tygodnia z reakcji** — trend HRV (7 d vs baza 60 d i SWC),
+- [x] **8. Adaptacja tygodnia z reakcji** — trend HRV (7 d vs baza 60 d i SWC),
       EF przy stałym tętnie, realizacja planu decydują: rośnie / stoi / lżej,
       zamiast sztywnego „co 3.–4. tydzień”.
 - [ ] **9. Odporność na zmęczenie (durability)** — w długich biegach fazy
@@ -93,6 +93,16 @@ i zostaje. `rc.active_plan` (automatyczna przebudowa po zmianie startów) dosta�
 okrążenia i aktywności, żeby też liczył szczeble z wykonania. Akcent tygodnia
 startu (`sharpen`) nie przesuwa drabinki. Do zrobienia przy 8: ta sama
 ocena wykonania (`outcomes`) może sterować wzrostem tygodnia.
+
+- [ ] **8b. EF przy stałym tętnie jako sygnał postępu** — w 8 weszły HRV,
+      tętno spoczynkowe i realizacja; EF (`efficiency`) wymaga grupowania po
+      przedziale tętna (pułapka z CLAUDE.md), więc osobno.
+
+**Przegląd wstecz po 8 (2026-10-28):** decyzja dnia (`coach.next_session`)
+i tydzień planu patrzą na HRV z dwóch stron — rano status Garmina dla jednej
+sesji, przy przebudowie własna baza 60 d dla objętości tygodnia; to dwa poziomy,
+nie dubel. `rc.active_plan` przekazuje `daily`, więc automatyczna przebudowa
+po zmianie startów też ocenia reakcję.
 
 ## Czeka na zgodę
 

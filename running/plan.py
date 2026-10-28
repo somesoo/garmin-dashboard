@@ -39,6 +39,7 @@ import math
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 import i18n
@@ -61,6 +62,15 @@ SPIKE_DAYS = 30
 SPIKE_FLOOR_KM = 3.0
 # Two A races closer than this share one build: the plan asks which one is the goal.
 A_RACE_GAP_WEEKS = 8
+# The week ahead follows the body's response (``response``): HRV against its own
+# 60-day baseline with the smallest worthwhile change of 0.5 SD (Plews et al.
+# 2013; HRV-guided training: Kiviniemi 2007, Javaloyes 2019), resting HR up
+# >= 3 bpm (beyond its day-to-day noise, Buchheit 2014), and how much of the
+# last two weeks was run.
+HRV_SWC = 0.5
+HRV_BASE_DAYS = 60
+RHR_RISE_BPM = 3.0
+DONE_SHARE = 0.7
 
 
 @dataclass
@@ -167,8 +177,50 @@ def _weeks(request: PlanRequest, start: dt.date, offset: int = 0) -> list[dict[s
     return out
 
 
-def _volumes(weeks: list[dict[str, Any]], base: dict[str, Any], request: PlanRequest) -> None:
-    """Fill ``volume_km`` / ``long_km`` / ``recovery`` per week, in place."""
+def response(daily: pd.DataFrame | None, today: dt.date, done: dict[str, Any] | None = None) -> dict[str, Any]:
+    """How the body is taking the training, for the week ahead.
+
+    ``grow`` -- as planned; ``hold`` -- one signal: no step up this week;
+    ``lighter`` -- two or more: this week becomes the lighter one. ``done`` is
+    ``compliance`` of the last two weeks (None for a new plan).
+    """
+    signals: list[dict[str, Any]] = []
+    if daily is not None and not daily.empty and "hrv_last_night" in daily:
+        frame = daily[["day", *(c for c in ("hrv_last_night", "rhr") if c in daily)]].copy()
+        frame["day"] = pd.to_datetime(frame["day"])
+        end = pd.Timestamp(today)
+        recent = frame[(frame["day"] > end - pd.Timedelta(days=7)) & (frame["day"] <= end)]
+        base = frame[(frame["day"] > end - pd.Timedelta(days=7 + HRV_BASE_DAYS))
+                     & (frame["day"] <= end - pd.Timedelta(days=7))]
+        hrv_now = np.log(recent["hrv_last_night"].dropna().clip(lower=1))
+        hrv_base = np.log(base["hrv_last_night"].dropna().clip(lower=1))
+        if len(hrv_now) >= 4 and len(hrv_base) >= 20:
+            floor = hrv_base.mean() - HRV_SWC * hrv_base.std()
+            if hrv_now.mean() < floor:
+                signals.append({"key": "hrv_low", "now": round(float(np.exp(hrv_now.mean())), 1),
+                                "base": round(float(np.exp(hrv_base.mean())), 1),
+                                "floor": round(float(np.exp(floor)), 1)})
+        if "rhr" in frame:
+            rhr_now, rhr_base = recent["rhr"].dropna(), base["rhr"].dropna()
+            if len(rhr_now) >= 4 and len(rhr_base) >= 20 and rhr_now.mean() - rhr_base.mean() >= RHR_RISE_BPM:
+                signals.append({"key": "rhr_up", "now": round(float(rhr_now.mean()), 1),
+                                "base": round(float(rhr_base.mean()), 1)})
+    if done and done.get("due", 0) >= 3 and done.get("km_ratio") is not None and done["km_ratio"] < DONE_SHARE:
+        signals.append({"key": "not_run", "ratio": done["km_ratio"], "actual": done["actual_km"],
+                        "planned": done["planned_km"]})
+    decision = "lighter" if len(signals) >= 2 else "hold" if signals else "grow"
+    return {"decision": decision, "signals": signals, "day": today.isoformat()}
+
+
+def _volumes(weeks: list[dict[str, Any]], base: dict[str, Any], request: PlanRequest,
+             adapt: dict[str, Any] | None = None) -> None:
+    """Fill ``volume_km`` / ``long_km`` / ``recovery`` per week, in place.
+
+    ``adapt`` (``response``) changes the first build week: ``hold`` keeps the
+    next week at the starting volume, ``lighter`` makes the first week the
+    lighter one and restarts the 3-4 week cycle after it.
+    """
+    decision = (adapt or {}).get("decision", "grow")
     days = len(set(request.run_days))
     start_km = max(base["weekly_km_4w"], 0.8 * base["weekly_km_8w"], 3.0 * days)
     peak_cap = PEAK_KM[request.distance] * (0.8 if days <= 3 else 1.0)
@@ -186,11 +238,20 @@ def _volumes(weeks: list[dict[str, Any]], base: dict[str, Any], request: PlanReq
     long_share = 0.5 if days <= 3 else 0.42 if request.distance != "m" else 0.5
     last_build = start_km
     last_long = long_now
+    shift = 1 if decision == "lighter" else 0
     for index, week in enumerate(weeks):
         if week["phase"] in ("base", "build", "peak"):
             position = build.index(week)
-            recovery = (position + 1) % cycle == 0 and position != len(build) - 1
-            if position == 0 and base.get("after_race"):
+            recovery = (position - shift + 1) % cycle == 0 and position != len(build) - 1 and position >= shift
+            if position == 0 and decision == "lighter" and not base.get("after_race"):
+                volume, long_km = 0.75 * start_km, 0.75 * long_now
+                recovery = True
+                week["adapt"] = decision
+            elif position == 1 and decision == "hold":
+                # One signal against: the step up waits a week.
+                volume, long_km = last_build, last_long
+                week["adapt"] = decision
+            elif position == 0 and base.get("after_race"):
                 # The week after a goal race: recover before building again.
                 volume, long_km = 0.7 * start_km, 0.7 * long_now
                 recovery = True
@@ -492,6 +553,7 @@ def generate_goals(
     keep: list[dict[str, Any]] | None = None,
     strength_history: int = 0,
     done_as_planned: dict[str, dict[str, Any]] | None = None,
+    adapt: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build one plan (store.validate_plan-compatible) through every goal ahead.
 
@@ -503,7 +565,7 @@ def generate_goals(
     ``strength_history`` is the number of strength sessions done recently
     (``strength_done``), which decides when heavy work starts;
     ``done_as_planned`` (``outcomes``) decides which past sessions move the
-    ladders up.
+    ladders up; ``adapt`` (``response``) sets the first block's next week.
     """
     tr = i18n.tr
     if result.get("status") != "ok":
@@ -535,6 +597,7 @@ def generate_goals(
     kept_dates = {s["date"] for s in keep or []}
     done = already_run(runs, start)
     progress = _progress(keep or [], strength_history, settings.strength, done_as_planned)
+    progress["adapt"] = adapt
 
     weeks: list[dict[str, Any]] = []
     sessions: list[dict[str, Any]] = []
@@ -563,7 +626,7 @@ def generate_goals(
         block = _weeks(request, block_start, offset=len(weeks))
         if index == 0 and len(block) < 3:
             warnings.append({"key": "short"})
-        _volumes(block, base, request)
+        _volumes(block, base, request, adapt if index == 0 else None)
         sessions.extend(_block_sessions(block, request, settings, base, paces, zones, race_pace, kept_dates,
                                         done if index == 0 else None, last_race, progress))
         last_race = goal
@@ -600,6 +663,7 @@ def generate_goals(
         },
         "paces": {name: [round(a, 3), round(b, 3)] for name, (a, b) in paces.items()},
         "cs": result.get("cs"),
+        "response": adapt,
         "zones": {"basis": zones.get("basis"), "lthr": lthr,
                   **{name: list(band) for name, band in zones.items() if name != "basis" and band}},
         "weeks": [
@@ -874,6 +938,10 @@ def _block_sessions(
                                   min(s["distance_km"], 5.0), paces, zones, request.distance, race_pace))
             if s["date"] in why:
                 s["why"] = why[s["date"]]
+        if week.get("adapt") and progress.get("adapt"):
+            first_run = next((s for s in built if s["type"] in RUN_TYPES and s["type"] != "race"), None)
+            if first_run is not None:
+                first_run.setdefault("why", []).insert(0, {"key": "response", **progress["adapt"]})
         if settings.strength:
             built.extend(_strength_sessions(week, built, request, settings, start, kept_dates, hard_done,
                                             last_race, progress))
@@ -955,6 +1023,15 @@ def outcomes(plan: dict[str, Any], runs: pd.DataFrame, today: dt.date, laps: pd.
                       "top": int(top)}
         out[row["id"]] = result
     return out
+
+
+def _last_weeks(plan: dict[str, Any], runs: pd.DataFrame, today: dt.date, days: int = 14) -> dict[str, Any]:
+    """``compliance`` of the plan's last ``days`` before ``today``."""
+    since = (today - dt.timedelta(days=days)).isoformat()
+    recent = [s for s in plan.get("sessions", []) if since <= s["date"] < today.isoformat()]
+    if not recent:
+        return {"due": 0}
+    return compliance(match({**plan, "sessions": recent}, runs, today=today))
 
 
 def _number(value: Any) -> bool:
@@ -1357,11 +1434,13 @@ def replan(
     strength_history: int = 0,
     laps: pd.DataFrame | None = None,
     activities: pd.DataFrame | None = None,
+    daily: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """Rebuild everything from ``today`` on with fresh data; the past stays as it was.
 
     The workout ladders continue from what was really done (``outcomes``:
-    the watch laps, when given, check reps and pace).
+    the watch laps, when given, check reps and pace); with ``daily`` the next
+    week grows, holds or gets lighter by the body's response (``response``).
 
     ``goals`` replaces the plan's goals (the races saved now); without it the
     plan keeps the goals it has.
@@ -1378,7 +1457,9 @@ def replan(
     keep = [s for s in plan.get("sessions", []) if s["date"] < today.isoformat()]
     fresh = generate_goals(settings, plan_goals(plan) if goals is None else goals, runs, result, keep=keep,
                            strength_history=strength_history,
-                           done_as_planned=outcomes(plan, runs, today, laps=laps, activities=activities))
+                           done_as_planned=outcomes(plan, runs, today, laps=laps, activities=activities),
+                           adapt=response(daily, today - dt.timedelta(days=1), _last_weeks(plan, runs, today))
+                           if daily is not None else None)
     fresh["id"] = plan["id"]
     if goals is None and plan.get("name"):
         fresh["name"] = plan["name"]

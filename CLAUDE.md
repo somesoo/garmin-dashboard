@@ -745,6 +745,14 @@ Plan i cele:
   Pierwszy plan (bez przeszłości) liczy wszystko. Siła liczy się po dopasowaniu
   do aktywności siłowej z zegarka. Wywołujący `replan` podają `laps=` i
   `activities=` (bez nich okrążenia nie są sprawdzane).
+- **Najbliższy tydzień według reakcji** (`plan.response`, przy `replan(...,
+  daily=)` i nowym planie): HRV z 7 dni (średnia ln) poniżej bazy z 60 dni −
+  0,5 SD, tętno spoczynkowe 7 d ≥ +3 bpm nad bazą, < 70% km z ostatnich 2 tyg.
+  przebiegnięte. Jeden sygnał → `hold` (drugi tydzień bez przyrostu), dwa →
+  `lighter` (pierwszy tydzień lżejszy −25%, cykl lżejszych tygodni liczy się od
+  niego). Decyzja w `plan["response"]`, na pierwszej sesji tygodnia `why:
+  response`. Dalsze tygodnie zostają w rytmie 3–4 tyg. — przyszłej reakcji nie
+  znamy, więc każda przebudowa decyduje na nowo.
 - **Prędkość krytyczna w planie** (`physio.critical_speed`, prognoza: `cs`) jest
   liczona tylko z czystych wysiłków bliskich maksymalnego 2–20 min (`block`,
   `whole`, start) z 90 dni, min. 2 o długości różnej ≥ 2×; `cap_threshold`

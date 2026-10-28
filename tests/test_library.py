@@ -287,3 +287,46 @@ class DoneAsPlanned(unittest.TestCase):
                    and s["text"].get("key") == "threshold")
         self.assertGreaterEqual(nxt["text"]["level"], self.session["text"]["level"])
         self.assertNotIn("rung_hold", [w["key"] for w in nxt.get("why", [])])
+
+
+class Response(unittest.TestCase):
+    def daily(self, hrv_recent=60.0, rhr_recent=48.0):
+        days = pd.date_range("2026-01-01", "2026-03-01")
+        rows = []
+        for i, day in enumerate(days):
+            recent = day > pd.Timestamp("2026-02-22")
+            rows.append({"day": day, "hrv_last_night": hrv_recent if recent else 60.0 + (i % 5 - 2),
+                         "rhr": rhr_recent if recent else 48.0 + (i % 3 - 1)})
+        return pd.DataFrame(rows)
+
+    def test_signals_and_decision(self):
+        today = dt.date(2026, 3, 1)
+        self.assertEqual(planning.response(self.daily(), today)["decision"], "grow")
+        low = planning.response(self.daily(hrv_recent=52.0), today)
+        self.assertEqual((low["decision"], [s["key"] for s in low["signals"]]), ("hold", ["hrv_low"]))
+        both = planning.response(self.daily(hrv_recent=52.0, rhr_recent=53.0), today)
+        self.assertEqual(both["decision"], "lighter")
+        missed = planning.response(self.daily(), today, {"due": 6, "km_ratio": 0.5, "actual_km": 20.0,
+                                                         "planned_km": 40.0})
+        self.assertEqual(missed["decision"], "hold")
+        self.assertEqual(planning.response(None, today)["decision"], "grow")
+
+    def test_the_first_week_follows_the_decision(self):
+        runs, _, _, result = fixture()
+        settings = planning.PlanSettings(run_days=[1, 3, 5, 6], long_day=6, start=dt.date(2026, 3, 2))
+        goal = {"race_id": None, "name": None, "distance": "hm", "date": "2026-06-14", "goal_s": None,
+                "priority": "A"}
+
+        def weeks(decision):
+            plan = planning.generate_goals(settings, [goal], runs, result, anchor=pd.Timestamp("2026-03-01"),
+                                           adapt={"decision": decision, "signals": [], "day": "2026-03-01"})
+            return plan
+
+        grow, hold, lighter = weeks("grow"), weeks("hold"), weeks("lighter")
+        self.assertGreater(grow["weeks"][1]["volume_km"], grow["weeks"][0]["volume_km"])
+        self.assertEqual(hold["weeks"][1]["volume_km"], hold["weeks"][0]["volume_km"])
+        self.assertTrue(lighter["weeks"][0]["recovery"])
+        self.assertLess(lighter["weeks"][0]["volume_km"], grow["weeks"][0]["volume_km"])
+        first = next(s for s in lighter["sessions"] if s["type"] in planning.RUN_TYPES)
+        self.assertEqual(first["why"][0]["key"], "response")
+        self.assertEqual(store.validate_plan(lighter), [])

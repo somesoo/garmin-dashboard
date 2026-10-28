@@ -313,7 +313,8 @@ def active_plan(today: dt.date | None = None) -> dict[str, Any] | None:
                                                         goals=[planning.goal_of(r) for r in races],
                                                         strength_history=strength_done(),
                                                         laps=shell.table("run_laps"),
-                                                        activities=shell.table("activities")))
+                                                        activities=shell.table("activities"),
+                                                        daily=shell.daily()))
         except ValueError as error:
             st.warning(i18n.tr(pl=f"Nie udało się dopasować planu do nowych celów: {error}",
                                en=f"Could not fit the plan to the new goals: {error}"))

@@ -612,6 +612,17 @@ def why_line(item: dict[str, Any]) -> str:
                      "niż mówi samopoczucie.",
                   en=f"Day {days} after the race ({race}): no quality and no long run for {need} days — Daniels' "
                      "rule, one easy day per 3 km raced. Muscles recover from a race longer than it feels.")
+    if key == "response":
+        signals = "; ".join(signal_line(x) for x in item.get("signals") or [])
+        if item.get("decision") == "lighter":
+            return tr(pl=f"Ten tydzień jest lżejszy (−25%), bo organizm słabo przyjmuje obciążenie: {signals}. Lżejszy "
+                         "tydzień z kalendarza przesuwa się dalej.",
+                      en=f"This week is lighter (−25%) because the body is not taking the load well: {signals}. The "
+                         "scheduled lighter week moves further on.")
+        return tr(pl=f"W tym tygodniu bez przyrostu objętości, bo jeden sygnał jest przeciw: {signals}. Wzrost wraca "
+                     "przy następnej przebudowie, jeśli sygnał zniknie.",
+                  en=f"No step up in volume this week, because one signal is against it: {signals}. Growth returns "
+                     "with the next rebuild if the signal is gone.")
     if key == "rung_hold":
         family, reason = family_label(item.get("family")), item.get("reason")
         if reason == "missed":
@@ -649,6 +660,24 @@ def why_line(item: dict[str, Any]) -> str:
         days = item.get("days")
         return tr(pl=f"{days} dni po starcie: krótko i bardzo spokojnie, nogi się odbudowują.",
                   en=f"{days} days after the race: short and very easy, the legs are rebuilding.")
+    return str(key)
+
+
+def signal_line(item: dict[str, Any]) -> str:
+    """One signal of ``plan.response``."""
+    tr = i18n.tr
+    key = item.get("key")
+    if key == "hrv_low":
+        now, base, floor = (f"{item[k]:.1f}" for k in ("now", "base", "floor"))
+        return tr(pl=f"HRV z 7 dni {now.replace('.', ',')} ms poniżej własnej normy ({base.replace('.', ',')} ms, "
+                     f"dolna granica {floor.replace('.', ',')})",
+                  en=f"7-day HRV {now} ms below your own norm ({base} ms, lower edge {floor})")
+    if key == "rhr_up":
+        return tr(pl=f"tętno spoczynkowe z 7 dni {item['now']:g} vs {item['base']:g} bpm",
+                  en=f"7-day resting heart rate {item['now']:g} vs {item['base']:g} bpm")
+    if key == "not_run":
+        return tr(pl=f"z ostatnich 2 tygodni przebiegnięte {item['actual']:.0f} z {item['planned']:.0f} km",
+                  en=f"{item['actual']:.0f} of {item['planned']:.0f} km of the last 2 weeks were run")
     return str(key)
 
 
