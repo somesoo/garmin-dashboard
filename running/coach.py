@@ -116,7 +116,15 @@ def next_session(
 
     if session is not None:
         hard = session["type"] in ("tempo", "threshold", "intervals", "long")
-        if hard and len(flags) >= 2:
+        if session["date"] > today.isoformat():
+            # Tonight's sleep decides that day, not this morning's numbers.
+            action = "decyzja rano"
+            if hard and flags:
+                reasons.append(f"Dziś bez treningu. Regeneracja jest słabsza ({len(flags)} sygn.) — jeśli rano "
+                               "w dniu sesji będzie podobnie, zamień ją na spokojny albo przesuń.")
+            else:
+                reasons.append("Dziś bez treningu. Decyzja zapadnie rano w dniu sesji, po nocnych danych.")
+        elif hard and len(flags) >= 2:
             action = "zamień na spokojny"
             reasons.append("Dwa lub więcej sygnałów słabej regeneracji przy mocnej sesji w planie: "
                            "jakość po złej nocy daje mniej bodźca i więcej zmęczenia. Przesuń ją o 1–2 dni.")
@@ -130,7 +138,8 @@ def next_session(
         else:
             action = "jak w planie"
             reasons.append("Brak sygnałów przeciw: regeneracja i obciążenie w normie.")
-        return {"source": "plan", "session": session, "action": action, "reasons": reasons, "flags": flags,
+        return {"source": "plan", "session": session, "today": session["date"] == today.isoformat(),
+                "action": action, "reasons": reasons, "flags": flags,
                 "recovery": recovery, "load": load}
 
     # No plan: a suggestion from the record alone.
@@ -158,7 +167,7 @@ def next_session(
         "pace_hi": band[1] if band else None,
         "main": "3×10 min w tempie T, 1 min truchtu" if kind == "threshold" else f"{km:.0f} km spokojnie",
     }
-    return {"source": "dane", "session": suggestion, "action": "propozycja", "reasons": [why],
+    return {"source": "dane", "session": suggestion, "today": True, "action": "propozycja", "reasons": [why],
             "flags": flags, "recovery": recovery, "load": load}
 
 

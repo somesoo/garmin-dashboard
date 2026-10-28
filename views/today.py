@@ -25,6 +25,7 @@ ACTION_ICONS = {
     "zamień na spokojny": ":material/pause_circle:",
     "przesuń": ":material/event_repeat:",
     "propozycja": ":material/lightbulb:",
+    "decyzja rano": ":material/schedule:",
 }
 
 
@@ -88,9 +89,11 @@ def _decision(active: dict | None, suggestion: dict | None, today: dt.date) -> N
         return
     session = suggestion["session"]
     date = dt.date.fromisoformat(session["date"])
-    when = "dziś" if date == today else f"{DAY_NAMES[date.weekday()]} {date:%d.%m}"
     action = suggestion["action"]
-    st.markdown(f"**{session.get('title')}** · {when} · decyzja: **{action}**")
+    if suggestion.get("today", True):
+        st.markdown(f"**{session.get('title')}** · dziś · decyzja: **{action}**")
+    else:
+        st.markdown(f"**Dziś wolne.** Następnie: **{session.get('title')}** · {DAY_NAMES[date.weekday()]} {date:%d.%m}")
     details = [session.get("main", "")]
     if session.get("pace_lo") and "/km" not in session.get("main", ""):
         details.append(f"tempo {units.fmt_pace(session['pace_lo'], False)}–{units.fmt_pace(session.get('pace_hi'))}")
@@ -100,7 +103,8 @@ def _decision(active: dict | None, suggestion: dict | None, today: dt.date) -> N
     if suggestion["reasons"]:
         st.markdown(f"<div class='tile-caption'>{suggestion['reasons'][0]}</div>", unsafe_allow_html=True)
 
-    if suggestion["source"] != "plan" or active is None:
+    # Changing a later session on tonight's numbers would act on data the next night replaces.
+    if suggestion["source"] != "plan" or active is None or not suggestion.get("today", True):
         return
     hard = session["type"] in planning.HARD_TYPES and session["type"] != "race"
     columns = st.columns(2)

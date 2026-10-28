@@ -291,7 +291,8 @@ TERMS: dict[str, Term] = {
             "Plan układa się tygodniami naprzód, a forma zmienia się z dnia na dzień. Decyzja godzi jedno "
             "z drugim: nigdy nie dokłada więcej, niż plan przewidział, najwyżej odpuszcza.",
             "„Jak w planie” — biegnij. Jeden sygnał przeciw — zacznij i oceń po rozgrzewce. Dwa lub więcej "
-            "przy mocnej sesji — zamień na spokojny albo przesuń o dzień. Sygnały starsze niż doba są pomijane.",
+            "przy mocnej sesji — zamień na spokojny albo przesuń o dzień. Sygnały starsze niż doba są pomijane. "
+            "Gdy dziś nie ma sesji, kafel tylko zapowiada następną — decyzja zapada rano w jej dniu.",
         ),
         "quality_sessions": (
             "Mocne sesje",

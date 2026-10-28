@@ -208,7 +208,9 @@ def _next(active: dict, frame: pd.DataFrame, result: dict) -> None:
     date = dt.date.fromisoformat(session["date"]) if session else None
     with bento.tile(
         "Następny trening", key="plan_next", terms=["today_decision"],
-        caption=f"{date:%d.%m} ({DAY_NAMES[date.weekday()]}) · decyzja: <b>{suggestion['action']}</b>" if session else None,
+        caption=(f"{date:%d.%m} ({DAY_NAMES[date.weekday()]}) · "
+                 + (f"decyzja: <b>{suggestion['action']}</b>" if suggestion.get("today", True) else "decyzja rano w dniu sesji"))
+        if session else None,
         how=" ".join(suggestion["reasons"] + ([f"Sygnały: {'; '.join(suggestion['flags'])}."] if suggestion["flags"] else [])
                      + ([f"Po co: {session['purpose']}"] if session and session.get("purpose") else [])) or None,
     ):

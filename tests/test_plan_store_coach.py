@@ -291,6 +291,18 @@ class Coach(TempStore):
                      rhr_deviation=0.0)
         self.assertEqual(coach.next_session(plan, runs, fine, result, today)["action"], "jak w planie")
 
+    def test_a_later_session_waits_for_its_own_morning(self):
+        runs, _, _, result = fixture()
+        today = dt.date(2026, 3, 3)
+        plan = {"sessions": [{"id": "s", "date": "2026-03-04", "type": "intervals", "status": "planned",
+                              "title": "5×1000"}]}
+        rough = daily("2026-02-20", 12, readiness=25.0, readiness_level="LOW", hrv_status="UNBALANCED",
+                      sleep_h=5.0, rhr_deviation=6.0)
+        verdict = coach.next_session(plan, runs, rough, result, today)
+        self.assertFalse(verdict["today"])
+        self.assertEqual(verdict["action"], "decyzja rano")
+        self.assertIn("rano", verdict["reasons"][0])
+
     def test_without_recovery_data_there_are_no_invented_flags(self):
         runs, _, _, result = fixture()
         signals = coach.recovery_signals(daily("2026-02-20", 12), dt.date(2026, 3, 3))
