@@ -386,3 +386,22 @@ class PlanCheck(unittest.TestCase):
         summary = plan_check.summary(table)
         self.assertEqual(summary["broken"], {rule: 0 for rule in plan_check.RULES})
         self.assertEqual(summary["plans"], len(table))
+
+
+
+class Constants(unittest.TestCase):
+    """The heuristic numbers stay consistent with the forecast's requirements."""
+
+    def test_peak_and_long_run_cover_what_the_forecast_calls_prepared(self):
+        from running import forecast
+
+        for distance, need in forecast.REQUIREMENTS.items():
+            self.assertGreaterEqual(planning.PEAK_KM[distance] * 0.8, need["weekly_km"] * 0.8, distance)
+            self.assertGreater(planning.PEAK_KM[distance], need["weekly_km"], distance)
+            self.assertGreaterEqual(planning.LONG_TARGET_KM[distance], need["long_km"], distance)
+
+    def test_every_constant_is_labelled(self):
+        doc = planning.__doc__
+        for name in ("SPIKE", "LONG_TARGET_KM", "PEAK_KM", "MAX_STEP_KM", "TAPER_WEEKS", "LONG_GAP_DAYS",
+                     "QUALITY_ROOM_KM", "ON_PACE_SHARE", "HR_MARGIN"):
+            self.assertIn(name, doc)

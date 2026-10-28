@@ -30,6 +30,35 @@ Principles the generator follows (and the page states):
   goal pace appears only in race-specific segments, and only when the goal is
   within reach of the forecast. Re-planning recalculates paces from the latest
   data, which is how the plan follows real progress.
+
+Where the numbers come from -- [S] a source, [C] coaching convention, [H] a
+heuristic of this app (kept honest by a sourced rule above it or a test):
+
+* ``SPIKE`` 1.1x the longest run of 30 days [S Garmin-RUNSAFE, BJSM 2025].
+* Long run time cap 150 min (165 for M) [S Daniels]; ``LONG_TARGET_KM``
+  [H] -- at least ``forecast.REQUIREMENTS`` long_km (test), HM 19 km ~ 90%
+  of the race, M 32 km the usual ceiling; ``LONG_STEP_KM`` [H], in practice
+  bounded by ``SPIKE``.
+* ``PEAK_KM`` [H] -- 15-25% above ``forecast.REQUIREMENTS`` weekly_km (the
+  volume at which preparation counts as full; test), x0.8 with <= 3 days.
+* ``MAX_STEP_KM`` [H] -- keeps the curve smooth; the week-to-week ratio
+  itself did not predict injury (Garmin-RUNSAFE), the single run does.
+* Lighter week every 3rd / 4th week, -25% [C periodisation practice];
+  overridden by the body's response (``response``: HRV SWC 0.5 SD [S Plews
+  2013], resting HR +3 bpm [S Buchheit 2014]).
+* Taper: ``TAPER_WEEKS`` 1/1/2/3 and race-week volume ~40-60% of the peak
+  [S Bosquet 2007: 8-14 days, -41-60%, intensity kept]; marathon 3 weeks [C].
+* ``easy_days_after`` one easy day per 3 km raced [S Daniels];
+  ``LONG_GAP_DAYS`` / ``QUALITY_GAP_DAYS`` [C].
+* Long-run share of the week 42-50% [H] -- above Daniels' 25-30%, which is
+  written for 60+ km weeks; with 3-4 running days a smaller share leaves no
+  long run at all.
+* Phase split at 1/3 and 2/3 of the build [H]; ``QUALITY_ROOM_KM`` 35 km and
+  5+ days for a second quality session [H] -- three hard days need two easy
+  ones around them; ``keep_one`` [H].
+* Quality caps and ladders: ``running/library.py`` (Daniels' shares, Friel's
+  zones and decoupling, Bosquet's taper, Maunder's durability); rep
+  execution ``ON_PACE_SHARE`` 2/3 and ``HR_MARGIN`` 3 bpm [H].
 """
 
 from __future__ import annotations

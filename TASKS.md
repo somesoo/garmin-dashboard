@@ -60,7 +60,7 @@ zrobione — czy nowa reguła czegoś nie unieważnia (wpis „Przegląd wstecz�
       szczytu progresja odcinka w tempie startowym i kontrola dryfu tętna.
 - [x] **10. Sprawdzenie wstecz planu** — symulacja generatora na historii:
       ile reguł złamanych, jak plan nadążał za realnym wykonaniem.
-- [ ] **11. Stałe bez źródła** (`PEAK_KM`, `LONG_TARGET_KM`, udział długiego,
+- [x] **11. Stałe bez źródła** (`PEAK_KM`, `LONG_TARGET_KM`, udział długiego,
       granice faz, `QUALITY_ROOM_KM`, `keep_one`) — każdą uzasadnić źródłem albo
       wyprowadzić z danych biegacza; opisać w docstringu.
 - [ ] **12. Siła na zegarek** — trening siłowy jako workout Garmina
@@ -113,6 +113,12 @@ wstrzymanie długości przy dryfie to kandydat do 8b (ten sam sygnał postępu c
 nie łamie żadnej reguły (także po 1–9). Realność 26% mówi, że plan zakłada
 ciągłość, której w danych nie było — kandydat do 11: start planu po przerwie
 (dziś `no_running` tylko ostrzega) i/lub mniejszy pierwszy krok po przerwie.
+
+**Przegląd wstecz po 11 (2026-10-28):** każda liczba w `plan.py` ma w docstringu
+etykietę [S] źródło / [C] konwencja / [H] heurystyka; test pilnuje, że szczyt
+objętości i długi bieg nie spadną poniżej tego, co prognoza uznaje za pełne
+przygotowanie. Heurystyki zostają heurystykami — najsłabsze to udział długiego
+biegu (42–50% przy 3–4 dniach) i granice faz.
 
 ## Czeka na zgodę
 
