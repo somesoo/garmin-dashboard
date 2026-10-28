@@ -13,7 +13,7 @@ import routing
 import shell
 import theme as tz
 import config
-from running import coach, forecast, garmin_workout as gw, plan as planning, store, text, units
+from running import coach, forecast, garmin_workout as gw, library, plan as planning, store, text, units
 from views import run_common as rc
 
 STATUS_ICONS = rc.STATUS_ICONS
@@ -352,9 +352,13 @@ def _explain(active: dict, result: dict) -> None:
               "week, and quality never lands next to a hard day that really happened. Every session a rule changed "
               "carries its reason (“Why here”)."),
         tr(pl=f"**Długi bieg** rośnie od {base.get('long_km_6w', 0):.0f} do {longest:.0f} km o 1–2 km na tydzień, "
-              "maks. ~2,5 h.",
+              "maks. ~2,5 h. W szczycie przed półmaratonem i maratonem kończy się odcinkiem w tempie startowym, który "
+              "rośnie z biegu na bieg (półmaraton: 3 → 8 km) — ale tylko wtedy, gdy w spokojnej części tętno nie "
+              f"odjechało od tempa o więcej niż {library.DRIFT_LIMIT:g}% (odporność na zmęczenie, Maunder 2021).",
            en=f"**The long run** grows from {base.get('long_km_6w', 0):.0f} to {longest:.0f} km by 1–2 km a week, "
-              "max. ~2.5 h."),
+              "max. ~2.5 h. In the peak before a half or full marathon it ends with a race-pace stretch that grows "
+              "run by run (half: 3 → 8 km) — but only while heart rate in the easy part has not drifted from pace by "
+              f"more than {library.DRIFT_LIMIT:g}% (durability, Maunder 2021)."),
         tr(pl=f"**Wokół startów.** Długi bieg najpóźniej {planning.LONG_GAP_DAYS + 1} dni przed startem, akcent "
               f"najpóźniej {planning.QUALITY_GAP_DAYS + 1} dni przed — w tygodniu startu jeden krótki (kilka odcinków "
               "w tempie startowym 4–6 dni przed), bo taper tnie kilometry, nie intensywność; spokojne biegi tego "

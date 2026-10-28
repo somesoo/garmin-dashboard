@@ -753,6 +753,11 @@ Plan i cele:
   niego). Decyzja w `plan["response"]`, na pierwszej sesji tygodnia `why:
   response`. Dalsze tygodnie zostają w rytmie 3–4 tyg. — przyszłej reakcji nie
   znamy, więc każda przebudowa decyduje na nowo.
+- **Długi bieg z finiszem** (`library.LONG_FINISH`, rodzina `long_finish`):
+  w szczycie HM/M odcinek w tempie startowym na końcu długiego biegu idzie po
+  drabince (HM 3 → 8 km, M 6 → 14 km, ≤ 40% biegu). Szczebel rośnie, gdy bieg
+  się odbył, a dryf tempo:tętno spokojnej części (`library.drift` z okrążeń,
+  bez 1. km i bez finiszu) ≤ 5%; inaczej `rung_hold` z powodem `drift`.
 - **Prędkość krytyczna w planie** (`physio.critical_speed`, prognoza: `cs`) jest
   liczona tylko z czystych wysiłków bliskich maksymalnego 2–20 min (`block`,
   `whole`, start) z 90 dni, min. 2 o długości różnej ≥ 2×; `cap_threshold`

@@ -243,7 +243,7 @@ def family_label(key: Any) -> str:
     tr = i18n.tr
     return {"threshold": tr(pl="próg", en="threshold"), "intervals": tr(pl="interwały", en="intervals"),
             "hills": tr(pl="podbiegi", en="hills"), "race_pace": tr(pl="tempo startowe", en="race pace"),
-            "tempo": "tempo"}.get(key, str(key))
+            "tempo": "tempo", "long_finish": tr(pl="długi z finiszem", en="long run with a finish")}.get(key, str(key))
 
 
 def strength_label(stage: Any) -> str:
@@ -644,6 +644,14 @@ def why_line(item: dict[str, Any]) -> str:
                          "zegarka) — powtórka szczebla; awans po ⅔ odcinków w tempie.",
                       en=f"{when}: {item.get('on_pace')} of {item.get('planned')} reps within the pace band (from the "
                          "watch laps) — the rung is repeated; it moves up with ⅔ of the reps on pace.")
+        if reason == "drift":
+            value = f"{item.get('drift'):.1f}"
+            return tr(pl=f"{when}: w spokojnej części długiego biegu tętno odjechało od tempa o {value.replace('.', ',')}% "
+                         f"(granica {item.get('limit'):g}%) — wytrzymałość jeszcze nie trzyma, więc odcinek w tempie "
+                         "startowym na końcu zostaje tej samej długości.",
+                      en=f"{when}: in the easy part of the long run heart rate drifted from pace by {value}% (limit "
+                         f"{item.get('limit'):g}%) — endurance is not holding yet, so the race-pace finish stays the "
+                         "same length.")
         if reason == "hr_high":
             return tr(pl=f"{when}: średnie tętno odcinków {item.get('hr')} bpm, powyżej strefy progu (do "
                          f"{item.get('top')}) — tempo było za ciężkie na dziś; ten sam szczebel.",

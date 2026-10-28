@@ -330,3 +330,44 @@ class Response(unittest.TestCase):
         first = next(s for s in lighter["sessions"] if s["type"] in planning.RUN_TYPES)
         self.assertEqual(first["why"][0]["key"], "response")
         self.assertEqual(store.validate_plan(lighter), [])
+
+
+class Durability(unittest.TestCase):
+    def laps(self, hr_second, km=14):
+        rows = []
+        for i in range(km):
+            rows.append({"activity_id": 9000, "lap": i + 1, "distance_m": 1000.0, "duration_s": 400.0,
+                         "avg_hr": 145.0 if i < km / 2 else hr_second, "intensity": "active"})
+        return pd.DataFrame(rows)
+
+    def test_drift_from_laps(self):
+        self.assertAlmostEqual(library.drift(self.laps(145.0)), 0.0)
+        self.assertGreater(library.drift(self.laps(155.0)), library.DRIFT_LIMIT)
+        self.assertAlmostEqual(library.drift(self.laps(155.0), easy_km=7), 0.0)  # the finish is left out
+        self.assertIsNone(library.drift(self.laps(145.0, km=3)))
+
+    def test_finish_grows_through_the_peak(self):
+        plan, _, _ = make("hm", race=dt.date(2026, 8, 30))
+        weeks = {w["week"]: w for w in plan["weeks"]}
+        parts = [s["text"]["part"] for s in plan["sessions"]
+                 if s["type"] == "long" and s["text"].get("part") and not weeks[s["week"]].get("recovery")]
+        self.assertGreaterEqual(len(parts), 2)
+        self.assertEqual(parts, sorted(parts))
+        self.assertGreater(parts[-1], parts[0])
+        for s in plan["sessions"]:
+            if s["text"].get("part"):
+                self.assertLessEqual(s["text"]["part"], s["distance_km"] * library.FINISH_SHARE + 0.01)
+
+    def test_drift_holds_the_finish(self):
+        plan, runs, result = make("hm", race=dt.date(2026, 8, 30))
+        long_run = next(s for s in plan["sessions"] if s["type"] == "long" and s["text"].get("part"))
+        date = dt.date.fromisoformat(long_run["date"])
+        run = pd.DataFrame([{"activity_id": 9000, "day": pd.Timestamp(date), "kind": "long",
+                             "distance_km": long_run["distance_km"], "pace_min_km": 6.5}])
+        laps = self.laps(160.0, km=int(long_run["distance_km"]))
+        found = planning.outcomes(plan, pd.concat([runs, run], ignore_index=True), date + dt.timedelta(days=1),
+                                  laps=laps)[long_run["id"]]
+        self.assertEqual(found["reason"], "drift")
+        steady = planning.outcomes(plan, pd.concat([runs, run], ignore_index=True), date + dt.timedelta(days=1),
+                                   laps=self.laps(145.0, km=int(long_run["distance_km"])))[long_run["id"]]
+        self.assertTrue(steady["advance"])

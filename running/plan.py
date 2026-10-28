@@ -418,8 +418,8 @@ def _session(
         spec: dict[str, Any] = {"key": "long"}
         target = _hr_target(zones, "E")
         steps = [_target(_step("run", km=km, pace=easy), target)]
-        if race_pace and week["phase"] == "peak" and distance in ("hm", "m"):
-            part = min(round(km * (0.35 if distance == "m" else 0.3)), 14 if distance == "m" else 8)
+        part = (workout or {}).get("part")
+        if race_pace and part:
             steps = [_target(_step("run", km=km - part, pace=easy), target),
                      _step("run", km=part, pace=(race_pace * 0.99, race_pace * 1.01))]
             spec.update(part=float(part), race_pace=round(sum(steps[-1]["pace"]) / 2, 3))
@@ -869,7 +869,16 @@ def _block_sessions(
             date = week["monday"] + dt.timedelta(days=day)
             km = week["long_km"] if kind == "long" else 0.0
             workout = None
-            if kind in QUALITY_TYPES and phase == "race":
+            if kind == "long" and phase == "peak" and race_pace and request.distance in library.LONG_FINISH:
+                count = progress["levels"].get("long_finish", 0)
+                level = max(0, count - 1) if week.get("recovery") else count
+                workout = {"part": library.long_finish(request.distance, level, km)}
+                if not week.get("recovery"):
+                    progress["levels"]["long_finish"] = count + 1
+                note = progress.get("held", {}).pop("long_finish", None)
+                if note:
+                    why.setdefault(date.isoformat(), []).append(note)
+            elif kind in QUALITY_TYPES and phase == "race":
                 workout = library.sharpener(request.distance, paces, race_pace)
             elif kind in QUALITY_TYPES and day in families:
                 family = families[day]
@@ -950,7 +959,16 @@ def _block_sessions(
     return sessions
 
 
-FAMILIES = ("threshold", "intervals", "hills", "race_pace", "tempo")
+FAMILIES = ("threshold", "intervals", "hills", "race_pace", "tempo", "long_finish")
+
+
+def _family(session: dict[str, Any]) -> str | None:
+    """The ladder a session climbs: its text key, or ``long_finish`` for a long
+    run with a race-pace finish."""
+    spec = session.get("text") or {}
+    if spec.get("key") == "long":
+        return "long_finish" if spec.get("part") else None
+    return spec.get("key")
 
 
 def _progress(keep: list[dict[str, Any]], strength_history: int, strength: bool,
@@ -967,7 +985,7 @@ def _progress(keep: list[dict[str, Any]], strength_history: int, strength: bool,
     held: dict[str, dict[str, Any]] = {}
     marked = 0
     for session in sorted(keep or [], key=lambda s: s["date"]):
-        key = (session.get("text") or {}).get("key")
+        key = _family(session)
         outcome = (outcomes or {}).get(session.get("id"))
         if key in FAMILIES and session.get("phase") != "taper" and not (session.get("text") or {}).get("sharpen"):
             if outcomes is None or (outcome and outcome["advance"]):
@@ -997,12 +1015,17 @@ def outcomes(plan: dict[str, Any], runs: pd.DataFrame, today: dt.date, laps: pd.
     if not past["sessions"]:
         return {}
     matched = match(past, runs, today=today, laps=laps, activities=activities)
+    sessions = {s["id"]: s for s in past["sessions"]}
+    by_activity = dict(tuple(laps.groupby("activity_id"))) if laps is not None and not laps.empty else {}
     top = ((plan.get("zones") or {}).get("T") or [None, None])[1]
     out: dict[str, dict[str, Any]] = {}
     for row in matched.to_dict("records"):
         effective = row.get("effective")
         if row.get("type") == "strength":
             out[row["id"]] = {"done": effective in ("done", "modified")}
+            continue
+        if row.get("type") == "long" and (sessions.get(row["id"], {}).get("text") or {}).get("part"):
+            out[row["id"]] = _finish_outcome(sessions[row["id"]], row, by_activity)
             continue
         if row.get("type") not in QUALITY_TYPES:
             continue
@@ -1032,6 +1055,18 @@ def _last_weeks(plan: dict[str, Any], runs: pd.DataFrame, today: dt.date, days: 
     if not recent:
         return {"due": 0}
     return compliance(match({**plan, "sessions": recent}, runs, today=today))
+
+
+def _finish_outcome(session: dict[str, Any], row: dict[str, Any], by_activity: dict) -> dict[str, Any]:
+    """A long run with a race-pace finish moves its ladder when it was run and
+    the easy part before the finish stayed coupled (``library.drift``)."""
+    if row.get("effective") in ("missed", "skipped", "planned") or not row.get("activity_id"):
+        return {"advance": False, "reason": "missed"}
+    easy_km = (session.get("distance_km") or 0) - (session["text"].get("part") or 0)
+    value = library.drift(by_activity.get(int(row["activity_id"])), easy_km)
+    if value is not None and value > library.DRIFT_LIMIT:
+        return {"advance": False, "reason": "drift", "drift": value, "limit": library.DRIFT_LIMIT}
+    return {"advance": True, **({"drift": value} if value is not None else {})}
 
 
 def _number(value: Any) -> bool:

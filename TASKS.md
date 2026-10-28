@@ -56,7 +56,7 @@ zrobione — czy nowa reguła czegoś nie unieważnia (wpis „Przegląd wstecz�
 - [x] **8. Adaptacja tygodnia z reakcji** — trend HRV (7 d vs baza 60 d i SWC),
       EF przy stałym tętnie, realizacja planu decydują: rośnie / stoi / lżej,
       zamiast sztywnego „co 3.–4. tydzień”.
-- [ ] **9. Odporność na zmęczenie (durability)** — w długich biegach fazy
+- [x] **9. Odporność na zmęczenie (durability)** — w długich biegach fazy
       szczytu progresja odcinka w tempie startowym i kontrola dryfu tętna.
 - [ ] **10. Sprawdzenie wstecz planu** — symulacja generatora na historii:
       ile reguł złamanych, jak plan nadążał za realnym wykonaniem.
@@ -103,6 +103,11 @@ i tydzień planu patrzą na HRV z dwóch stron — rano status Garmina dla jedne
 sesji, przy przebudowie własna baza 60 d dla objętości tygodnia; to dwa poziomy,
 nie dubel. `rc.active_plan` przekazuje `daily`, więc automatyczna przebudowa
 po zmianie startów też ocenia reakcję.
+
+**Przegląd wstecz po 9 (2026-10-28):** dryf liczony z okrążeń daje na Twoich
+długich biegach −5…+6% (18.10: +0,8%), więc próg 5% rozróżnia realne przypadki.
+Długość samego długiego biegu dalej rośnie z `_volumes` niezależnie od dryfu —
+wstrzymanie długości przy dryfie to kandydat do 8b (ten sam sygnał postępu co EF).
 
 ## Czeka na zgodę
 

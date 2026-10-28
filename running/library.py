@@ -90,6 +90,54 @@ ROTATION = {
 
 STRIDES = (6, 20, 60)  # reps, seconds fast, seconds easy
 
+# Durability (Maunder et al., Sports Med 2021; Jones 2021: holding pace late in a
+# long effort is a determinant of its own): the race-pace finish of the peak's
+# long runs grows rung by rung. It moves up only while the easy part before it
+# stays coupled -- pace:HR drift under DRIFT_LIMIT % (Friel's aerobic decoupling).
+LONG_FINISH = {"hm": [3.0, 4.0, 5.0, 6.0, 8.0], "m": [6.0, 8.0, 10.0, 12.0, 14.0]}
+FINISH_SHARE = 0.4  # never more than this share of the long run
+DRIFT_LIMIT = 5.0
+
+
+def long_finish(distance: str, level: int, km: float) -> float | None:
+    """Race-pace kilometres at the end of a peak long run (HM / M), or None."""
+    rungs = LONG_FINISH.get(distance)
+    if not rungs or km <= 0:
+        return None
+    part = rungs[max(0, min(level, len(rungs) - 1))]
+    return float(min(part, math.floor(km * FINISH_SHARE)))
+
+
+def drift(laps: Any, easy_km: float | None = None) -> float | None:
+    """Pace:HR decoupling (%) of the steady part of a run, from its watch laps.
+
+    The first kilometre (warm-up drift) is left out; ``easy_km`` stops before a
+    fast finish. Efficiency (speed per beat) of the first half over the second,
+    minus one: positive = the heart rate climbed for the same pace.
+    """
+    if laps is None or len(laps) == 0:
+        return None
+    frame = laps.sort_values("lap")
+    frame = frame[frame["avg_hr"].notna() & (frame["distance_m"] > 200) & (frame["duration_s"] > 0)]
+    distance = frame["distance_m"].cumsum()
+    limit = (easy_km or float("inf")) * 1000
+    frame = frame[(distance > 1000) & (distance <= limit + 1)]
+    if frame["distance_m"].sum() < 4000 or len(frame) < 4:
+        return None
+    half = frame["distance_m"].sum() / 2
+    first = frame[frame["distance_m"].cumsum() <= half]
+    second = frame.iloc[len(first):]
+    if first.empty or second.empty:
+        return None
+
+    def efficiency(part: Any) -> float:
+        speed = part["distance_m"].sum() / part["duration_s"].sum()
+        heart = (part["avg_hr"] * part["duration_s"]).sum() / part["duration_s"].sum()
+        return speed / heart
+
+    return round((efficiency(first) / efficiency(second) - 1) * 100, 1)
+
+
 # Race week (Bosquet et al. 2007, Mujika: keep the intensity, cut the volume): one
 # short race-pace session 4-6 days out, so the legs keep the rhythm. (reps, km, rest s)
 SHARPENER = {"5k": (4, 0.4, 90), "10k": (4, 0.8, 90), "hm": (3, 1.0, 90), "m": (2, 2.0, 120)}
