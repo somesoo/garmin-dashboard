@@ -66,7 +66,7 @@ def render() -> None:
 
     if not track.empty:
         _same_route(run)
-        _shared(run)
+        _shared(run, track)
     left, right = bento.row(2, 2)
     with left:
         if not track.empty:
@@ -234,7 +234,7 @@ def _effort_group(kind: str) -> str:
     return "mocny" if kind in HARD else "długi" if kind == "long" else "spokojny"
 
 
-def _shared(run: pd.Series) -> None:
+def _shared(run: pd.Series, track: pd.DataFrame) -> None:
     """The longest stretch shared with each other run -- an ad-hoc segment of
     whatever length the two tracks have in common."""
     found = rc.shared(int(run["activity_id"]))
@@ -268,9 +268,22 @@ def _shared(run: pd.Series) -> None:
             st.markdown(f"<div class='tile-caption'>{len(shown)} najdłuższych z {len(found)}</div>",
                         unsafe_allow_html=True)
         rows = getattr(getattr(event, "selection", None), "rows", None) or []
-        if not rows:
+        chosen = shown.iloc[rows[0]] if rows else None
+        # Where it was: every shared stretch on this run's track, or just the picked one.
+        km = pd.to_numeric(track["distance_km"], errors="coerce")
+        km = km - km.min()
+        marked = pd.Series(False, index=track.index)
+        for item in ([chosen] if chosen is not None else shown.to_dict("records")):
+            marked |= km.between(item["km_from"], item["km_to"])
+        st.markdown("<div class='tile-caption'>" + (
+            f"Na mapie: km {chosen['km_from']:.2f}–{chosen['km_to']:.2f}, wspólne z biegiem z "
+            f"{chosen['start_local']:%d.%m.%Y}." if chosen is not None
+            else "Na mapie: wszystkie wspólne odcinki z tabeli. Zaznacz wiersz, żeby pokazać jeden.")
+            + "</div>", unsafe_allow_html=True)
+        tz.show(tz.route_map(track.assign(shared=marked), highlight="shared", height=380,
+                             uirevision=f"shared-{activity_id}"), key=f"shared_map_{activity_id}")
+        if chosen is None:
             return
-        chosen = shown.iloc[rows[0]]
         name, save, open_ = st.columns([3, 1, 1], vertical_alignment="bottom")
         title = name.text_input("Nazwa segmentu", key=f"shared_name_{activity_id}",
                                 placeholder=f"np. km {chosen['km_from']:.1f}–{chosen['km_to']:.1f}")
