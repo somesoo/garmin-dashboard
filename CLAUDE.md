@@ -34,7 +34,7 @@ garmin-dashboard/
   insights/*.md      wnioski: proza + bloki SQL liczone na żywo
   data/raw/          źródło prawdy (nie usuwać — odbudowa tabel bez API)
   data/tables/       daily.parquet, activities.parquet
-  data/coach/        zawody i plany wpisane przez biegacza (JSON, poza gitem)
+  data/coach/        zawody, plany i segmenty wpisane przez biegacza (JSON, poza gitem)
 ```
 
 Python: `.venv` w katalogu repo — `.venv/bin/python` na macOS (główna maszyna,
@@ -487,7 +487,7 @@ gdy reset widoku jest pożądany. Bez tego każdy rerun wyrzuca użytkownika z p
 ## Moduł biegowy (`running/`, strony `views/run_*`)
 
 Grupa „Bieganie” w nawigacji: przegląd, prognoza wyników, plan treningowy,
-zawody i cele, szczegóły treningu, obciążenie biegowe. Cała logika siedzi
+zawody i cele, szczegóły treningu, segmenty, obciążenie biegowe. Cała logika siedzi
 w pakiecie `running/` (czyste pandas, testowane); strony tylko rysują.
 
 Tabele (materializuje je `analytics.main` przez `running.pipeline.build`):
@@ -545,6 +545,31 @@ Pułapki:
   tętno przy spokojnym tempie (upał) zostaje biegiem spokojnym z adnotacją.
 - `data/coach/` to stan wpisany ręcznie — nie da się go odbudować z `raw/`.
   Przy przenoszeniu na serwer kopiuj razem z resztą `data/`.
+
+Ta sama trasa i prywatne segmenty (`running/segments.py`, strony *Trening*
+i *Segmenty*) — porównanie biegów bez okrążeń z zegarka, tylko z GPS:
+
+- **Ta sama trasa** liczy się automatycznie: ślad zagęszczony do 10 m → komórki
+  ~50 m; dwa biegi to jedna trasa, gdy każdy pokrywa ≥ 80% komórek drugiego
+  (sąsiedztwo 3×3) i dystanse różnią się ≤ 15%. Kierunek bez znaczenia.
+- **Segment** to odcinek wycięty suwakiem km z jednego biegu (punkty kontrolne
+  co ~20 m) w `data/coach/segments.json` (`store.save_segment`). Przebieg =
+  start i meta w promieniu 35 m, dystans 0,85–1,2× długości, każdy punkt
+  kontrolny ≤ 40 m od śladu; kierunek ma znaczenie, bieg może przejść segment
+  kilka razy. Tempo liczone na długości segmentu, czas ze strumienia (kilka s).
+- **Wspólne odcinki** (`segments.shared`) to segmenty bez rysowania: dla
+  otwartego biegu najdłuższy kawałek wspólny z każdym innym biegiem (cKDTree,
+  ślady ≤ 35 m, ≥ 400 m, luki GPS do ~50 m mostkowane), o długości, jaka wyszła;
+  mierzony na obu tym samym `passes`, więc kierunek się liczy. Δ tempa, Δ tętna
+  i Δ efektywności (m/uderzenie) idą do kwadrantu „Szybciej czy mocniej?”;
+  wiersz da się zapisać jako stały segment.
+- **Najlepsze odcinki** (jak best efforts Stravy) to `run_efforts` z miejscem
+  w historii i w 365 dniach — bez nowej tabeli.
+- Liczone w widoku, nie w ETL (`rc.paths` — ślady co 10 m raz na build,
+  `rc.same_route`, `rc.shared`, `rc.segment_efforts`, cache kluczowany buildem
+  i mtime pliku segmentów) — ułamki sekundy na całą historię.
+- Kolumna tabeli z „tempo”/„pace” w nazwie i typem float przechodzi przez
+  `readable_paces` jako m:ss — różnice tempa w sekundach nazywaj `Δ s/km`.
 
 Treningi na zegarek:
 

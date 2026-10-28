@@ -1399,10 +1399,13 @@ def route_map(
     height: int = 520,
     uirevision: str | None = None,
     pace: bool = False,
+    highlight: str | None = None,
 ) -> go.Figure | None:
     """One GPS track as a line whose colour carries the measure.
 
     ``pace`` writes the colour scale and the hover as ``m:ss`` per km.
+    ``highlight`` (a boolean column, instead of ``color``) draws the run muted
+    and the marked stretch in the series colour -- a segment being cut.
 
     A line, not a string of dots: a route is a continuous thing, and sampled
     markers break it into beads that drift apart as you zoom in. The colour
@@ -1516,16 +1519,31 @@ def route_map(
             )
             custom = pd.DataFrame({"km": distance, "value": values}).to_numpy()
     else:
+        marked = track[highlight].fillna(False).astype(bool) if highlight in track.columns else None
         fig.add_trace(
             go.Scattermap(
                 lat=track["lat"],
                 lon=track["lon"],
                 mode="lines",
-                line=dict(width=4, color=m["series"][0]),
+                line=dict(width=4, color=m["muted"] if marked is not None else m["series"][0]),
                 hoverinfo="skip",
                 showlegend=False,
             )
         )
+        if marked is not None and marked.any():
+            # Gaps (None) between separate stretches, so they are not joined.
+            stretch = track[["lat", "lon"]].astype(object).where(marked, None)
+            fig.add_trace(
+                go.Scattermap(
+                    lat=stretch["lat"],
+                    lon=stretch["lon"],
+                    mode="lines",
+                    line=dict(width=6, color=m["series"][0]),
+                    hoverinfo="skip",
+                    showlegend=False,
+                    connectgaps=False,
+                )
+            )
         hover = "%{customdata[0]:.2f} km<extra></extra>"
         custom = distance.to_frame().to_numpy()
 

@@ -9,7 +9,7 @@ import bento
 import routing
 import shell
 import theme as tz
-from running import plan as planning, sessions, store, units, workouts
+from running import plan as planning, segments, sessions, store, units, workouts
 from views import run_common as rc
 
 ZONE_LABELS = {f"hr_z{i}_s": f"strefa {i}" for i in range(1, 6)}
@@ -64,6 +64,18 @@ def render() -> None:
     with right:
         _similar(frame, run)
 
+    if not track.empty:
+        _same_route(run)
+        _shared(run)
+    left, right = bento.row(2, 2)
+    with left:
+        if not track.empty:
+            _faster_or_harder(run)
+    with right:
+        _best_efforts(run)
+    if not track.empty:
+        _segments(run)
+        _new_segment(run, track)
 
 
 def _summary(run: pd.Series) -> None:
@@ -173,6 +185,250 @@ def _workout(frame: pd.DataFrame, run: pd.Series) -> None:
         _pace_at_hr(peers, every, run)
     with right:
         _workout_peers(peers, run)
+
+
+def _same_route(run: pd.Series) -> None:
+    """Earlier and later runs on this route (GPS overlap), whatever their kind."""
+    twins = rc.same_route(int(run["activity_id"]))
+    if twins.empty:
+        return
+    every = pd.concat([twins, run.to_frame().T], ignore_index=True)
+    every["start_local"] = pd.to_datetime(every["start_local"])
+    earlier = twins[twins["start_local"] < run["start_local"]].sort_values("start_local")
+    caption = f"{len(twins)} {'bieg' if len(twins) == 1 else 'biegi' if len(twins) < 5 else 'biegów'} tą trasą"
+    if not earlier.empty:
+        last = earlier.iloc[-1]
+        caption += (f" · wobec {last['start_local']:%d.%m.%Y} ({rc.kind_label(last['kind'])}): tempo "
+                    f"<b>{(run['pace_min_km'] - last['pace_min_km']) * 60:+.0f} s/km</b>"
+                    + (f", tętno <b>{run['avg_hr'] - last['avg_hr']:+.0f}</b> bpm"
+                       if pd.notna(run["avg_hr"]) and pd.notna(last["avg_hr"]) else ""))
+    left, right = bento.row(2, 2)
+    with left, bento.tile(
+        "Ta sama trasa w czasie", rows=2, key="route_time", caption=caption, terms=["same_route"],
+        how="Biegi, których ślady GPS pokrywają się w ≥80% (w obie strony) przy dystansie ±15% — niezależnie "
+            "od typu treningu. Szybciej przy tym samym tętnie na tej samej trasie to czysty postęp.",
+    ) as t:
+        points = every.assign(
+            grupa=lambda f: f["activity_id"].map(lambda a: "ten bieg" if a == run["activity_id"] else "ta trasa"),
+            kiedy=lambda f: f["start_local"].dt.strftime("%d.%m.%Y"),
+            typ=lambda f: f["kind"].map(rc.kind_label),
+            tętno=lambda f: pd.to_numeric(f["avg_hr"], errors="coerce").round(),
+        ).sort_values("grupa", key=lambda g: g.map({"ten bieg": 0, "ta trasa": 1}))
+        points["pace_min_km"] = pd.to_numeric(points["pace_min_km"], errors="coerce")
+        figure = tz.scatter(points, "start_local", "pace_min_km", color="grupa", color_kind="categorical",
+                            hover=("typ", "tętno"), x_title="", y_title="", pace_y=True, reverse_y=True)
+        t.chart(figure, table=points[["kiedy", "typ", "distance_km", "pace_min_km", "tętno"]].rename(
+            columns={"distance_km": "km", "pace_min_km": "tempo"}), key=f"route_time_{int(run['activity_id'])}")
+    with right, bento.tile("Biegi tą trasą", rows=2, key="route_runs", terms=["same_route"],
+                           how="Kliknij wiersz, żeby otworzyć bieg."):
+        shown = twins.sort_values("start_local", ascending=False).head(bento.table_rows(2))
+        rc.pickable_runs(shown, key=f"route_runs_{int(run['activity_id'])}",
+                         height=bento.table_height(len(shown)), hint=False)
+
+
+HARD = ("tempo", "threshold", "intervals", "race")
+
+
+def _effort_group(kind: str) -> str:
+    return "mocny" if kind in HARD else "długi" if kind == "long" else "spokojny"
+
+
+def _shared(run: pd.Series) -> None:
+    """The longest stretch shared with each other run -- an ad-hoc segment of
+    whatever length the two tracks have in common."""
+    found = rc.shared(int(run["activity_id"]))
+    if found.empty:
+        return
+    activity_id = int(run["activity_id"])
+    with bento.tile(
+        "Wspólne odcinki z innymi biegami", key="shared", terms=["shared_stretch", "efficiency_delta"],
+        caption=f"{len(found)} {'bieg dzieli' if len(found) == 1 else 'biegi dzielą' if len(found) < 5 else 'biegów dzieli'}"
+                f" z tym biegiem co najmniej 400 m trasy, w tym samym kierunku. Zaznacz wiersz, żeby zapisać "
+                "odcinek jako segment albo otworzyć tamten bieg.",
+        how="Dla każdego innego biegu najdłuższy wspólny kawałek (ślady ≤ 35 m od siebie), zmierzony na obu. "
+            "Δ < 0: tutaj szybciej / niższe tętno. Efektywność to metry na uderzenie serca — rośnie, gdy "
+            "biegniesz szybciej przy tym samym tętnie.",
+    ) as t:
+        shown = found.head(bento.table_rows(2)).reset_index(drop=True)
+        event = st.dataframe(pd.DataFrame({
+            "kiedy": shown["start_local"].dt.strftime("%d.%m.%Y"),
+            "typ": shown["kind"].map(rc.kind_label),
+            "km tutaj": [f"{a:.2f}–{b:.2f}" for a, b in zip(shown["km_from"], shown["km_to"])],
+            "długość": (shown["length_m"] / 1000).round(2),
+            "czas tu": shown["seconds"].map(units.fmt_time),
+            "czas wtedy": shown["seconds_other"].map(units.fmt_time),
+            "tempo tu": shown["pace"].map(lambda v: units.fmt_pace(v, False)),
+            "Δ s/km": shown["d_pace_s"].round().astype("Int64"),
+            "Δ tętno": shown["d_hr"].round().astype("Int64"),
+            "Δ efektywność %": shown["d_eff_pct"].round(1),
+        }), hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
+            key=f"shared_{activity_id}", height=bento.table_height(len(shown)))
+        if len(found) > len(shown):
+            st.markdown(f"<div class='tile-caption'>{len(shown)} najdłuższych z {len(found)}</div>",
+                        unsafe_allow_html=True)
+        rows = getattr(getattr(event, "selection", None), "rows", None) or []
+        if not rows:
+            return
+        chosen = shown.iloc[rows[0]]
+        name, save, open_ = st.columns([3, 1, 1], vertical_alignment="bottom")
+        title = name.text_input("Nazwa segmentu", key=f"shared_name_{activity_id}",
+                                placeholder=f"np. km {chosen['km_from']:.1f}–{chosen['km_to']:.1f}")
+        if save.button("Zapisz segment", icon=":material/add_location_alt:", key=f"shared_save_{activity_id}",
+                       width="stretch", type="primary"):
+            try:
+                store.save_segment({"name": title, **chosen["segment"], "activity_id": activity_id,
+                                    "km_from": float(chosen["km_from"]), "km_to": float(chosen["km_to"])})
+            except ValueError as error:
+                st.warning(str(error))
+            else:
+                st.rerun()
+        if open_.button("Tamten bieg", icon=":material/arrow_forward:", key=f"shared_open_{activity_id}",
+                        width="stretch"):
+            routing.open_run(int(chosen["other_id"]))
+
+
+def _faster_or_harder(run: pd.Series) -> None:
+    """Each shared stretch as a point: was this run faster, and what did it cost?"""
+    found = rc.shared(int(run["activity_id"])).dropna(subset=["d_hr", "d_pace_s"])
+    if found.empty:
+        with bento.tile("Szybciej czy mocniej?", rows=2, key="faster_harder", terms=["efficiency_delta"]):
+            st.caption("Brak wspólnych odcinków z tętnem po obu stronach.")
+        return
+    better = int(((found["d_pace_s"] < 0) & (found["d_hr"] <= 0)).sum())
+    gained = found["d_eff_pct"].median()
+    with bento.tile(
+        "Szybciej czy mocniej?", rows=2, key="faster_harder", terms=["efficiency_delta"],
+        caption=f"wobec {len(found)} wspólnych odcinków: szybciej przy niższym tętnie {better}×, "
+                f"mediana efektywności <b>{gained:+.1f}%</b>",
+        how="Kropka = wspólny odcinek z innym biegiem, wielkość = jego długość. Lewa górna ćwiartka: szybciej "
+            "przy niższym tętnie (forma). Prawa górna: szybciej, ale mocniej. Kolor to typ tamtego biegu — "
+            "porównanie ze spokojnym biegiem mówi więcej niż z interwałami.",
+    ) as t:
+        points = found.assign(
+            typ=found["kind"].map(_effort_group),
+            kiedy=found["start_local"].dt.strftime("%d.%m.%Y"),
+            km=(found["length_m"] / 1000).round(2),
+            d_hr=found["d_hr"].round(),
+            d_pace_s=found["d_pace_s"].round(),
+            d_eff_pct=found["d_eff_pct"].round(1),
+        ).rename(columns={"d_hr": "Δ tętno", "d_pace_s": "Δ s/km"})
+        figure = tz.scatter(points, "Δ tętno", "Δ s/km", color="typ", color_kind="categorical", size="km",
+                            hover=("kiedy", "km"), x_title="Δ tętno (bpm)", y_title="Δ tempa (s/km, w górę = szybciej)",
+                            reverse_y=True)
+        if figure is not None:
+            tz.zero_lines(figure)
+        t.chart(figure, table=points[["kiedy", "typ", "km", "Δ s/km", "Δ tętno", "d_eff_pct"]].rename(
+            columns={"d_eff_pct": "Δ efektywność %"}), key=f"faster_harder_{int(run['activity_id'])}")
+
+
+def _best_efforts(run: pd.Series) -> None:
+    """Strava's best efforts: this run's fastest 1 km ... marathon, ranked."""
+    efforts = rc.efforts()
+    if efforts.empty:
+        return
+    efforts = efforts[efforts["effort"].isin(sessions.EFFORT_DISTANCES)]
+    mine = efforts[efforts["activity_id"] == run["activity_id"]]
+    year = efforts[efforts["day"] > pd.Timestamp(run["day"]) - pd.Timedelta(days=365)]
+    rows = []
+    for item in mine.sort_values("distance_m").itertuples():
+        pool = efforts[efforts["effort"] == item.effort]
+        pool_year = year[year["effort"] == item.effort]
+        rank = int((pool["seconds"] < item.seconds).sum()) + 1
+        rank_year = int((pool_year["seconds"] < item.seconds).sum()) + 1
+        best = pool["seconds"].min()
+        badge = "🏆 rekord" if rank == 1 else f"{rank}. w historii" if rank <= 3 else \
+            "🏅 najlepszy w roku" if rank_year == 1 else f"{rank_year}. w roku" if rank_year <= 3 else ""
+        rows.append({
+            "dystans": sessions.EFFORT_LABELS.get(item.effort, item.effort),
+            "czas": units.fmt_time(item.seconds),
+            "tempo": units.fmt_pace(item.pace_min_km, False),
+            "tętno": round(item.avg_hr) if pd.notna(item.avg_hr) else None,
+            "miejsce": f"{rank}/{len(pool)}",
+            "": badge,
+            "do rekordu": "—" if item.seconds <= best else f"+{units.fmt_time(item.seconds - best)}",
+        })
+    records = sum(1 for r in rows if r[""].startswith("🏆"))
+    with bento.tile(
+        "Najlepsze odcinki", rows=2, key="best_efforts", terms=["best_effort"],
+        caption=(f"<b>{records} {'rekord' if records == 1 else 'rekordy' if records < 5 else 'rekordów'}"
+                 "</b> życiowe w tym biegu" if records else "Najszybsze odcinki tego biegu na tle wszystkich biegów.")
+        if rows else "Za krótki bieg na najlepsze odcinki.",
+        how="Najszybszy ciągły kawałek biegu na każdym dystansie (jak „best efforts” na Stravie), z miejscem "
+            "wśród wszystkich biegów i w ostatnich 365 dniach. Odcinek treningowy to nie start — rekord z "
+            "biegu ciągłego jest zwykle zaniżony.",
+    ) as t:
+        if rows:
+            t.table(pd.DataFrame(rows))
+
+
+def _segments(run: pd.Series) -> None:
+    """Saved segments this run passed, each against all its other passes."""
+    saved = {s["id"]: s for s in store.segments()}
+    if not saved:
+        return
+    efforts = rc.segment_efforts()
+    mine = efforts[efforts["activity_id"] == int(run["activity_id"])] if not efforts.empty else efforts
+    with bento.tile(
+        "Segmenty w tym biegu", key="run_segments", terms=["segment"],
+        caption=None if not mine.empty else "Ten bieg nie przechodzi przez żaden zapisany segment.",
+        how="Twoje segmenty (zapisane niżej albo na stronie Segmenty). Miejsce liczy wszystkie przebiegi "
+            "segmentu ze wszystkich biegów; „poprzednio” to ostatni wcześniejszy przebieg.",
+    ) as t:
+        with t.header:
+            if st.button("", icon=":material/arrow_forward:", key="to_segments", type="tertiary",
+                         help="Strona Segmenty"):
+                routing.goto("segmenty")
+        if mine.empty:
+            return
+        rows = []
+        for item in mine.itertuples():
+            pool = efforts[efforts["segment_id"] == item.segment_id]
+            before = pool[pool["start_local"] < item.start_local]
+            best = pool["seconds"].min()
+            rows.append({
+                "segment": saved.get(item.segment_id, {}).get("name", "—"),
+                "od km": item.at_km,
+                "długość": f"{saved.get(item.segment_id, {}).get('length_m', 0) / 1000:.2f} km",
+                "czas": units.fmt_time(item.seconds),
+                "tempo": units.fmt_pace(item.pace_min_km, False),
+                "tętno": item.hr,
+                "miejsce": f"{item.rank}/{item.of}" + (" 🏆" if item.rank == 1 and item.of > 1 else ""),
+                "do najlepszego": "—" if item.seconds == best else f"+{item.seconds - best:.0f} s",
+                "poprzednio": "—" if before.empty
+                else f"{item.seconds - before.iloc[-1]['seconds']:+.0f} s ({before.iloc[-1]['start_local']:%d.%m.%y})",
+            })
+        t.table(pd.DataFrame(rows))
+
+
+@st.fragment
+def _new_segment(run: pd.Series, track: pd.DataFrame) -> None:
+    """Cut a segment out of this run: a km range, a name, a look at the map."""
+    total = float(pd.to_numeric(track["distance_km"], errors="coerce").max() or 0)
+    if total < 0.2:
+        return
+    with bento.panel("Nowy segment z tego biegu", key="new_segment", terms=["segment"],
+                     caption="Wybierz odcinek po kilometrach — każdy bieg, który przejdzie go od początku do "
+                             "końca, trafi do rankingu."):
+        activity_id = int(run["activity_id"])
+        low, high = st.slider("Kilometry", 0.0, round(total, 2), (0.0, round(min(total, 1.0), 2)), step=0.05,
+                              key=f"segment_range_{activity_id}", format="%.2f km")
+        marked = track.assign(segment=pd.to_numeric(track["distance_km"], errors="coerce").between(low, high))
+        tz.show(tz.route_map(marked, highlight="segment", height=360, uirevision=f"segment-{activity_id}"),
+                key=f"segment_map_{activity_id}")
+        name, save = st.columns([4, 1], vertical_alignment="bottom")
+        title = name.text_input("Nazwa", key=f"segment_name_{activity_id}", placeholder="np. podbieg na Wzgórzu")
+        if save.button("Zapisz segment", icon=":material/add_location_alt:", key=f"segment_save_{activity_id}",
+                       width="stretch", type="primary"):
+            cut = segments.cut(track, low, high)
+            try:
+                if cut is None:
+                    raise ValueError("Za krótki odcinek śladu.")
+                store.save_segment({"name": title, **cut, "activity_id": activity_id,
+                                    "km_from": low, "km_to": high})
+            except ValueError as error:
+                st.warning(str(error))
+            else:
+                st.rerun(scope="app")
 
 
 def _lap_text(laps: list[tuple[float, float]]) -> str:

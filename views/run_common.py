@@ -16,7 +16,7 @@ import pandas as pd
 import streamlit as st
 
 import shell
-from running import coach, forecast, plan as planning, store, units
+from running import coach, forecast, plan as planning, segments, store, units
 
 KIND_ORDER = ["recovery", "easy", "long", "tempo", "threshold", "intervals", "race"]
 CONFIDENCE_ICON = {"wysoka": "●●●", "średnia": "●●○", "niska": "●○○"}
@@ -95,6 +95,55 @@ def current_forecast() -> dict[str, Any]:
     if frame.empty:
         return {"status": "insufficient", "reason": "Brak tabeli biegów."}
     return _forecast(shell.build_id(), store_stamp(), dt.date.today().isoformat())
+
+
+@st.cache_data(show_spinner=False)
+def _paths(_build: str) -> dict[int, pd.DataFrame]:
+    routes = shell.table("routes")
+    frame = runs()
+    if routes.empty or frame.empty:
+        return {}
+    return segments.paths(routes[routes["activity_id"].isin(frame["activity_id"])])
+
+
+def paths() -> dict[int, pd.DataFrame]:
+    """Every run's GPS track resampled to 10 m (``segments.path``)."""
+    return _paths(shell.build_id())
+
+
+@st.cache_data(show_spinner=False)
+def _signatures(_build: str) -> dict[int, dict[str, Any]]:
+    return segments.signatures(paths())
+
+
+def same_route(activity_id: int) -> pd.DataFrame:
+    """Other runs on this run's route (GPS overlap), with ``overlap``."""
+    twins = segments.same_route(_signatures(shell.build_id()), int(activity_id))
+    if not twins:
+        return pd.DataFrame()
+    frame = runs()
+    overlap = dict(twins)
+    return frame[frame["activity_id"].isin(overlap)].assign(overlap=lambda f: f["activity_id"].map(overlap))
+
+
+@st.cache_data(show_spinner=False)
+def _segment_efforts(_build: str, _stamp: str) -> pd.DataFrame:
+    return segments.efforts(store.segments(), paths(), runs())
+
+
+def segment_efforts() -> pd.DataFrame:
+    """Every pass of every saved segment; recomputed after a rebuild or a save."""
+    return _segment_efforts(shell.build_id(), store.segments_stamp())
+
+
+@st.cache_data(show_spinner=False)
+def _shared(_build: str, activity_id: int) -> pd.DataFrame:
+    return segments.shared(activity_id, paths(), runs())
+
+
+def shared(activity_id: int) -> pd.DataFrame:
+    """Longest stretch this run shares with every other run, timed on both."""
+    return _shared(shell.build_id(), int(activity_id))
 
 
 def guard() -> pd.DataFrame | None:

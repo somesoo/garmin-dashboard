@@ -26,6 +26,7 @@ import config
 ROOT = config.DATA / "coach"
 RACES = ROOT / "races.json"
 PLANS = ROOT / "plans"
+SEGMENTS = ROOT / "segments.json"
 
 DISTANCES = ("5k", "10k", "hm", "m")
 SESSION_TYPES = ("rest", "recovery", "easy", "long", "tempo", "threshold", "intervals", "race")
@@ -225,3 +226,46 @@ def delete_plan(plan_id: str) -> None:
 
 def plans_for(race_id: str) -> list[dict[str, Any]]:
     return [p for p in plans() if p.get("race_id") == race_id]
+
+
+# --------------------------------------------------------------------------
+# segments (private Strava: stretches cut out of a run, see running/segments.py)
+
+
+def validate_segment(segment: dict[str, Any]) -> list[str]:
+    errors = []
+    if not str(segment.get("name") or "").strip():
+        errors.append("Brak nazwy segmentu.")
+    points = segment.get("points")
+    if not isinstance(points, list) or len(points) < 2 or not all(
+            isinstance(p, list) and len(p) == 2 and all(isinstance(v, (int, float)) for v in p) for p in points):
+        errors.append("Segment potrzebuje co najmniej dwóch punktów [lat, lon].")
+    length = segment.get("length_m")
+    if not isinstance(length, (int, float)) or length < 100:
+        errors.append("Segment musi mieć co najmniej 100 m.")
+    return errors
+
+
+def segments() -> list[dict[str, Any]]:
+    data = _read(SEGMENTS, [])
+    return sorted((s for s in data if isinstance(s, dict)), key=lambda s: str(s.get("name")).lower())
+
+
+def save_segment(segment: dict[str, Any]) -> dict[str, Any]:
+    errors = validate_segment(segment)
+    if errors:
+        raise ValueError(" ".join(errors))
+    segment = dict(segment, name=str(segment["name"]).strip())
+    segment.setdefault("id", new_id("seg"))
+    segment.setdefault("created", dt.datetime.now().isoformat(timespec="seconds"))
+    others = [s for s in segments() if s.get("id") != segment["id"]]
+    _write(SEGMENTS, others + [segment])
+    return segment
+
+
+def delete_segment(segment_id: str) -> None:
+    _write(SEGMENTS, [s for s in segments() if s.get("id") != segment_id])
+
+
+def segments_stamp() -> str:
+    return str(SEGMENTS.stat().st_mtime_ns) if SEGMENTS.exists() else "none"

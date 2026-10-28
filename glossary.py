@@ -308,6 +308,49 @@ TERMS: dict[str, Term] = {
             "Do ~5 s/km i kilku uderzeń — równo. Ostatni wyraźnie wolniejszy przy tętnie pod sufitem — tempo "
             "za ambitne albo za krótkie przerwy. Ujemny rozjazd (przyspieszanie) — był zapas.",
         ),
+        "same_route": (
+            "Ta sama trasa",
+            "Biegi, których ślady GPS pokrywają się w co najmniej 80% (w obie strony, siatka ~50 m) "
+            "przy dystansie różnym o najwyżej 15%. Kierunek nie ma znaczenia.",
+            "Na tej samej trasie tempo nie zależy od podbiegów ani nawierzchni — porównanie jest uczciwe "
+            "także dla długich i spokojnych biegów, które nie mają odcinków z zegarka.",
+            "Patrz na tempo razem z tętnem i typem treningu: szybciej przy tym samym tętnie to postęp, "
+            "szybciej przy wyższym — po prostu mocniej.",
+        ),
+        "shared_stretch": (
+            "Wspólny odcinek",
+            "Najdłuższy kawałek trasy, który ten bieg dzieli z innym (ślady ≤ 35 m od siebie, ten sam kierunek, "
+            "co najmniej 400 m) — segment o takiej długości, jaka akurat wyszła, bez rysowania.",
+            "Porównuje dowolne dwa biegi na dokładnie tym samym terenie, także gdy całe trasy się różnią.",
+            "Czas ze strumienia próbek (kilka sekund dokładności). Postój na światłach liczy się do czasu, "
+            "więc pojedynczy duży rozjazd sprawdź na mapie.",
+        ),
+        "efficiency_delta": (
+            "Δ efektywność",
+            "Zmiana metrów przebiegniętych na jedno uderzenie serca wobec tamtego biegu, na tym samym odcinku.",
+            "Oddziela formę od wysiłku: szybciej przy wyższym tętnie to mocniejszy bieg, szybciej przy tym "
+            "samym tętnie — lepsza forma.",
+            "Dodatnia = więcej metrów na uderzenie niż wtedy. Porównuj z biegami podobnego typu; upał, wiatr "
+            "i zmęczenie przesuwają ją o kilka procent.",
+        ),
+        "best_effort": (
+            "Najlepsze odcinki",
+            "Najszybszy ciągły fragment biegu na standardowych dystansach (1 km, mila, 3 km, 5 km, 10 km, "
+            "półmaraton, maraton) — wycięty z dowolnego miejsca biegu.",
+            "Rekordy powstają też na treningu, nie tylko na zawodach; miejsce w historii pokazuje, jak dobry "
+            "był ten bieg.",
+            "🏆 = rekord życiowy, 🏅 = najlepszy w ostatnich 365 dniach. Źródło: Garmin albo strumień próbek.",
+        ),
+        "segment": (
+            "Segment",
+            "Twój prywatny odcinek trasy, wycięty z jednego biegu (jak segmenty na Stravie, ale nigdzie "
+            "nie wysyłany). Bieg go przechodzi, gdy mija start i metę w promieniu 35 m, a cały ślad "
+            "między nimi trzyma się trasy segmentu (40 m).",
+            "Ten sam podbieg czy prosta w parku pojawia się w wielu biegach różnego typu — segment "
+            "pozwala porównać właśnie ten kawałek.",
+            "Czas jest ze strumienia próbek (dokładność kilku sekund), tempo liczone na długości segmentu. "
+            "Kierunek ma znaczenie: od startu do mety.",
+        ),
         "pace_at_hr": (
             "Tempo przy tym samym tętnie",
             "Prosta tempo ~ tętno poprowadzona przez odcinki wcześniejszych workoutów (2 lata) i odległość "
