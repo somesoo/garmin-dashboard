@@ -498,10 +498,20 @@ def forecast(
         "hr_max": hr_max,
         # The threshold heart rate the plan's zones hang on (physio.threshold_hr).
         "lthr": physio.threshold_hr(efforts, anchor),
+        # Critical speed from clean efforts only (physio.critical_speed): the cap on T pace.
+        "cs": physio.critical_speed(_with_kind(efforts, runs), anchor),
         "lower_bound": lower_bound,
         "notes": notes,
         "distances": distances,
     }
+
+
+def _with_kind(efforts: pd.DataFrame, runs: pd.DataFrame) -> pd.DataFrame:
+    """Efforts with their run's kind (a race counts as a clean effort)."""
+    if efforts is None or efforts.empty or runs is None or runs.empty or "kind" not in runs:
+        return efforts
+    return efforts.merge(runs[["activity_id", "kind"]], on="activity_id", how="left") \
+        if "kind" not in efforts else efforts
 
 
 def hr_trend(hr_runs: pd.DataFrame, perf: dict[str, Any] | None, anchor: pd.Timestamp) -> float | None:

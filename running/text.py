@@ -238,6 +238,14 @@ def _work(spec: dict[str, Any]) -> float:
     return float(spec.get("work") or spec.get("reps", 1) * spec.get("rep", 0))
 
 
+def family_label(key: Any) -> str:
+    """A workout family of the library (``text.key`` of a quality session)."""
+    tr = i18n.tr
+    return {"threshold": tr(pl="próg", en="threshold"), "intervals": tr(pl="interwały", en="intervals"),
+            "hills": tr(pl="podbiegi", en="hills"), "race_pace": tr(pl="tempo startowe", en="race pace"),
+            "tempo": "tempo"}.get(key, str(key))
+
+
 def strength_label(stage: Any) -> str:
     tr = i18n.tr
     return {"adapt": tr(pl="adaptacja", en="adaptation"), "strength": tr(pl="ciężko", en="heavy"),
@@ -604,6 +612,32 @@ def why_line(item: dict[str, Any]) -> str:
                      "niż mówi samopoczucie.",
                   en=f"Day {days} after the race ({race}): no quality and no long run for {need} days — Daniels' "
                      "rule, one easy day per 3 km raced. Muscles recover from a race longer than it feels.")
+    if key == "rung_hold":
+        family, reason = family_label(item.get("family")), item.get("reason")
+        if reason == "missed":
+            return tr(pl=f"Poprzedni trening tego rodzaju ({family}, {when}) się nie odbył — ten sam szczebel "
+                         "drabinki, zamiast wyżej.",
+                      en=f"The previous session of this kind ({family}, {when}) did not happen — the same rung of "
+                         "the ladder instead of the next one.")
+        if reason == "other_kind":
+            kind = kind_label(item.get("kind"))
+            return tr(pl=f"{when} zamiast „{family}” wyszedł trening typu „{kind}” — ten sam szczebel.",
+                      en=f"On {when} the “{family}” session turned into “{kind}” — the same rung.")
+        if reason == "short":
+            return tr(pl=f"{when}: zrobione {item.get('done')} z {item.get('planned')} odcinków — powtórka szczebla, "
+                         "zanim pójdzie wyżej.",
+                      en=f"{when}: {item.get('done')} of {item.get('planned')} reps done — the rung is repeated "
+                         "before moving up.")
+        if reason == "off_pace":
+            return tr(pl=f"{when}: w paśmie tempa {item.get('on_pace')} z {item.get('planned')} odcinków (z okrążeń "
+                         "zegarka) — powtórka szczebla; awans po ⅔ odcinków w tempie.",
+                      en=f"{when}: {item.get('on_pace')} of {item.get('planned')} reps within the pace band (from the "
+                         "watch laps) — the rung is repeated; it moves up with ⅔ of the reps on pace.")
+        if reason == "hr_high":
+            return tr(pl=f"{when}: średnie tętno odcinków {item.get('hr')} bpm, powyżej strefy progu (do "
+                         f"{item.get('top')}) — tempo było za ciężkie na dziś; ten sam szczebel.",
+                      en=f"{when}: average rep heart rate {item.get('hr')} bpm, above the threshold zone (up to "
+                         f"{item.get('top')}) — the pace was too hard for now; the same rung.")
     if key == "spike":
         return tr(pl=f"Skrócone z {item['from_km']:g} do {item['cap']:g} km: najdłuższy bieg z ostatnich 30 dni to "
                      f"{item['longest']:g} km, a pojedynczy bieg dłuższy o ponad 10% od niego wyraźnie zwiększa "

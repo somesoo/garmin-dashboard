@@ -491,6 +491,7 @@ def generate_goals(
     anchor: pd.Timestamp | None = None,
     keep: list[dict[str, Any]] | None = None,
     strength_history: int = 0,
+    done_as_planned: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build one plan (store.validate_plan-compatible) through every goal ahead.
 
@@ -500,7 +501,9 @@ def generate_goals(
     block opens with a recovery week. ``result`` is a ``forecast.forecast``
     output; ``keep`` holds sessions that already happened (kept unchanged);
     ``strength_history`` is the number of strength sessions done recently
-    (``strength_done``), which decides when heavy work starts.
+    (``strength_done``), which decides when heavy work starts;
+    ``done_as_planned`` (``outcomes``) decides which past sessions move the
+    ladders up.
     """
     tr = i18n.tr
     if result.get("status") != "ok":
@@ -516,7 +519,8 @@ def generate_goals(
     vdot = float(result["vdot"])
     lthr = result.get("lthr")
     zones = physio.hr_zones(result.get("hr_max"), (lthr or {}).get("bpm"))
-    paces = physio.training_paces(vdot)
+    # T never faster than critical speed when clean efforts give one (physio.cap_threshold).
+    paces = physio.cap_threshold(physio.training_paces(vdot), result.get("cs"))
     base0 = baseline(runs, pd.Timestamp(anchor), vdot)
     warnings: list[dict[str, Any]] = []
     if base0["weekly_km_4w"] < 5:
@@ -530,7 +534,7 @@ def generate_goals(
                              "second": second.get("name") or second["date"], "weeks": round(gap, 1)})
     kept_dates = {s["date"] for s in keep or []}
     done = already_run(runs, start)
-    progress = _progress(keep or [], strength_history, settings.strength)
+    progress = _progress(keep or [], strength_history, settings.strength, done_as_planned)
 
     weeks: list[dict[str, Any]] = []
     sessions: list[dict[str, Any]] = []
@@ -595,6 +599,7 @@ def generate_goals(
             "confidence": item.confidence if item else None,
         },
         "paces": {name: [round(a, 3), round(b, 3)] for name, (a, b) in paces.items()},
+        "cs": result.get("cs"),
         "zones": {"basis": zones.get("basis"), "lthr": lthr,
                   **{name: list(band) for name, band in zones.items() if name != "basis" and band}},
         "weeks": [
@@ -811,6 +816,9 @@ def _block_sessions(
                 level = max(0, count - 1) if week.get("recovery") else count
                 workout = library.quality(family, level, week["volume_km"], request.distance, paces, race_pace,
                                           factor=library.TAPER_FACTOR if phase == "taper" else 1.0)
+                note = progress.get("held", {}).pop(family, None)
+                if note:
+                    why.setdefault(date.isoformat(), []).append(note)
                 if not week.get("recovery") and phase != "taper":
                     progress["levels"][family] = count + 1
             session = _session(kind, date, week, km if kind == "long" else 6.0, paces, zones,
@@ -877,19 +885,80 @@ def _block_sessions(
 FAMILIES = ("threshold", "intervals", "hills", "race_pace", "tempo")
 
 
-def _progress(keep: list[dict[str, Any]], strength_history: int, strength: bool) -> dict[str, Any]:
-    """Where the ladders stand before the first new session: every family's
-    sessions already in the plan's past, and the strength sessions done."""
+def _progress(keep: list[dict[str, Any]], strength_history: int, strength: bool,
+              outcomes: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Where the ladders stand before the first new session.
+
+    With ``outcomes`` (``outcomes``: what really happened to each past session)
+    a family climbs only for sessions that were done as written; a missed,
+    cut short, off-pace or too-hard one holds the rung, and the reason waits
+    in ``held`` for the next session of that family. Without them (a first
+    plan) every past session counts.
+    """
     levels: dict[str, int] = {}
+    held: dict[str, dict[str, Any]] = {}
     marked = 0
-    for session in keep or []:
+    for session in sorted(keep or [], key=lambda s: s["date"]):
         key = (session.get("text") or {}).get("key")
-        if key in FAMILIES and session.get("phase") != "taper":
-            levels[key] = levels.get(key, 0) + 1
-        elif session.get("type") == "strength" and session.get("status") in ("done", "modified"):
-            marked += 1
-    # Garmin's record and the sessions ticked by hand overlap: the larger one counts.
-    return {"levels": levels, "strength": max(int(strength_history), marked), "enabled": strength}
+        outcome = (outcomes or {}).get(session.get("id"))
+        if key in FAMILIES and session.get("phase") != "taper" and not (session.get("text") or {}).get("sharpen"):
+            if outcomes is None or (outcome and outcome["advance"]):
+                levels[key] = levels.get(key, 0) + 1
+                held.pop(key, None)
+            elif outcome:
+                held[key] = {"key": "rung_hold", "family": key, "date": session["date"],
+                             **{k: v for k, v in outcome.items() if k != "advance"}}
+        elif session.get("type") == "strength":
+            done = outcome["done"] if outcome else session.get("status") in ("done", "modified")
+            marked += int(bool(done))
+    # Garmin's record and the sessions ticked off overlap: the larger one counts.
+    return {"levels": levels, "held": held, "strength": max(int(strength_history), marked), "enabled": strength}
+
+
+# Rep execution: a rung counts when every rep was run and two thirds were on pace,
+# and threshold reps stayed within the T heart-rate zone (+3 bpm for drift).
+ON_PACE_SHARE = 2 / 3
+HR_MARGIN = 3
+
+
+def outcomes(plan: dict[str, Any], runs: pd.DataFrame, today: dt.date, laps: pd.DataFrame | None = None,
+             activities: pd.DataFrame | None = None) -> dict[str, dict[str, Any]]:
+    """What happened to each session before ``today``: ``advance`` for a quality
+    session done as written (else ``reason``), ``done`` for strength."""
+    past = {**plan, "sessions": [s for s in plan.get("sessions", []) if s["date"] < today.isoformat()]}
+    if not past["sessions"]:
+        return {}
+    matched = match(past, runs, today=today, laps=laps, activities=activities)
+    top = ((plan.get("zones") or {}).get("T") or [None, None])[1]
+    out: dict[str, dict[str, Any]] = {}
+    for row in matched.to_dict("records"):
+        effective = row.get("effective")
+        if row.get("type") == "strength":
+            out[row["id"]] = {"done": effective in ("done", "modified")}
+            continue
+        if row.get("type") not in QUALITY_TYPES:
+            continue
+        result: dict[str, Any] = {"advance": True}
+        planned, done = row.get("reps_planned"), row.get("reps_done")
+        on_pace = row.get("reps_on_pace")
+        if effective in ("missed", "skipped", "planned"):
+            result = {"advance": False, "reason": "missed"}
+        elif row.get("type_ok") is False:
+            result = {"advance": False, "reason": "other_kind", "kind": row.get("actual_kind")}
+        elif _number(planned) and _number(done) and done < planned:
+            result = {"advance": False, "reason": "short", "done": int(done), "planned": int(planned)}
+        elif _number(planned) and _number(on_pace) and on_pace < math.ceil(planned * ON_PACE_SHARE):
+            result = {"advance": False, "reason": "off_pace", "on_pace": int(on_pace), "planned": int(planned)}
+        elif top and row.get("type") == "threshold" and isinstance(row.get("rep_hr"), list) and row["rep_hr"] \
+                and sum(row["rep_hr"]) / len(row["rep_hr"]) > top + HR_MARGIN:
+            result = {"advance": False, "reason": "hr_high", "hr": round(sum(row["rep_hr"]) / len(row["rep_hr"])),
+                      "top": int(top)}
+        out[row["id"]] = result
+    return out
+
+
+def _number(value: Any) -> bool:
+    return value is not None and not (isinstance(value, float) and math.isnan(value))
 
 
 STRENGTH_SPORTS = ("strength_training", "indoor_cardio", "hiit")
@@ -1201,6 +1270,7 @@ def _compare_reps(session: dict[str, Any], laps: pd.DataFrame | None) -> dict[st
         "reps_done": len(blocks),
         "reps_on_pace": on_pace,
         "rep_paces": [round(b["pace"], 3) for b in blocks],
+        "rep_hr": [b["hr"] for b in blocks if b["hr"] is not None],
     }
 
 
@@ -1285,8 +1355,13 @@ def replan(
     today: dt.date | None = None,
     goals: list[dict[str, Any]] | None = None,
     strength_history: int = 0,
+    laps: pd.DataFrame | None = None,
+    activities: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """Rebuild everything from ``today`` on with fresh data; the past stays as it was.
+
+    The workout ladders continue from what was really done (``outcomes``:
+    the watch laps, when given, check reps and pace).
 
     ``goals`` replaces the plan's goals (the races saved now); without it the
     plan keeps the goals it has.
@@ -1302,7 +1377,8 @@ def replan(
     )
     keep = [s for s in plan.get("sessions", []) if s["date"] < today.isoformat()]
     fresh = generate_goals(settings, plan_goals(plan) if goals is None else goals, runs, result, keep=keep,
-                           strength_history=strength_history)
+                           strength_history=strength_history,
+                           done_as_planned=outcomes(plan, runs, today, laps=laps, activities=activities))
     fresh["id"] = plan["id"]
     if goals is None and plan.get("name"):
         fresh["name"] = plan["name"]

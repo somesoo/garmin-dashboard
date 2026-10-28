@@ -47,10 +47,10 @@ zrobione — czy nowa reguła czegoś nie unieważnia (wpis „Przegląd wstecz�
       Prędkość krytyczna **odłożona**: dzisiejsze `critical_speed` bierze najlepsze
       odcinki Garmina z treningów (z przerwami) i wychodzi wolniej niż próg z
       VDOT (5:14 vs 5:03–5:10) — patrz 6b.
-- [ ] **6b. Prędkość krytyczna z czystych wysiłków** — dopasowanie CS tylko do
+- [x] **6b. Prędkość krytyczna z czystych wysiłków** — dopasowanie CS tylko do
       `run_efforts` z `near_max` (bez odcinków z przerwami); dopiero wtedy jako
       kontrola tempa progowego (T nie szybciej niż CS).
-- [ ] **7. Progresja z wykonania** — szczebel drabinki z tego, co faktycznie
+- [x] **7. Progresja z wykonania** — szczebel drabinki z tego, co faktycznie
       zrobione (okrążenia `run_laps`: odcinki w tempie, tętno na odcinkach),
       nie z liczby zaplanowanych sesji.
 - [ ] **8. Adaptacja tygodnia z reakcji** — trend HRV (7 d vs baza 60 d i SWC),
@@ -86,6 +86,13 @@ spokojny na górze nowej strefy (≤ 159 bpm) zostaje „easy”, więc dopasowa
 planu się nie psuje; bez zmian. Odcinki podbiegów pokazują pasmo strefy I, którego
 60–90 s nie osiągnie — opis i tak mówi „po wysiłku”. Przy punkcie 7 strefy od
 LTHR mogą być miarą wykonania (tętno odcinków vs pasmo T).
+
+**Przegląd wstecz po 6b i 7 (2026-10-28):** tętno progowe z punktu 6 pochodzi
+z `block` — to jeden ciągły blok pracy (reps == 1), więc jest czystym wysiłkiem
+i zostaje. `rc.active_plan` (automatyczna przebudowa po zmianie startów) dostał
+okrążenia i aktywności, żeby też liczył szczeble z wykonania. Akcent tygodnia
+startu (`sharpen`) nie przesuwa drabinki. Do zrobienia przy 8: ta sama
+ocena wykonania (`outcomes`) może sterować wzrostem tygodnia.
 
 ## Czeka na zgodę
 

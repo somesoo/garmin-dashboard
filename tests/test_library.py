@@ -202,3 +202,88 @@ class Zones(unittest.TestCase):
         self.assertTrue(any("pace" in st for st in quality["steps"] if st["kind"] == "warmup"))
         self.assertEqual(plan["zones"]["basis"], "lthr")
         self.assertTrue(store.validate_steps([{"kind": "run", "km": 5, "hr": [140, 150], "pace": [6.0, 6.5]}]))
+
+
+
+class CriticalSpeed(unittest.TestCase):
+    def efforts(self, rows):
+        return pd.DataFrame([{"day": pd.Timestamp(d), "distance_m": m, "seconds": t, "minutes": t / 60,
+                              "near_max": True, "source": src} for d, m, t, src in rows])
+
+    def test_fit_needs_two_clean_efforts_of_different_length(self):
+        anchor = pd.Timestamp("2026-03-01")
+        one = self.efforts([("2026-02-20", 4000, 1138, "block")])
+        self.assertIsNone(physio.critical_speed(one, anchor))
+        dirty = self.efforts([("2026-02-20", 4000, 1138, "block"), ("2026-02-10", 1000, 250, "garmin")])
+        self.assertIsNone(physio.critical_speed(dirty, anchor))  # a split inside a run is not clean
+        clean = self.efforts([("2026-02-20", 4000, 1138, "block"), ("2026-02-10", 1600, 400, "whole"),
+                              ("2026-02-12", 3000, 800, "whole")])
+        cs = physio.critical_speed(clean, anchor)
+        self.assertIsNotNone(cs)
+        self.assertGreater(cs["cs_ms"], 3.0)
+        self.assertEqual(cs["efforts"], 3)
+        self.assertIsNotNone(cs["r2"])
+
+    def test_threshold_is_never_faster_than_cs(self):
+        paces = physio.training_paces(45)
+        slow_cs = {"cs_ms": 3.0, "pace": paces["T"][0] + 0.2, "r2": None}
+        capped = physio.cap_threshold(paces, slow_cs)
+        self.assertAlmostEqual(capped["T"][0], slow_cs["pace"])
+        self.assertAlmostEqual(capped["T"][1] - capped["T"][0], paces["T"][1] - paces["T"][0])
+        fast_cs = {"cs_ms": 4.0, "pace": paces["T"][0] - 0.3, "r2": None}
+        self.assertEqual(physio.cap_threshold(paces, fast_cs), paces)
+        self.assertEqual(physio.cap_threshold(paces, None), paces)
+
+
+class DoneAsPlanned(unittest.TestCase):
+    """The ladders climb on what was really run (plan.outcomes), not on what was planned."""
+
+    def setUp(self):
+        self.plan, self.runs, self.result = make()
+        self.session = next(s for s in self.plan["sessions"] if s["type"] == "threshold")
+        self.date = dt.date.fromisoformat(self.session["date"])
+        self.reps, band = planning.planned_reps(self.session["steps"])
+        self.rep = next(st for st in self.session["steps"] if st["kind"] == "repeat")["steps"][0]["km"]
+        self.pace = sum(band) / 2
+
+    def run_on(self, kind="threshold"):
+        return pd.DataFrame([{"activity_id": 5000, "day": pd.Timestamp(self.date), "kind": kind,
+                              "distance_km": self.session["distance_km"], "pace_min_km": 5.5}])
+
+    def laps(self, reps, pace_factor=1.0, hr=160):
+        rows = [("warmup", 0, 2000, 840, 140)]
+        for _ in range(reps):
+            rows += [("active", 1, self.rep * 1000, self.rep * self.pace * pace_factor * 60, hr),
+                     ("recovery", 2, 200, 60, 150)]
+        rows.append(("cooldown", 3, 1500, 600, 145))
+        return pd.DataFrame([{"activity_id": 5000, "lap": i + 1, "intensity": k, "step_index": st, "distance_m": m,
+                              "duration_s": s, "avg_hr": h, "max_hr": h + 5, "cadence": 170.0}
+                             for i, (k, st, m, s, h) in enumerate(rows)])
+
+    def outcome(self, runs, laps=None, plan=None):
+        return planning.outcomes(plan or self.plan, runs, self.date + dt.timedelta(days=1), laps=laps)[self.session["id"]]
+
+    def test_each_way_a_session_can_go(self):
+        self.assertEqual(self.outcome(self.run_on(), self.laps(self.reps)), {"advance": True})
+        self.assertEqual(self.outcome(self.runs.iloc[0:0])["reason"], "missed")
+        if self.reps > 1:
+            self.assertEqual(self.outcome(self.run_on(), self.laps(self.reps - 1))["reason"], "short")
+        self.assertEqual(self.outcome(self.run_on(), self.laps(self.reps, pace_factor=1.15))["reason"], "off_pace")
+        self.assertEqual(self.outcome(self.run_on("easy"))["reason"], "other_kind")
+        hot = {**self.plan, "zones": {"basis": "lthr", "T": [165, 174]}}
+        self.assertEqual(self.outcome(self.run_on(), self.laps(self.reps, hr=182), plan=hot)["reason"], "hr_high")
+
+    def test_a_held_rung_is_repeated_with_its_reason(self):
+        today = self.date + dt.timedelta(days=1)
+        held = planning.replan(self.plan, self.runs[self.runs["day"] < pd.Timestamp("2026-03-02")], self.result,
+                               today=today)
+        nxt = next(s for s in held["sessions"] if s["date"] >= today.isoformat()
+                   and s["text"].get("key") == "threshold")
+        self.assertEqual(nxt["text"]["level"], self.session["text"]["level"])
+        self.assertIn("rung_hold", [w["key"] for w in nxt.get("why", [])])
+        runs = pd.concat([self.runs, self.run_on()], ignore_index=True)
+        moved = planning.replan(self.plan, runs, self.result, today=today, laps=self.laps(self.reps))
+        nxt = next(s for s in moved["sessions"] if s["date"] >= today.isoformat()
+                   and s["text"].get("key") == "threshold")
+        self.assertGreaterEqual(nxt["text"]["level"], self.session["text"]["level"])
+        self.assertNotIn("rung_hold", [w["key"] for w in nxt.get("why", [])])

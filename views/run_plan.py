@@ -162,7 +162,8 @@ def _create(frame: pd.DataFrame, result: dict, active: dict | None) -> None:
             active = {**active, "request": {**active["request"], "run_days": sorted(days), "long_day": long_day,
                                             "max_weekly_km": cap or None, "strength": strength}}
             payload = planning.replan(active, frame, result, today=tomorrow, goals=goals,
-                                      strength_history=rc.strength_done())
+                                      strength_history=rc.strength_done(), laps=shell.table("run_laps"),
+                                    activities=shell.table("activities"))
         else:
             payload = planning.generate_goals(settings, goals, frame, result, strength_history=rc.strength_done())
         store.save_only_plan(payload)
@@ -261,6 +262,23 @@ def _explain(active: dict, result: dict) -> None:
             en="**Heart rate as % of HRmax** — no continuous near-maximal effort of 18–60 min in 120 days, so the "
                "threshold heart rate cannot be found. A test: 30 min even and hard on your own; the zones will "
                "update themselves.")
+    cs = active.get("cs")
+    if cs:
+        cs_line = tr(pl=f"**Prędkość krytyczna {units.fmt_pace(cs['pace'])}** (z {cs['efforts']} czystych wysiłków "
+                        "2–20 min) — tempo progowe nigdy nie jest od niej szybsze: próg ma leżeć w domenie ciężkiej, "
+                        "nie ponad nią (Jones 2019).",
+                     en=f"**Critical speed {units.fmt_pace(cs['pace'])}** (from {cs['efforts']} clean efforts of 2–20 "
+                        "min) — threshold pace is never faster: threshold work belongs in the heavy domain, not above "
+                        "it (Jones 2019).")
+    else:
+        cs_line = tr(pl="**Prędkość krytyczna: za mało danych.** Liczy się tylko z czystych wysiłków bliskich "
+                        "maksymalnego (ciągły blok, cały bieg na czas, start) o długości 2–20 min — „najszybsze 5 km” "
+                        "z interwałów ma w sobie przerwy i zaniża wynik. Dwie próby, np. 800 m i 3 km na maksa w "
+                        "różne dni, i tempo progowe dostanie drugą kontrolę obok VDOT.",
+                     en="**Critical speed: not enough data.** It counts only clean near-maximal efforts (a continuous "
+                        "block, a whole timed run, a race) of 2–20 min — the “fastest 5 km” of an interval session "
+                        "contains the recoveries and drags it down. Two trials, e.g. 800 m and 3 km all out on "
+                        "different days, and threshold pace gets a second check beside VDOT.")
     done = rc.strength_done()
     strength_line = tr(pl=f"(zegarek: {done} w ostatnich 120 dniach)", en=f"(watch: {done} in the last 120 days)")
     lines = [
@@ -340,6 +358,7 @@ def _explain(active: dict, result: dict) -> None:
               + " After the race short recovery runs, and quality and the long run only after one easy day per 3 km "
               "raced. A: the distance's full taper and a recovery week after; B/C: a lighter race week."),
         zone_line,
+        cs_line,
         tr(pl=f"**Tempa z dzisiejszej formy** (VDOT {active.get('forecast', {}).get('vdot')}), nie z celu. "
               "„Przebuduj od jutra” przelicza je z nowych danych; samopoczucie dnia ocenia rano decyzja na stronie "
               "Dziś (HRV, sen, tętno spoczynkowe).",
@@ -588,7 +607,8 @@ def _actions_body(active: dict, frame: pd.DataFrame, result: dict) -> None:
         try:
             fresh = planning.replan(active, frame, result, today=dt.date.today() + dt.timedelta(days=1),
                                     goals=[planning.goal_of(r) for r in rc.upcoming_races()],
-                                    strength_history=rc.strength_done())
+                                    strength_history=rc.strength_done(), laps=shell.table("run_laps"),
+                                    activities=shell.table("activities"))
             store.save_only_plan(fresh)
         except ValueError as error:
             st.error(str(error))

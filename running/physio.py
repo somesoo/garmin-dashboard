@@ -245,3 +245,69 @@ def zone_text(zones: dict[str, Any] | None, name: str) -> str:
         return f"{band[0]}–{band[1]} bpm"
     low, high = LTHR_FRACTIONS.get(name, (0.6, 0.72))
     return f"{low:.0%}–{high:.0%} LTHR"
+
+
+# --------------------------------------------------------------------------
+# critical speed from clean efforts
+#
+# CS is the boundary between the heavy and severe domains: threshold training
+# is meant to sit at or below it (Jones et al., Med Sci Sports Exerc 2019;
+# Jones & Vanhatalo, Sports Med 2017). The two-parameter model d = CS*t + D'
+# holds for maximal efforts of ~2-20 minutes. It must be fitted on clean
+# efforts only: the "fastest 5 km" inside an interval session includes the
+# recoveries and drags CS down. Clean = one continuous work block of a
+# workout, or a whole near-maximal run (a race or a time trial).
+
+CS_MINUTES = (2.0, 20.0)
+CS_DAYS = 90
+CS_SPREAD = 2.0  # the longest effort at least twice the shortest
+
+
+def critical_speed(efforts: pd.DataFrame | None, anchor: pd.Timestamp | None = None,
+                   days: int = CS_DAYS) -> dict[str, Any] | None:
+    """CS (m/s), D' (m) and its pace from clean near-maximal efforts, or None.
+
+    Needs two clean efforts whose durations differ at least ``CS_SPREAD``-fold
+    (two points fix a line; a third gives a fit quality).
+    """
+    needed = {"near_max", "minutes", "seconds", "distance_m", "day", "source"}
+    if efforts is None or efforts.empty or not needed <= set(efforts.columns):
+        return None
+    frame = efforts.copy()
+    frame["day"] = pd.to_datetime(frame["day"])
+    anchor = pd.Timestamp(anchor) if anchor is not None else frame["day"].max()
+    clean = frame["source"].isin(("block", "whole")) | (frame.get("kind", pd.Series(index=frame.index)) == "race")
+    low, high = CS_MINUTES
+    frame = frame[clean & frame["near_max"].fillna(False).astype(bool) & frame["minutes"].between(low, high)
+                  & (frame["day"] <= anchor) & (frame["day"] > anchor - pd.Timedelta(days=days))]
+    if frame.empty:
+        return None
+    # The best time per distance: a slower repeat of the same distance is not a maximum.
+    bests = frame.sort_values("seconds").drop_duplicates("distance_m")
+    if len(bests) < 2 or bests["seconds"].max() < CS_SPREAD * bests["seconds"].min():
+        return None
+    times = bests["seconds"].to_numpy(dtype=float)
+    distances = bests["distance_m"].to_numpy(dtype=float)
+    design = np.column_stack([times, np.ones_like(times)])
+    (cs, d_prime), *_ = np.linalg.lstsq(design, distances, rcond=None)
+    if cs <= 0 or d_prime < 0:
+        return None
+    r2 = None
+    if len(bests) >= 3:
+        predicted = design @ np.array([cs, d_prime])
+        total = float(np.sum((distances - distances.mean()) ** 2))
+        r2 = round(1 - float(np.sum((distances - predicted) ** 2)) / total, 3) if total > 0 else None
+    return {"cs_ms": round(float(cs), 3), "pace": round(1000 / float(cs) / 60, 3), "d_prime_m": round(float(d_prime)),
+            "efforts": int(len(bests)), "r2": r2, "days": [str(d.date()) for d in bests["day"]]}
+
+
+def cap_threshold(paces: dict[str, tuple[float, float]], cs: dict[str, Any] | None) -> dict[str, tuple[float, float]]:
+    """T no faster than critical speed: when the VDOT band's fast end is quicker
+    than CS pace, the band moves back so that it starts at CS."""
+    if not cs or "T" not in paces or cs.get("r2") is not None and cs["r2"] < 0.95:
+        return paces
+    fast, slow = paces["T"]
+    if fast >= cs["pace"]:
+        return paces
+    shift = cs["pace"] - fast
+    return {**paces, "T": (fast + shift, slow + shift)}

@@ -734,9 +734,23 @@ Plan i cele:
   bez takiego wysiłku — % HRmax jak dawniej. Plan zapisuje je w `plan["zones"]`.
   Przy LTHR kroki biegów spokojnych, regeneracyjnych i długich mają cel
   `"hr": [od, do]` zamiast `pace` (`garmin_workout`: `heart.rate.zone`), opis
-  podaje tętno, tempo tylko orientacyjnie. **Prędkość krytyczna nie koryguje
-  temp**: `critical_speed` liczy się z najlepszych odcinków Garmina *wewnątrz*
-  treningów (w interwałach z przerwami), więc wychodzi zaniżona.
+  podaje tętno, tempo tylko orientacyjnie.
+- **Szczebel drabinki z wykonania** (`plan.outcomes`, `_progress`): przy
+  `replan` każda przeszła sesja jakości jest porównana z biegiem (`match` +
+  okrążenia `run_laps`); rodzina idzie szczebel wyżej tylko, gdy sesja się
+  odbyła, typ się zgadza, zrobione są wszystkie odcinki, ≥ ⅔ w paśmie tempa
+  (±3%) i — dla progu — średnie tętno odcinków ≤ górna granica strefy T + 3 bpm.
+  Inaczej szczebel stoi, a najbliższa sesja tej rodziny ma `why: rung_hold`
+  z powodem (`missed` / `other_kind` / `short` / `off_pace` / `hr_high`).
+  Pierwszy plan (bez przeszłości) liczy wszystko. Siła liczy się po dopasowaniu
+  do aktywności siłowej z zegarka. Wywołujący `replan` podają `laps=` i
+  `activities=` (bez nich okrążenia nie są sprawdzane).
+- **Prędkość krytyczna w planie** (`physio.critical_speed`, prognoza: `cs`) jest
+  liczona tylko z czystych wysiłków bliskich maksymalnego 2–20 min (`block`,
+  `whole`, start) z 90 dni, min. 2 o długości różnej ≥ 2×; `cap_threshold`
+  przesuwa pasmo T tak, żeby nie było szybsze niż CS. Tabela `critical_speed`
+  w hurtowni (strona Forma) to inna rzecz: najlepsze odcinki Garmina *wewnątrz*
+  treningów, w interwałach razem z przerwami — zaniżona, nie do temp.
 - **Dwa starty A < 8 tyg. od siebie** (`A_RACE_GAP_WEEKS`): ostrzeżenie
   `close_a_races` — plan nie wybiera sam, prosi o zmianę jednego na B.
 - **Zmiana startów przebudowuje plan od jutra**: `rc.active_plan` porównuje
