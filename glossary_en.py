@@ -223,10 +223,11 @@ TERMS: dict[str, tuple[str, str, str, str]] = {
         "for the distance alone.",
     ),
     "after_plan": (
-        "After the plan",
-        "The forecast for race day if you follow the plan: +1 VDOT per ~5 weeks and the preparation "
-        "the plan builds.",
-        "Shows whether the goal is reachable by the race date.",
+        "On race day (after the plan / as now)",
+        "The forecast for race day. When the plan covers the race: +1 VDOT per ~5 weeks and the preparation "
+        "the plan builds before that race. Without a plan: today's preparation and a fitness gain times "
+        "consistency, fading after ~6 weeks.",
+        "Shows whether the goal is reachable by the race date — and what the plan adds over training as so far.",
         "In brackets the cautious and the optimistic variant. Shown only for a distance with a race entered.",
     ),
     "interval80": (

@@ -106,6 +106,7 @@ def goal_status(code: Any) -> str:
     return {"none": tr(pl="bez celu czasowego", en="no time goal"),
             "now": tr(pl="w zasięgu już dziś", en="within reach today"),
             "plan": tr(pl="realny po planie", en="realistic after the plan"),
+            "steady": tr(pl="realny przy obecnym treningu", en="realistic with your current training"),
             "ambitious": tr(pl="ambitny", en="ambitious"),
             "stretch": tr(pl="bardzo ambitny", en="very ambitious")}.get(str(code), str(code))
 

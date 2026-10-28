@@ -34,8 +34,13 @@ The model, in the order it is computed
    the anchor is only a lower bound.
 7. **After the plan.** Daniels' own rule -- raise training VDOT about one
    point per 4-6 weeks of consistent training -- gives the expected gain to
-   race day (range 1/6..1/4 point per week, at most 16 weeks counted), and the
-   preparation the plan reaches replaces today's.
+   race day (range 1/6..1/4 point per week; full rate for 16 weeks, half rate
+   for the next 16, nothing beyond), and the preparation the plan reaches
+   replaces today's (in full with 6+ weeks to go, proportionally sooner). The target is per race (``target``): two races at the
+   same distance get their own weeks and their own plan. Without a plan the
+   target is ``steady``: today's preparation stays, and the gain at the same
+   rate is scaled by consistency and flattens out after ~6 weeks, because an
+   unchanged load stops adapting the body.
 
 The requirements and constants are heuristics chosen for recreational runners;
 they are shown on the page next to every number they influence.
@@ -44,7 +49,7 @@ they are shown on the page next to every number they influence.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import numpy as np
@@ -64,6 +69,9 @@ REQUIREMENTS: dict[str, dict[str, float]] = {
     "m": {"long_km": 30, "weekly_km": 55, "runs": 4},
 }
 MAX_EXTRA_EXPONENT = 0.08
+GAIN_FULL_WEEKS = 16.0
+STEADY_TAU_WEEKS = 6.0
+PREP_RAMP_WEEKS = 6.0
 PERF_WINDOW_DAYS = 120
 HR_WINDOW_DAYS = 42
 NEAR_MAX_HR = 0.91
@@ -98,6 +106,9 @@ class DistanceForecast:
     prep: dict[str, Any]
     methods: dict[str, float | None]
     sigma_parts: dict[str, float] = field(default_factory=dict)
+    vdot: float | None = None
+    anchor_m: float = 5000.0
+    target_basis: str | None = None  # "plan" | "steady"
     target_s: float | None = None
     target_low_s: float | None = None
     target_high_s: float | None = None
@@ -272,6 +283,43 @@ def _penalty(distance_m: float, anchor_m: float, prep: float) -> float:
     return (distance_m / anchor_m) ** (MAX_EXTRA_EXPONENT * (1 - max(0.0, min(1.0, prep))))
 
 
+def counted_weeks(weeks: float) -> float:
+    """Weeks of training that count toward the VDOT gain: full rate, then half, then none."""
+    weeks = max(0.0, float(weeks))
+    return min(weeks, GAIN_FULL_WEEKS) + 0.5 * min(max(0.0, weeks - GAIN_FULL_WEEKS), GAIN_FULL_WEEKS)
+
+
+def target(item: DistanceForecast, weeks: float, prep: float) -> DistanceForecast:
+    """Copy of ``item`` with the post-plan target for a race ``weeks`` away and a plan reaching ``prep``."""
+    if item.vdot is None or weeks <= 0:
+        return replace(item, target_s=None, target_low_s=None, target_high_s=None)
+    # Volume and long runs take weeks to build: the plan's preparation is
+    # reached in full only with PREP_RAMP_WEEKS or more to go.
+    now = item.prep["score"]
+    reached = now + (prep - now) * min(1.0, float(weeks) / PREP_RAMP_WEEKS) if prep > now else prep
+    return _with_gain(item, counted_weeks(weeks), reached, "plan")
+
+
+def steady(item: DistanceForecast, weeks: float, consistency: float) -> DistanceForecast:
+    """Copy of ``item`` with the race-day target if training simply goes on as now."""
+    if item.vdot is None or weeks <= 0:
+        return replace(item, target_s=None, target_low_s=None, target_high_s=None)
+    counted = STEADY_TAU_WEEKS * (1 - math.exp(-float(weeks) / STEADY_TAU_WEEKS)) * max(0.0, min(1.0, consistency))
+    return _with_gain(item, counted, item.prep["score"], "steady")
+
+
+def _with_gain(item: DistanceForecast, counted: float, prep: float, basis: str) -> DistanceForecast:
+    metres = item.distance_km * 1000
+    penalty = _penalty(metres, item.anchor_m, prep)
+    return replace(
+        item,
+        target_basis=basis,
+        target_s=physio.race_time(item.vdot + counted / 5, metres) * penalty,
+        target_low_s=physio.race_time(item.vdot + counted / 4, metres) * penalty,
+        target_high_s=physio.race_time(item.vdot + counted / 6, metres) * penalty,
+    )
+
+
 def _garmin(daily: pd.DataFrame, anchor: pd.Timestamp) -> dict[str, float | None]:
     out: dict[str, float | None] = {key: None for key in GARMIN_COLUMNS}
     out["vo2max"] = None
@@ -418,15 +466,12 @@ def forecast(
             prep=prep,
             methods=methods,
             sigma_parts=sigma_parts,
+            vdot=combined,
+            anchor_m=anchor_m,
         )
         weeks = (weeks_to_race or {}).get(key)
         if weeks is not None and weeks > 0:
-            counted = min(float(weeks), 16.0)
-            reached = (plan_prep or {}).get(key, 1.0)
-            target_penalty = _penalty(metres, anchor_m, reached)
-            item.target_s = physio.race_time(combined + counted / 5, metres) * target_penalty
-            item.target_low_s = physio.race_time(combined + counted / 4, metres) * target_penalty
-            item.target_high_s = physio.race_time(combined + counted / 6, metres) * target_penalty
+            item = target(item, weeks, (plan_prep or {}).get(key, 1.0))
         if key == "m" and prep["score"] < 0.45:
             item.warnings.append(i18n.tr(
                 pl="Przygotowanie do maratonu jest dziś niskie — to prognoza ukończenia przy równym rozłożeniu sił, "
@@ -555,7 +600,7 @@ def confidence_reasons(item: DistanceForecast, perf: dict[str, Any] | None) -> l
 
 
 # goal_status codes (labels: text.goal_status).
-GOAL_STATUS = ("none", "now", "plan", "ambitious", "stretch")
+GOAL_STATUS = ("none", "now", "plan", "steady", "ambitious", "stretch")
 
 
 def goal_status(item: DistanceForecast | None, goal_s: float | None) -> str:
@@ -566,7 +611,7 @@ def goal_status(item: DistanceForecast | None, goal_s: float | None) -> str:
         return "now"
     target = item.target_s or item.potential_s
     if goal_s >= target:
-        return "plan"
+        return "steady" if item.target_basis == "steady" else "plan"
     edge = item.target_low_s or item.low_s
     return "ambitious" if goal_s >= edge else "stretch"
 

@@ -235,10 +235,11 @@ TERMS: dict[str, Term] = {
             "Różnica potencjał − realistyczny to zysk możliwy bez poprawy szybkości, samym treningiem pod dystans.",
         ),
         "after_plan": (
-            "Po planie",
-            "Prognoza na dzień zawodów, jeśli zrealizujesz plan: +1 VDOT na ~5 tygodni i przygotowanie, "
-            "które plan buduje.",
-            "Pokazuje, czy cel jest osiągalny do daty startu.",
+            "Na dzień startu (po planie / jak teraz)",
+            "Prognoza na dzień zawodów. Gdy plan obejmuje start: +1 VDOT na ~5 tygodni i przygotowanie, które "
+            "plan buduje przed tym startem. Bez planu: dzisiejsze przygotowanie i przyrost formy razy regularność, "
+            "wygasający po ~6 tygodniach.",
+            "Pokazuje, czy cel jest osiągalny do daty startu — i ile daje plan wobec trenowania jak dotąd.",
             "W nawiasie wariant ostrożny i optymistyczny. Pojawia się tylko dla dystansu z wpisanym startem.",
         ),
         "interval80": (

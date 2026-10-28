@@ -111,6 +111,25 @@ class Model(Fixture):
         self.assertGreater(item.target_high_s, item.target_s)
         self.assertIsNone(result["distances"]["5k"].target_s)
 
+    def test_target_is_per_race(self):
+        item = self.run_forecast()["distances"]["hm"]
+        near, far = forecast.target(item, 17.6, 0.9), forecast.target(item, 22.6, 0.9)
+        self.assertLess(far.target_s, near.target_s)
+        self.assertIsNone(item.target_s)
+        self.assertEqual(forecast.counted_weeks(10), 10)
+        self.assertEqual(forecast.counted_weeks(20), 18)
+        self.assertEqual(forecast.counted_weeks(60), forecast.counted_weeks(32))
+
+    def test_steady_target_flattens_and_keeps_preparation(self):
+        item = self.run_forecast()["distances"]["hm"]
+        self.assertEqual(forecast.steady(item, 10, 0.0).target_s, item.realistic_s)  # no regular running: no gain
+        soon, later, much_later = (forecast.steady(item, w, 1.0) for w in (6, 18, 40))
+        self.assertLess(later.target_s, soon.target_s)
+        self.assertLess(later.target_s - much_later.target_s, 1.0 + (soon.target_s - later.target_s) / 5)
+        self.assertGreater(later.target_s, forecast.target(item, 18, 1.0).target_s)  # a plan beats "as now"
+        self.assertEqual(later.target_basis, "steady")
+        self.assertEqual(forecast.goal_status(later, later.target_s + 1), "steady")
+
     def test_preparation_components(self):
         prep = forecast.preparation(self.runs, self.anchor, "hm")
         self.assertEqual(prep["long_km"], 12.0)
