@@ -300,6 +300,24 @@ TERMS: dict[str, Term] = {
             "To one dają bodziec; reszta to baza i regeneracja.",
             "Amatorom zwykle wystarczają 1–2 w tygodniu przy ~75–80% spokojnych kilometrów.",
         ),
+        "rep_fade": (
+            "Rozjazd odcinków",
+            "O ile wolniej był ostatni odcinek workoutu niż pierwszy (s/km) i o ile wyżej szło na nim tętno.",
+            "Pokazuje, czy tempo było dobrane do formy: równe odcinki przy lekko rosnącym tętnie to dobrze "
+            "rozłożony wysiłek.",
+            "Do ~5 s/km i kilku uderzeń — równo. Ostatni wyraźnie wolniejszy przy tętnie pod sufitem — tempo "
+            "za ambitne albo za krótkie przerwy. Ujemny rozjazd (przyspieszanie) — był zapas.",
+        ),
+        "pace_at_hr": (
+            "Tempo przy tym samym tętnie",
+            "Prosta tempo ~ tętno poprowadzona przez odcinki wcześniejszych workoutów (2 lata) i odległość "
+            "odcinków tego treningu od niej, w s/km.",
+            "Porównuje workouty o różnej długości odcinków: 5×800 m biega się szybciej niż 3×2 km, ale przy "
+            "tym samym tętnie szybsze tempo to postęp.",
+            "Ujemnie = szybciej niż wcześniej przy tym samym tętnie. Średnie tętno odcinka spóźnia się za "
+            "wysiłkiem, więc długie odcinki wypadają tu trochę gorzej niż krótkie — porównuj głównie "
+            "z podobnymi (kolor w legendzie).",
+        ),
     }),
     **_group("Sen i rytm dobowy", {
         "sri": (

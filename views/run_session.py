@@ -9,7 +9,7 @@ import bento
 import routing
 import shell
 import theme as tz
-from running import plan as planning, sessions, store, units
+from running import plan as planning, sessions, store, units, workouts
 from views import run_common as rc
 
 ZONE_LABELS = {f"hr_z{i}_s": f"strefa {i}" for i in range(1, 6)}
@@ -49,6 +49,7 @@ def render() -> None:
         routing.open_activity(int(chosen))
 
     _summary(run)
+    _workout(frame, run)
     left, right = bento.row(2, 2)
     with left:
         _splits(run)
@@ -62,6 +63,7 @@ def render() -> None:
         _zones(run)
     with right:
         _similar(frame, run)
+
 
 
 def _summary(run: pd.Series) -> None:
@@ -152,6 +154,126 @@ def _structure(run: pd.Series) -> None:
             "km": (phases["distance_m"] / 1000).round(2),
             "tempo": phases["avg_speed_ms"].map(lambda v: units.fmt_pace(units.pace_from_speed(v), False)),
         }))
+
+
+def _workout(frame: pd.DataFrame, run: pd.Series) -> None:
+    """A watch workout rep by rep, then against the earlier workouts."""
+    laps = shell.table("run_laps")
+    activity_id = int(run["activity_id"])
+    table = workouts.reps(laps[laps["activity_id"] == activity_id]) if not laps.empty else pd.DataFrame()
+    if len(table) < 2:
+        return
+    _reps(table, workouts.summary(table))
+    history, every = workouts.history(frame, laps)
+    peers = workouts.peers(history, activity_id)
+    if peers.empty:
+        return
+    left, right = bento.row(2, 2)
+    with left:
+        _pace_at_hr(peers, every, run)
+    with right:
+        _workout_peers(peers, run)
+
+
+def _lap_text(laps: list[tuple[float, float]]) -> str:
+    return " · ".join(units.fmt_pace(pace, False) + ("" if abs(km - 1) < 0.05 else f" ({km * 1000:.0f} m)")
+                      for km, pace in laps)
+
+
+def _reps(table: pd.DataFrame, shape: dict) -> None:
+    caption = (f"{shape['reps']} × {shape['rep_km']:.1f} km · śr. <b>{units.fmt_pace(shape['pace'])}</b>"
+               + (f" przy {shape['hr']:.0f} bpm" if pd.notna(shape["hr"]) else "")
+               + f" · ostatni <b>{shape['fade_s']:+.0f} s/km</b> wobec pierwszego"
+               + (f", tętno {shape['hr_drift']:+.0f}" if pd.notna(shape["hr_drift"]) else "")
+               + (f" · przerwy {units.fmt_time(shape['rest_s'])}" if pd.notna(shape["rest_s"]) else ""))
+    with bento.tile(
+        "Odcinki i splity", key="reps", caption=caption, terms=["rep_fade", "cadence"],
+        how="Z okrążeń zegarka (dokładny czas stopera). Splity to kolejne okrążenia wewnątrz odcinka — "
+            "auto-lap co kilometr, niepełne z długością w nawiasie. Przerwa to trucht po odcinku.",
+    ) as t:
+        t.table(pd.DataFrame({
+            "#": table["rep"],
+            "km": table["km"],
+            "czas": table["seconds"].map(units.fmt_time),
+            "tempo": table["pace"].map(lambda v: units.fmt_pace(v, False)),
+            "splity": table["laps"].map(_lap_text),
+            "tętno": table["hr"].round().astype("Int64"),
+            "maks.": table["hr_max"].round().astype("Int64"),
+            "kadencja": table["cadence"].round().astype("Int64"),
+            "przerwa": table["rest_s"].map(lambda v: units.fmt_time(v) if pd.notna(v) else "—"),
+            "trucht": table["rest_pace"].map(lambda v: units.fmt_pace(v, False)),
+            "tętno w przerwie": table["rest_hr"].round().astype("Int64"),
+        }))
+
+
+def _pace_at_hr(peers: pd.DataFrame, every: pd.DataFrame, run: pd.Series) -> None:
+    activity_id = int(run["activity_id"])
+    current = peers[peers["current"]].iloc[0]
+    offset = current["vs_hr_s"]
+    caption = (f"przy tym samym tętnie <b>{'szybciej' if offset < 0 else 'wolniej'} o {abs(offset):.0f} s/km</b> "
+               "niż odcinki wcześniejszych workoutów" if pd.notna(offset)
+               else "Za mało wcześniejszych workoutów, żeby poprowadzić linię tempo ~ tętno.")
+    with bento.tile(
+        "Tempo a tętno na odcinkach", rows=2, key="pace_hr", caption=caption, terms=["pace_at_hr"],
+        how="Każda kropka to jeden odcinek. Szara linia to dopasowanie do odcinków sprzed tego treningu — "
+            "kropki nad nią to szybciej przy tym samym tętnie. Podobne = odcinki o długości ±35%.",
+    ) as t:
+        groups = {aid: "ten trening" if is_current else "podobne odcinki" if similar else "inne workouty"
+                  for aid, is_current, similar in peers[["activity_id", "current", "similar"]].itertuples(index=False)}
+        points = every[every["start_local"] <= current["start_local"]].assign(
+            grupa=lambda f: f["activity_id"].map(groups),
+            kiedy=lambda f: f["start_local"].dt.strftime("%d.%m.%Y"),
+            odcinek=lambda f: f["km"].map(lambda v: f"{v:.1f} km"),
+        ).rename(columns={"hr": "tętno", "pace": "tempo"})
+        order = {"ten trening": 0, "podobne odcinki": 1, "inne workouty": 2}
+        points = points.sort_values("grupa", key=lambda g: g.map(order))
+        figure = tz.scatter(points, "tętno", "tempo", color="grupa", color_kind="categorical",
+                            hover=("kiedy", "odcinek"), x_title="średnie tętno odcinka (bpm)", y_title="",
+                            pace_y=True, reverse_y=True)
+        fit = workouts.hr_fit(every, activity_id, current["start_local"])
+        if figure is not None and fit is not None:
+            span = pd.Series([points["tętno"].min(), points["tętno"].max()])
+            figure.add_scatter(x=span, y=fit[0] + fit[1] * span, mode="lines", hoverinfo="skip", showlegend=False,
+                               line=dict(color=tz.tokens()["muted"], width=1.4, dash="dot"))
+        t.chart(figure, table=points[["kiedy", "grupa", "odcinek", "tempo", "tętno"]],
+                key=f"pace_hr_{activity_id}")
+
+
+def _workout_peers(peers: pd.DataFrame, run: pd.Series) -> None:
+    others = peers[~peers["current"]]
+    current = peers[peers["current"]].iloc[0]
+    earlier = others[others["similar"] & (others["start_local"] < current["start_local"])]
+    caption = None
+    if not earlier.empty:
+        last = earlier.iloc[-1]
+        caption = (f"wobec {last['start_local']:%d.%m.%Y} ({last['reps']:.0f} × {last['rep_km']:.1f} km): tempo "
+                   f"<b>{(current['pace'] - last['pace']) * 60:+.0f} s/km</b>, tętno "
+                   f"<b>{current['hr'] - last['hr']:+.0f}</b> bpm")
+    with bento.tile(
+        "Podobne workouty", rows=2, key="workout_peers", caption=caption, terms=["rep_fade", "pace_at_hr"],
+        how="Najpierw workouty o podobnej długości odcinków (±35%, znak ≈), potem pozostałe; w grupie od "
+            "najnowszych. "
+            "Kliknij wiersz, żeby otworzyć trening.",
+    ):
+        if others.empty:
+            st.caption("To pierwszy workout z okrążeniami — nie ma z czym porównać.")
+            return
+        shown = others.sort_values(["similar", "start_local"], ascending=[False, False]) \
+            .head(bento.table_rows(2)).reset_index(drop=True)
+        event = st.dataframe(pd.DataFrame({
+            "kiedy": shown["start_local"].dt.strftime("%d.%m.%Y"),
+            "odcinki": [f"{r.reps:.0f} × {r.rep_km:.1f} km" + (" ≈" if r.similar else "") for r in shown.itertuples()],
+            "tempo": shown["pace"].map(lambda v: units.fmt_pace(v, False)),
+            "tętno": shown["hr"].round().astype("Int64"),
+            "rozjazd s/km": shown["fade_s"].round().astype("Int64"),
+            "tętno ↑": shown["hr_drift"].round().astype("Int64"),
+            "przerwa": shown["rest_s"].map(lambda v: units.fmt_time(v) if pd.notna(v) else "—"),
+            "vs tętno s/km": shown["vs_hr_s"].round().astype("Int64"),
+        }), hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
+            key=f"workout_peers_{int(run['activity_id'])}", height=bento.table_height(len(shown)))
+        rows = getattr(getattr(event, "selection", None), "rows", None) or []
+        if rows:
+            routing.open_run(int(shown.iloc[rows[0]]["activity_id"]))
 
 
 def _splits(run: pd.Series) -> None:

@@ -31,7 +31,7 @@ from typing import Any
 
 import pandas as pd
 
-from running import physio, store, units
+from running import physio, store, units, workouts
 from running.sessions import HARD_KINDS
 
 PEAK_KM = {"5k": 32.0, "10k": 42.0, "hm": 50.0, "m": 65.0}
@@ -619,41 +619,10 @@ PACE_TOLERANCE = 0.03  # a rep within 3% of the band counts as on pace: GPS nois
 
 
 def rep_blocks(laps: pd.DataFrame) -> list[dict[str, Any]]:
-    """Work reps of one structured run, from its laps.
-
-    A rep is a run of consecutive ``active`` laps of the same workout step:
-    auto-lap splits a 1.2 km rep into 1000 m + 200 m, and both belong to it.
-    A run without any warm-up / recovery laps was not a watch workout, so it
-    has no reps to compare -- the whole run would be one "rep".
-    """
-    if laps is None or laps.empty or not laps["intensity"].isin(("warmup", "recovery", "rest", "cooldown")).any():
-        return []
-    blocks: list[dict[str, Any]] = []
-    previous = None
-    for lap in laps.sort_values("lap").itertuples(index=False):
-        if lap.intensity != "active" or not lap.distance_m:
-            previous = None
-            continue
-        key = lap.step_index
-        if previous is not None and key == previous and blocks:
-            block = blocks[-1]
-        else:
-            block = {"distance_m": 0.0, "duration_s": 0.0, "hr_s": 0.0}
-            blocks.append(block)
-        block["distance_m"] += float(lap.distance_m)
-        block["duration_s"] += float(lap.duration_s or 0)
-        block["hr_s"] += float(lap.avg_hr or 0) * float(lap.duration_s or 0)
-        previous = key
-    out = []
-    for block in blocks:
-        if block["distance_m"] < 100 or block["duration_s"] <= 0:
-            continue
-        out.append({
-            "km": round(block["distance_m"] / 1000, 2),
-            "pace": block["duration_s"] / 60 / (block["distance_m"] / 1000),
-            "hr": round(block["hr_s"] / block["duration_s"]) if block["hr_s"] else None,
-        })
-    return out
+    """Work reps of one structured run, from its laps (``workouts.reps``)."""
+    table = workouts.reps(laps)
+    return [{"km": row.km, "pace": row.pace, "hr": round(row.hr) if pd.notna(row.hr) else None}
+            for row in table.itertuples()] if not table.empty else []
 
 
 def planned_reps(steps: list[dict[str, Any]] | None) -> tuple[int, tuple[float, float] | None]:

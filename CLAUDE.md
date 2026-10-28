@@ -533,7 +533,11 @@ Pułapki:
   `active` z tym samym `step_index` (`plan.rep_blocks`). Bieg bez okrążeń
   warmup/recovery nie był workoutem z zegarka i nie ma powtórzeń.
   `plan.match(..., laps=)` dokłada do sesji jakości `reps_planned/done/on_pace`
-  (±3% od pasma) i `rep_paces`.
+  (±3% od pasma) i `rep_paces`. Definicja odcinka jest jedna: `running/workouts.py`
+  (`reps` — odcinek ze splitami i przerwą po nim, `summary` — rozjazd tempa
+  i tętna, `history`/`peers` — workouty jakościowe ≥ 2 odcinków, podobne przy
+  długości odcinka ±35%, `vs_hr_s` — odległość od prostej tempo ~ tętno
+  odcinków z 2 lat przed treningiem). `plan.rep_blocks` to tylko jego widok.
 - **Endurance score, hill score i próg mleczanowy (tempo/tętno) są u tego
   użytkownika puste** (sprawdzone 2026-10-25; jest tylko przestarzałe FTP
   biegowe). Nie dodawaj ich do hurtowni, dopóki zegarek ich nie liczy.

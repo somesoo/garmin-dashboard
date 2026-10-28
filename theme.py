@@ -26,6 +26,7 @@ monotonicity, step gap, single hue and light-end contrast.
 
 from __future__ import annotations
 
+import math
 from typing import Any, Iterable, Mapping, Sequence
 
 import pandas as pd
@@ -880,12 +881,23 @@ def pace_axis(
         return fig
     low, high = (data.quantile(0.02), data.quantile(0.98)) if robust else (data.min(), data.max())
     low, high = float(low), float(high)
-    span = max(high - low, 0.1)
-    step = next(s for s in (0.25, 0.5, 1.0, 2.0, 5.0) if span / s <= 6)
-    first = (low // step) * step
-    ticks = [first + i * step for i in range(int((high - first) / step) + 2)]
-    pad = span * 0.06
-    rng = [high + pad, low - pad] if reverse else [low - pad, high + pad]
+    if high - low < 0.1:  # at least 6 s of frame, centred on the data
+        middle = (low + high) / 2
+        low, high = middle - 0.05, middle + 0.05
+    span = high - low
+    # Down to 5 s: intervals run within a few seconds of each other, and a
+    # 15 s grid left them between two ticks with no label on the axis.
+    step = next(s for s in (5 / 60, 10 / 60, 0.25, 0.5, 1.0, 2.0, 5.0) if span / s <= 6)
+    pad = max(span * 0.06, step * 0.25)
+    bottom, top = low - pad, high + pad
+    # At least two labelled ticks inside the frame: widen to the nearest ones.
+    inside = math.floor(top / step + 1e-9) - math.ceil(bottom / step - 1e-9) + 1
+    if inside < 2:
+        bottom = min(bottom, math.floor(low / step + 1e-9) * step - pad)
+        top = max(top, math.ceil(high / step - 1e-9) * step + pad)
+    first = math.floor(bottom / step) * step
+    ticks = [round(first + i * step, 6) for i in range(int((top - first) / step) + 2)]
+    rng = [top, bottom] if reverse else [bottom, top]
     kwargs = dict(tickmode="array", tickvals=ticks, ticktext=[pace_text(t) for t in ticks],
                   range=rng, autorange=False)
     if row is not None:
