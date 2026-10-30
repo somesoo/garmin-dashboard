@@ -3,6 +3,9 @@
 Pobiera dane z Garmin Connect, buduje hurtownię na dysku i hostuje dashboard
 na `http://localhost:8501`. Nic nie wychodzi na zewnątrz.
 
+Na razie aplikacja działa tylko z Garminem — patrz
+[Inne zegarki](#inne-zegarki-huawei-apple-watch).
+
 ## Uruchomienie
 
 **macOS:** dwuklik na **`Dashboard.command`** (otwiera się w Terminalu) albo
@@ -146,6 +149,41 @@ Windows:
 ```powershell
 schtasks /create /tn GarminETL /sc daily /st 07:00 /tr "\"$PWD\.venv\Scripts\python.exe\" \"$PWD\etl\run.py\""
 ```
+
+## Inne zegarki (Huawei, Apple Watch)
+
+Na razie aplikacja jest pisana pod Garmina: dane idą z Garmin Connect przez
+`garminconnect`, a część stron opiera się na liczbach, które liczy tylko Garmin.
+Zanim pojawi się drugie źródło danych, warto pilnować jednej zasady: **funkcja,
+która potrzebuje czegoś tylko z Garmina, ma być modułem opcjonalnym** — gdy
+dane są, używa ich; gdy ich nie ma, strona działa dalej na tym, co da się
+policzyć z dowolnego zegarka, zamiast pokazywać zera albo puste kafle.
+Użytkownik Huaweia czy Apple Watcha nie powinien dostać dashboardu z samymi
+„brak danych”.
+
+Co jest dziś tylko z Garmina (u innych producentów nie ma odpowiednika albo
+liczy się inaczej):
+
+- training readiness i jego składowe (`readiness`, `f_*`), training status,
+  `load_ratio` (ACWR Garmina), `load_4w_*`, Body Battery, VO2max z zegarka,
+  `hrv_status` i granice bazy HRV Garmina;
+- okrążenia i kroki workoutu z zegarka (`run_laps`, `activity_segments`);
+- wysyłanie planu na zegarek (`running/garmin_workout.py`, `etl/push_plan`).
+
+Co jest wspólne dla praktycznie każdego zegarka z tętnem i GPS: aktywności
+(dystans, czas, tętno, ślad GPS), tętno spoczynkowe, sen i jego fazy, kroki,
+często HRV nocne. Na tym da się zbudować większość aplikacji — i część
+już tak działa:
+
+- **forma** (`pmc`) liczy CTL/ATL/TSB sama, a `garmin_*` są tylko do porównania;
+- **prognoza** nie bierze wyniku Garmina do punktu, tylko do niepewności;
+- **strefy tętna** idą od progu z własnych wysiłków, a bez niego od HRmax;
+- **HRV** porównujemy z własną bazą (`hrv_deviation`), nie z zakresem Garmina.
+
+Przy dodawaniu kolejnej funkcji opartej na polu tylko z Garmina: sprawdzaj
+pokrycie danych, miej wariant zastępczy z danych wspólnych (albo chowaj kafel
+z jednym zdaniem, czego brakuje), a import z innego źródła mapuj do tych samych
+tabel `daily` / `activities`, żeby widoki nie wiedziały, skąd przyszły dane.
 
 ## Co nie jest pobierane
 
