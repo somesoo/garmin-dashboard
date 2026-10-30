@@ -34,6 +34,8 @@ garmin-dashboard/
   running/           logika modułu biegowego (bez Streamlita): klasyfikacja,
                      prognoza, plan, biblioteka treningów (`library.py`),
                      magazyn celów, brief dla asystenta
+  sport/             grupa „Sport” (bez Streamlita): katalog dyscyplin, gotowość
+                     na dowolny trening, ranking propozycji, różnorodność
   tests/             unittest: `.venv/bin/python -m unittest discover -s tests -t .`
   insights/*.md      wnioski: proza + bloki SQL liczone na żywo
   data/raw/          źródło prawdy (nie usuwać — odbudowa tabel bez API)
@@ -809,6 +811,38 @@ Treningi na zegarek:
   (klucz: id sesji) — rejestr jest na poziomie planu, bo `replan` nadaje
   sesjom nowe id; dzięki niemu następna wysyłka usuwa stare workouty zamiast
   zostawiać duplikaty. Przeszłych dat nie rusza.
+
+## Moduł sportowy (`sport/`, strony `views/sport*.py`)
+
+Grupa „Sport”: *Gotowość i propozycje* (`sport`) i *Dyscypliny* (`dyscypliny`).
+Logika w czystym pandas, testy w `tests/test_sport.py`; plan biegowy jest tylko
+czytany (`recommend.from_plan`), nigdy zmieniany.
+
+- **Katalog** (`catalog.py`): ~30 dyscyplin z ręcznymi wagami 0–1 — `load`
+  (uderzenia / nogi / góra), `trains` (tlen, moc, siła, technika, mobilność),
+  `levels` (najlżej–najmocniej uczciwie), `needs`, `months`. Garminowe typy
+  (`kiteboarding_v2`…) mapuje `discipline_of`. Kody są danymi, słowa dają
+  `label`/`blurb`/`*_label`.
+- **Gotowość** (`readiness.assess`): średnia ważona sześciu części w jednej
+  skali (~65 = zwykły dzień): readiness Garmina i HRV (×1,5; z ln HRV wobec 60
+  nocy), RHR wobec mediany 60 d, sen, obciążenie 7/28 d **wszystkich** sportów
+  (`training_load`, brak = 1/min), godziny od mocnego treningu. Progi 68/52/38 →
+  hard/moderate/easy/recover; dwie części nocne < 35 przycinają do easy; noc
+  starsza niż doba wypada. `systems`: zmęczenie układów z 4 dni, zanik
+  wykładniczy (τ 24–30 h), 1,0 ≈ typowa sesja przed chwilą.
+- **Ranking** (`recommend.rank`): sezon, warunki i sufit intensywności to
+  filtry (`skipped` z powodem); reszta to punkty z kodami w `reasons` (dni od
+  ostatniego razu, dominacja w 28 d, luki profilu z `variety.TARGET`, kolizja
+  ze zmęczonym układem, jutrzejszy kluczowy bieg → nogi ≤ moderate). Jitter ±3
+  stały w obrębie dnia.
+- **Realizm, którego użytkownik wprost wymagał**: główne propozycje (`picks`)
+  tylko z dyscyplin już uprawianych, po jednej z rodziny; „coś nowego” tylko bez
+  wyjazdu. `catalog.TRAVEL` (woda, wiatr, śnieg, góry) jest domyślnie wyłączone
+  — zaznacza się na dni wyjazdu; reszta warunków domyślnie z historii roku
+  (`store.default_available`), wybór w `data/sport.json`. Sezony pod Warszawę:
+  woda V–IX, rolki IV–X, MTB III–XI. Nie proponuj kajaka w październiku.
+- Przy dniu ≥ moderate mobilność/joga to **dodatek**, nie główna sesja.
+- Zdania z kodów składa `sport/text.py` (przecinek dziesiętny po polsku).
 
 Współpraca z asystentem: nie ma tu API modelu i żadnego nie dodajemy.
 `python -m running.coach [--json]` drukuje brief (prognoza z wejściami, biegi,

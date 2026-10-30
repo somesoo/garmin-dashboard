@@ -422,6 +422,59 @@ TERMS: dict[str, Term] = {
             "Głęboki zwykle 13–23% nocy, REM 20–25%. Garmin szacuje fazy z ruchu i tętna, więc pojedyncza noc bywa niedokładna.",
         ),
     }),
+    **_group("Sport", {
+        "sport_readiness": (
+            "Gotowość na trening (wszystkie sporty)",
+            "Liczba 0–100 z sześciu części, każda w tej samej skali (~65 = zwykły dzień): readiness Garmina, HRV "
+            "wobec 60 nocy, tętno spoczynkowe wobec mediany 60 dni, sen, obciążenie 7/28 dni ze wszystkich sportów "
+            "i czas od ostatniego mocnego treningu. Garmin i HRV liczą się 1,5×.",
+            "Readiness Garmina i decyzja dnia patrzą głównie na bieganie. Ta liczba mówi, na jaki wysiłek stać cię "
+            "dziś w czymkolwiek — i wyznacza sufit intensywności propozycji.",
+            "68+ mocno, 52–68 umiarkowanie, 38–52 spokojnie, poniżej — regeneracja. Dwie części nocne poniżej 35 "
+            "przycinają dzień do „spokojnie”, niezależnie od średniej. Noc starsza niż doba nie jest brana pod uwagę.",
+        ),
+        "body_systems": (
+            "Zmęczenie układów",
+            "Ile zostało w uderzeniach (stawy, ścięgna), mięśniach nóg i górze ciała po treningach z 4 dni: "
+            "obciążenie sesji wobec twojej typowej × waga dyscypliny, wygasające z czasem (ok. 1–1,5 doby).",
+            "Po rowerze nogi są zmęczone, a ramiona nie — basen czy ścianka nadal są dobrym pomysłem. Jedna liczba "
+            "gotowości tego nie odróżni.",
+            "100% ≈ jeden typowy trening tego układu przed chwilą. Powyżej ~50% dyscypliny obciążające ten układ "
+            "spadają w rankingu.",
+        ),
+        "quality_mix": (
+            "Profil 28 dni",
+            "Minuty z ostatnich 4 tygodni rozłożone na cechy, które buduje każda dyscyplina: tlen, moc i zrywy, "
+            "siła, technika i koordynacja, mobilność.",
+            "Pokazuje, czego brakuje — dyscypliny, które to uzupełniają, idą w górę w propozycjach.",
+            "Cel (45/15/15/15/10%) to zwykła wszechstronna mieszanka dla kogoś z bazą wytrzymałościową — punkt "
+            "odniesienia, nie zalecenie z badań.",
+        ),
+        "sport_pick": (
+            "Propozycje na dziś",
+            "Ranking dyscyplin, które już uprawiasz: punkty za to, ile dni minęło od ostatniego razu i za "
+            "uzupełnianie braków z 28 dni; minusy za dominującą dyscyplinę i obciążanie zmęczonego układu. "
+            "Po jednej z każdej rodziny, plus jedna rzecz nowa i dodatek mobilności, gdy jej brakowało.",
+            "Różnorodność bez zgadywania: co zrobić, żeby ruszać się inaczej, a nie dokładać do tego samego.",
+            "Intensywność to sufit z gotowości (albo niższy, jeśli dyscyplina mocniej się nie da). Czas to twoja "
+            "mediana sesji. Gdy jutro w planie jest kluczowy bieg, nogi dziś najwyżej umiarkowanie. Plan biegowy "
+            "nie jest zmieniany.",
+        ),
+        "sport_conditions": (
+            "Warunki i sezon",
+            "Co musi być pod ręką (basen, kort, partner…) i kiedy dyscyplina ma sens. Sezony są pod Polskę "
+            "centralną: woda od maja do września, rolki od kwietnia do października.",
+            "Propozycja ma być do zrobienia dziś wieczorem, nie na wyjeździe.",
+            "Woda, wiatr, śnieg i góry to wyjazd — domyślnie wyłączone, zaznacz je na te dni. Pozostałe warunki "
+            "są domyślnie włączone, gdy w ostatnim roku robiłeś coś, co ich wymaga.",
+        ),
+        "sport_variety": (
+            "Różnorodność (efektywna liczba dyscyplin)",
+            "exp(entropii Shannona) z podziału minut: 1 = jedna dyscyplina, 3 = czas jak gdyby po równo między trzy.",
+            "Zliczanie dyscyplin nagradza 10 minut jogi obok 10 godzin biegania; ta miara nie.",
+            "Wzrost to czas rozłożony szerzej. Liczy się trend, nie konkretny poziom.",
+        ),
+    }),
     **_group("Statystyka", {
         "r2": (
             "R² (dopasowanie modelu)",

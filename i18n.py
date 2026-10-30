@@ -38,7 +38,8 @@ BILINGUAL = ["app.py", "shell.py", "bento.py", "routing.py", "theme.py", "globe.
              *(f"views/{name}.py" for name in (
                  "activities", "atlas", "form", "notebook", "physio", "recovery", "reference", "routes",
                  "run_common", "run_forecast", "run_load", "run_overview", "run_plan", "run_races", "run_segments",
-                 "run_session", "sleep", "stats", "today", "trends")),
+                 "run_session", "sleep", "sport", "sport_disciplines", "stats", "today", "trends")),
+             *(f"sport/{name}.py" for name in ("catalog", "readiness", "recommend", "store", "text", "variety")),
              *(f"running/{name}.py" for name in (
                  "coach", "forecast", "garmin_workout", "physio", "pipeline", "plan", "segments", "sessions", "store",
                  "text", "units", "workouts")),
@@ -158,6 +159,7 @@ def day_month(day: Any) -> str:
 _GROUPS = {
     "overview": ("Przegląd", "Overview"),
     "running": ("Bieganie", "Running"),
+    "sport": ("Sport", "Sport"),
     "body": ("Ciało", "Body"),
     "training": ("Trening", "Training"),
     "analysis": ("Analiza", "Analysis"),
@@ -174,6 +176,8 @@ _PAGES = {
     "bieg": ("Trening", "Workout"),
     "segmenty": ("Segmenty", "Segments"),
     "obciazenie-biegowe": ("Obciążenie biegowe", "Running load"),
+    "sport": ("Gotowość i propozycje", "Readiness and ideas"),
+    "dyscypliny": ("Dyscypliny", "Disciplines"),
     "regeneracja": ("Regeneracja", "Recovery"),
     "sen": ("Rytm i sen", "Rhythm and sleep"),
     "trendy": ("Trendy", "Trends"),

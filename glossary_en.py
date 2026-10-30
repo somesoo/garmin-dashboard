@@ -13,6 +13,7 @@ GROUPS = {
     "Wydolność": "Fitness",
     "Prognoza i bieganie": "Forecast and running",
     "Sen i rytm dobowy": "Sleep and daily rhythm",
+    "Sport": "Sport",
     "Statystyka": "Statistics",
 }
 
@@ -412,6 +413,59 @@ TERMS: dict[str, tuple[str, str, str, str]] = {
         "The proportions say more than the sleep length alone.",
         "Deep is usually 13–23% of the night, REM 20–25%. Garmin estimates stages from movement and "
         "heart rate, so a single night can be inaccurate.",
+    ),
+    # ---- Sport
+    "sport_readiness": (
+        "Readiness for training (all sports)",
+        "A 0–100 number from six parts, each on the same scale (~65 = an ordinary day): Garmin readiness, HRV "
+        "against 60 nights, resting heart rate against its 60-day median, sleep, the 7/28-day load of every sport "
+        "and the time since the last hard session. Garmin and HRV count 1.5x.",
+        "Garmin readiness and the daily decision look mostly at running. This number says what effort you can "
+        "afford today in anything — and sets the intensity ceiling of the suggestions.",
+        "68+ hard, 52–68 moderate, 38–52 easy, below — recovery. Two night parts below 35 cap the day at “easy” "
+        "whatever the mean. A night older than a day is not used.",
+    ),
+    "body_systems": (
+        "Fatigue by body system",
+        "What is left in impact (joints, tendons), leg muscles and the upper body from the sessions of the last "
+        "4 days: the session's load against your typical one x the discipline's weight, fading over ~1–1.5 days.",
+        "After a ride the legs are tired and the arms are not — the pool or a climbing wall is still a good idea. "
+        "One readiness number cannot tell them apart.",
+        "100% ≈ one typical session for that system just now. Above ~50% the disciplines that load it drop in "
+        "the ranking.",
+    ),
+    "quality_mix": (
+        "28-day profile",
+        "The minutes of the last 4 weeks spread over the qualities each discipline builds: aerobic, power and "
+        "bursts, strength, skill and coordination, mobility.",
+        "Shows what is missing — disciplines that fill it move up in the suggestions.",
+        "The target (45/15/15/15/10%) is a plain all-round mix for someone with an endurance base — a reference "
+        "line, not a recommendation from a study.",
+    ),
+    "sport_pick": (
+        "Today's ideas",
+        "A ranking of the disciplines you already do: points for the days since the last time and for filling "
+        "the gaps of the last 28 days; minus for the dominant discipline and for loading a tired system. One "
+        "per family, plus one new thing and a mobility add-on when it was missing.",
+        "Variety without guessing: what to do to move differently rather than adding more of the same.",
+        "Intensity is the ceiling from readiness (or lower when the discipline cannot go harder). Duration is "
+        "your median session. With a key run planned for tomorrow, legs stay moderate today. The running plan "
+        "is not changed.",
+    ),
+    "sport_conditions": (
+        "Conditions and season",
+        "What has to be within reach (a pool, a court, a partner…) and when a discipline makes sense. Seasons "
+        "are set for central Poland: open water May to September, skates April to October.",
+        "A suggestion has to be doable tonight, not on a trip.",
+        "Water, wind, snow and mountains are a trip — off by default, tick them for those days. The other "
+        "conditions are on by default when you did something that needs them in the last year.",
+    ),
+    "sport_variety": (
+        "Variety (effective number of disciplines)",
+        "exp(Shannon entropy) of how the minutes split: 1 = one discipline, 3 = time as if split evenly between "
+        "three.",
+        "Counting disciplines rewards 10 minutes of yoga next to 10 hours of running; this measure does not.",
+        "A rise means time spread more widely. The trend matters, not a particular level.",
     ),
     # ---- Statistics
     "r2": (
