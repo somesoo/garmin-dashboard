@@ -38,6 +38,8 @@ from views import (  # noqa: E402
     run_segments,
     run_session,
     sleep,
+    sport,
+    sport_disciplines,
     stats,
     today,
     trends,
@@ -76,6 +78,10 @@ PAGES = {
         _page(run_session.render, "bieg", "insights"),
         _page(run_segments.render, "segmenty", "conversion_path"),
         _page(run_load.render, "obciazenie-biegowe", "stacked_bar_chart"),
+    ],
+    i18n.group("sport"): [
+        _page(sport.render, "sport", "sports_gymnastics"),
+        _page(sport_disciplines.render, "dyscypliny", "interests"),
     ],
     i18n.group("body"): [
         _page(recovery.render, "regeneracja", "monitor_heart"),
