@@ -3,8 +3,9 @@
 Router only: every page lives in ``views/``, every chart is built through
 ``theme.py`` and every page is laid out on the bento grid of ``bento.py``:
 a header, four KPI tiles, then a mosaic of fixed-height tiles. All chrome
-(navigation, the single global time filter, warehouse status) sits in the rail,
-so the canvas never has to reserve space for controls. ``guide.py`` puts the
+(the everyday pages, the lab, the single global time filter, the Garmin pull)
+sits in one line on top (``story.topbar``); the pages navigate through the loop
+next to their headline. ``guide.py`` puts the
 page's question above it and the "Dalej" links below it.
 """
 
@@ -22,6 +23,7 @@ import guide  # noqa: E402
 import i18n  # noqa: E402
 import routing  # noqa: E402
 import shell  # noqa: E402
+import story  # noqa: E402
 import theme  # noqa: E402
 from views import (  # noqa: E402
     atlas,
@@ -97,12 +99,11 @@ PAGES = {
 # Views navigate by url_path through this registry (see routing.py).
 routing.register(PAGES)
 
-page = st.navigation(PAGES, position="sidebar", expanded=True)
+# No sidebar: the loop on every page (story.py) is the navigation, and the top
+# line carries the everyday pages, the lab, the range, the language and the pull.
+page = st.navigation(PAGES, position="hidden")
 
-shell.range_picker()
-shell.footer()
-guide.rail()
-shell.language_picker()
+story.topbar(routing.name(page))
 
 guide.eyebrow(routing.name(page))
 page.run()

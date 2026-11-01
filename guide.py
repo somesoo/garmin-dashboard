@@ -243,10 +243,9 @@ def _inline(text: str) -> str:
 
 
 def rail() -> None:
-    """The way back to the tour once it was dismissed."""
+    """The way back to the tour once it was dismissed (in the lab menu of the top line)."""
     if not _done():
         return
-    if st.sidebar.button(i18n.tr(pl="Jak czytać ten dashboard", en="How to read this dashboard"),
-                         icon=":material/explore:", type="tertiary", key="tour_show"):
+    if st.button(i18n.tr(pl="Jak czytać ten dashboard", en="How to read this dashboard"), key="tour_show"):
         _remember(False)
         routing.goto("dzis")

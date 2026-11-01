@@ -8,9 +8,12 @@ import pandas as pd
 import streamlit as st
 
 import bento
+import facts
+import herochart as hc
 import i18n
 import routing
 import shell
+import story
 import theme as tz
 from running import coach, sessions, units
 from views import activities, run_common as rc
@@ -19,20 +22,62 @@ WINDOWS = {"7d": 7, "30d": 30, "90d": 90}
 
 
 def render() -> None:
+    """The year in weeks: kilometres per week with the breaks between them, fitness under it."""
+    tr = i18n.tr
     frame = rc.guard()
     if frame is None:
         st.title(i18n.page("bieganie"))
         return
-    end = frame["day"].max()
-    count, first, ago = len(frame), frame["day"].min(), (pd.Timestamp(dt.date.today()) - end).days
-    runs = i18n.plural(count, pl=("bieg", "biegi", "biegów"), en=("run", "runs"))
-    bento.header(
-        i18n.page("bieganie"),
-        i18n.tr(pl=f"{count} {runs} od {first:%d.%m.%Y}; spacery i nagrania < 1 km albo wolniejsze niż 12 min/km "
-                   f"pominięte. Ostatni bieg: {end:%d.%m.%Y} ({ago} dni temu).",
-                en=f"{count} {runs} since {first:%d.%m.%Y}; walks and recordings < 1 km or slower than 12 min/km "
-                   f"left out. Last run: {end:%d.%m.%Y} ({ago} days ago)."),
+    pmc = shell.table("pmc")
+    start, end = story.long_span(frame["day"].min(), frame["day"].max())
+    told = facts.running_year(frame, pmc, start, end)
+    story.frame_page(
+        "bieganie", headline=told["headline"],
+        sub=tr(pl="Kilometry tydzień po tygodniu. Szare pasy to tygodnie bez biegu, pomarańczowe — kilometry z "
+                  "treningów jakościowych. Pod spodem forma (CTL) na tej samej osi czasu.",
+               en="Kilometres week by week. Grey bands are weeks without a run, orange — kilometres from quality "
+                  "sessions. Below, fitness (CTL) on the same time axis."),
+        hero=lambda: _hero(told, pmc, start, end),
+        more=tr(pl="liczby z okresu, co mówią dane, prognoza, tempo według typu, rekordy, ostatnie treningi, tętno a tempo",
+                en="numbers for the period, what the data says, forecast, pace by type, records, recent sessions, heart rate vs pace"),
+        more_render=lambda: _details(frame),
     )
+
+
+def _hero(told: dict, pmc: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> None:
+    tr = i18n.tr
+    calendar = told["calendar"]
+    if calendar["km"].sum() <= 0:
+        st.caption(tr(pl="Brak biegów w tym okresie.", en="No runs in this period."))
+        return
+    c = hc.colors()
+    gaps = [[hc.ms(a), hc.ms(z), tr(pl=f"{n} tyg. przerwy", en=f"{n}-week break") if n >= facts.LONG_GAP else ""]
+            for a, z, n in told["gaps"]]
+    x0, x1 = calendar["week"].iloc[0], end + pd.Timedelta(days=7)
+    trend = pmc.copy()
+    trend["day"] = pd.to_datetime(trend["day"])
+    trend = trend[(trend["day"] >= x0) & (trend["day"] <= x1)]
+    panels = [
+        {"kind": "bars", "bars": [[hc.ms(r.week), [round(r.easy_km, 1), round(r.hard_km, 1)]] for r in calendar.itertuples() if r.km > 0],
+         "colors": [c["series"], c["warm"]], "names": [tr(pl="spokojne km", en="easy km"), tr(pl="mocne km", en="hard km")],
+         "period": tr(pl="tydzień od", en="week of"), "gaps": gaps,
+         "bracket": [hc.ms(told["back"]), hc.ms(calendar["week"].iloc[-1])] if told["back"] is not None else None,
+         "y": [0, float(calendar["km"].max()) * 1.08], "unit": "km", "decimals": 1},
+        {"kind": "lines", "strip": True, "y": [0, max(10.0, float(trend["ctl"].max() if not trend.empty else 10) * 1.1)],
+         "lines": [{"points": hc.points(trend, "day", "ctl", 1), "color": c["series"], "width": 2, "name": tr(pl="forma (CTL)", en="fitness (CTL)")}],
+         "label": {"group": tr(pl="Adaptacja · Forma", en="Adaptation · Fitness"), "head": tr(pl="CTL (forma 42 d)", en="CTL (42-day fitness)"),
+                   "note": tr(pl="obciążenie wszystkich sportów", en="load of every sport")},
+         "why": told["whys"].get("ctl", "")},
+    ]
+    satellites = [{**s, "anchor": {"t": hc.ms(s["anchor"][0]), "v": float(s["anchor"][1])} if s["anchor"] else None}
+                  for s in told["satellites"]]
+    hc.show({"x": [hc.ms(x0), hc.ms(x1)], "panels": panels, "satellites": satellites},
+            key="hero_bieganie", token=story.token("bieganie", start))
+
+
+def _details(frame: pd.DataFrame) -> None:
+    """The second plan: the page as it was, under the hero."""
+    end = frame["day"].max()
     _volume_strip(frame, end)
 
     left, right = bento.row(2, 2)

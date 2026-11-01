@@ -9,3 +9,5 @@ base = "dark"
 backgroundColor = "#1a1c20"
 secondaryBackgroundColor = "#23262c"
 textColor = "#fafafa"
+# The one accent: the same blue as the charts (theme.DARK series), not Streamlit's red.
+primaryColor = "#3987e5"

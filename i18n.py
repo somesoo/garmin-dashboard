@@ -35,6 +35,7 @@ SETTINGS = config.DATA / "ui.json"
 # Modules whose user-facing text is fully bilingual; the test keeps them so.
 # glossary.py is bilingual through glossary_en.py (its own parity test).
 BILINGUAL = ["app.py", "shell.py", "bento.py", "routing.py", "theme.py", "globe.py", "guide.py", "hero.py",
+             "story.py", "facts.py", "herochart.py",
              *(f"views/{name}.py" for name in (
                  "activities", "atlas", "day", "form", "hubs", "notebook", "physio", "recovery", "reference", "routes",
                  "run_common", "run_forecast", "run_load", "run_overview", "run_plan", "run_races", "run_segments",

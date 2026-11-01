@@ -9,8 +9,11 @@ import bento
 import glossary
 import i18n
 import shell
+import facts
+import herochart as hc
+import story
 import theme as tz
-from views import trends
+from views import run_common as rc, trends
 
 
 def _status(value: float | None, low: float | None, high: float | None) -> str:
@@ -30,7 +33,7 @@ def quadrant_labels() -> dict[str, str]:
             "pobudzony": tr(pl="pobudzony", en="aroused"), "stlumiony": tr(pl="stłumiony", en="suppressed")}
 
 
-def render() -> None:
+def _frame() -> pd.DataFrame:
     frame = shell.daily().sort_values("day")
     # The resting-HR norm is the person's own 60-day 10th-90th percentile,
     # computed over the full history so the window edge does not shrink it.
@@ -40,22 +43,81 @@ def render() -> None:
     for column in ("stress_avg", "sleep_stress"):
         if f"{column}_roll7" not in frame.columns:
             frame[f"{column}_roll7"] = frame[column].rolling(7, min_periods=3).mean()
+    return frame
+
+
+def render() -> None:
+    """The HRV hero: nights, the 7-night mean and Garmin's normal, hard sessions marked under it;
+    the week's kilometres (stimulus) and sleep (the other response) on the same time axis."""
+    tr = i18n.tr
+    frame = _frame()
+    view = shell.clip(frame)
+    runs = rc.runs()
+    told = facts.recovery(frame, runs, shell.cutoff())
+    story.frame_page(
+        "regeneracja", headline=told["headline"],
+        sub=tr(pl="Nocne HRV, średnia z 7 nocy i norma Garmina. Pomarańczowe kreski na dole to poranki po mocnym "
+                  "treningu. Pod spodem — bodziec (kilometry) i druga odpowiedź (sen) na tej samej osi czasu.",
+               en="Overnight HRV, the 7-night mean and Garmin's normal. Orange ticks at the bottom are mornings after "
+                  "a hard session. Below — the stimulus (kilometres) and the other response (sleep) on the same time axis."),
+        hero=lambda: _hero(view, runs, told),
+        more=tr(pl="tętno spoczynkowe, readiness, kwadranty, Body Battery, stres, kroki, waga, tydzień po tygodniu",
+                en="resting heart rate, readiness, quadrants, Body Battery, stress, steps, weight, week by week"),
+        more_render=lambda: _details(frame),
+    )
+
+
+def _hero(view: pd.DataFrame, runs: pd.DataFrame, told: dict) -> None:
+    tr = i18n.tr
+    if view.empty or view["hrv_last_night"].notna().sum() < 5:
+        shell.missing("HRV", tr(pl="Za mało nocy z HRV w wybranym zakresie.", en="Too few nights with HRV in this range."))
+        return
+    c = hc.colors()
+    start, end = view["day"].min(), view["day"].max() + pd.Timedelta(days=1)
+    hrv = hc.points(view, "day", "hrv_last_night", 0)
+    band = [[hc.ms(r.day), float(r.hrv_baseline_low), float(r.hrv_baseline_high)]
+            for r in view.dropna(subset=["hrv_baseline_low", "hrv_baseline_high"]).itertuples()]
+    hard = facts.hard_days(runs)
+    ticks = [[hc.ms(pd.Timestamp(d) + pd.Timedelta(days=1)), c["warm"]] for d in sorted(hard)
+             if start <= pd.Timestamp(d) + pd.Timedelta(days=1) < end]
+    last = view.dropna(subset=["hrv_last_night"]).iloc[-1]
+    weeks = facts.weekly_km(runs)
+    weeks = weeks[(weeks["week"] >= start - pd.Timedelta(days=6)) & (weeks["week"] < end)]
+    whys = facts.recovery_whys(view, weeks)
+    values = [v for _, v in hrv if v is not None] + [b for row in band for b in row[1:]]
+    top = float(weeks["km"].max()) if not weeks.empty else 10.0
+    panels = [
+        {"kind": "trend", "points": hrv, "smooth": hc.points(view, "day", "hrv_last_night_roll7", 1), "band": band,
+         "band_label": tr(pl="norma", en="normal"), "ticks": ticks, "y": hc.span(values), "unit": "ms",
+         "name": "HRV", "smooth_name": tr(pl="średnia 7 nocy", en="7-night mean"), "end": f"{last['hrv_last_night']:.0f} ms"},
+        {"kind": "bars", "strip": True,
+         "bars": [[hc.ms(r.week), [round(r.easy_km, 1), round(r.hard_km, 1)]] for r in weeks.itertuples()],
+         "colors": [c["series"], c["warm"]], "names": [tr(pl="spokojne km", en="easy km"), tr(pl="mocne km", en="hard km")],
+         "period": tr(pl="tydzień od", en="week of"), "y": [0, max(10.0, top * 1.1)],
+         "label": {"group": tr(pl="Bodziec · Obciążenie", en="Stimulus · Load"), "head": tr(pl="km tygodniowo", en="km per week"),
+                   "note": tr(pl="pomarańczowe — treningi jakościowe", en="orange — quality sessions")},
+         "why": whys.get("load", "")},
+        {"kind": "trend", "strip": True, "points": hc.points(view, "day", "sleep_h", 2),
+         "smooth": hc.points(view, "day", "sleep_h_roll7", 2), "y": [4, 10], "unit": "h", "decimals": 1, "tick_unit": " h",
+         "name": tr(pl="sen", en="sleep"), "end": "•", "end_color": c["warm"],
+         "label": {"group": tr(pl="Odpowiedź · Sen", en="Response · Sleep"), "head": tr(pl="godziny snu", en="hours of sleep"),
+                   "note": tr(pl="średnia 7 nocy", en="7-night mean")},
+         "why": whys.get("sleep", "")},
+    ]
+    satellites = [{**s, "anchor": {"t": hc.ms(s["anchor"][0]), "v": float(s["anchor"][1])} if s["anchor"] else None}
+                  for s in told["satellites"]]
+    spec = {"x": [hc.ms(start), hc.ms(end)], "panels": panels, "satellites": satellites}
+    hc.show(spec, key="hero_regeneracja", token=story.token("regeneracja"))
+
+
+def _details(frame: pd.DataFrame) -> None:
+    """The second plan of the page: everything the hero does not carry."""
     view = shell.clip(frame)
     row = shell.latest_day()
     week = shell.week_before(frame)
-
-    # Captions read the last scored night, not today's empty row before the watch synced.
     latest = frame[frame["day"] == row["day"]].iloc[-1] if row is not None else frame.iloc[-1]
     feedback = row.get("readiness_feedback") if row is not None else None
-
     tr = i18n.tr
-    bento.header(
-        i18n.page("regeneracja"),
-        tr(pl="HRV i tętno spoczynkowe mają sens wyłącznie względem własnej bazy. Zmiany pod liczbami: względem "
-              "średniej z poprzednich 7 dni.",
-           en="HRV and resting heart rate only make sense against your own baseline. Changes under the numbers: "
-              "against the average of the previous 7 days."),
-    )
     bento.kpis(row, week, [
         ("readiness", "Readiness", ""),
         ("hrv_last_night", tr(pl="HRV noc", en="Night HRV"), "ms"),
@@ -63,16 +125,9 @@ def render() -> None:
         ("sleep_score", tr(pl="Sen", en="Sleep"), ""),
     ])
 
+    # HRV is the hero above; the details start with what it does not show.
     left, right = bento.row(2, 2)
-    with left, bento.tile(tr(pl="HRV w nocy", en="Overnight HRV"), rows=2, key="hrv", terms=["hrv", "deviation"],
-                          caption=_status_line(latest.get("hrv_last_night"), "ms",
-                                               latest.get("hrv_baseline_low"), latest.get("hrv_baseline_high")),
-                          how=glossary.trend_how() + tr(pl=" Norma to zakres „zrównoważony” Garmina.",
-                                                       en=" The normal is Garmin's “balanced” range.")) as t:
-        t.chart(tz.trend(view, "day", {"HRV": ("hrv_last_night", "hrv_last_night_roll7")},
-                         band=("hrv_baseline_low", "hrv_baseline_high"), unit="ms"),
-                table=view[["day", "hrv_last_night", "hrv_baseline_low", "hrv_baseline_high"]].tail(40))
-    with right:
+    with left:
         with bento.tile(tr(pl="Tętno spoczynkowe", en="Resting heart rate"), key="rhr", terms=["rhr"],
                         caption=_status_line(latest.get("rhr"), "bpm",
                                              latest.get("rhr_norm_low"), latest.get("rhr_norm_high")),
@@ -81,6 +136,7 @@ def render() -> None:
             t.chart(tz.trend(view, "day", {"RHR": ("rhr", "rhr_roll7")},
                              band=("rhr_norm_low", "rhr_norm_high"), unit="bpm"),
                     table=view[["day", "rhr", "rhr_norm_low", "rhr_norm_high"]].tail(40))
+    with right:
         readiness_caption = _status_line(latest.get("readiness"), "")
         if isinstance(feedback, str) and feedback:
             readiness_caption = " · ".join(filter(None, [readiness_caption,

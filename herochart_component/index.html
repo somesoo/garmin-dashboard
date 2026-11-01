@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<title>Wykres główny</title>
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  body { color: var(--ink, #fff); font: 13px/1.45 "Source Sans Pro", -apple-system, "Segoe UI", sans-serif; }
+  #stage { position: relative; width: 100%; }
+  .grid { display: grid; grid-template-columns: var(--side, 230px) 1fr var(--side, 230px); column-gap: 28px; }
+  .col { display: flex; flex-direction: column; justify-content: space-around; gap: 16px; position: relative; z-index: 2; }
+  .col.l { text-align: right; }
+  .sat .g { font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  .sat .h { font-size: 16.5px; font-weight: 650; line-height: 1.25; margin-top: 2px; color: var(--ink); }
+  .sat .t { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .sat .go { display: inline-block; margin-top: 5px; font-size: 12px; font-weight: 600; color: var(--ink2); cursor: pointer;
+             padding-bottom: 2px; border-bottom: 1.5px dotted var(--edge); }
+  .sat .go:hover { border-bottom-color: var(--accent); color: var(--ink); }
+  .chart { position: relative; min-width: 0; }
+  .strip-l { text-align: right; padding-top: 4px; }
+  .strip-l .g, .strip-r .g { font-size: 10px; letter-spacing: .13em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  .strip-l .h { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .strip-l .t, .strip-r { font-size: 12px; color: var(--muted); }
+  .strip-r { padding-top: 4px; } .strip-r b { color: var(--ink2); }
+  svg.leaders { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 1; overflow: visible; }
+  svg text { font: 11px "Source Sans Pro", -apple-system, sans-serif; fill: var(--muted); }
+  .tip { position: absolute; pointer-events: none; background: var(--raise); color: var(--ink); border-radius: 8px; padding: 6px 9px;
+         font-size: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.5); opacity: 0; z-index: 5; white-space: nowrap; }
+  .tip b { font-weight: 650; }
+  .wipe { animation: wipe .9s cubic-bezier(.45,.05,.25,1) both; }
+  @keyframes wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+  @media (prefers-reduced-motion: reduce) { .wipe { animation: none; } }
+  @media (max-width: 860px) {
+    .grid { grid-template-columns: 1fr; } .col { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; }
+    .col.l { text-align: left; } .sat { flex: 1 1 200px; } .strip-l { text-align: left; } svg.leaders { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script type="module">
+import { render } from "./chart.js";
+
+/* The Streamlit component protocol by hand, as in globe_component/ and hero_component/. */
+function send(type, data) { window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, "*"); }
+const setFrameHeight = (height) => send("streamlit:setFrameHeight", { height });
+let clicks = 0;
+const onGo = (go) => { clicks += 1; send("streamlit:setComponentValue", { value: { clicks, go }, dataType: "json" }); };
+
+// The page should fit one screen: the chart takes the window height left below the frame's top,
+// minus the room the page still needs under it. Components are served from the app's own origin,
+// so the parent window can be read.
+function available(reserve) {
+  try {
+    const frame = window.frameElement, top = frame ? frame.getBoundingClientRect().top + window.parent.scrollY : 0;
+    return window.parent.innerHeight - top - reserve;
+  } catch (e) { return 620; }
+}
+
+let args = null, animate = true;
+function paint() {
+  if (!args) return;
+  const height = render(document.getElementById("stage"), args, { onGo, animate, available: available(args.reserve || 120) });
+  animate = false;
+  setFrameHeight(height);
+}
+let timer;
+window.addEventListener("resize", () => { clearTimeout(timer); timer = setTimeout(paint, 120); });
+window.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type !== "streamlit:render") return;
+  const next = data.args || {};
+  if (!args || next.token !== args.token) animate = true;
+  args = next;
+  paint();
+});
+send("streamlit:componentReady", { apiVersion: 1 });
+</script>
+</body>
+</html>

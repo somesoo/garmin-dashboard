@@ -152,6 +152,90 @@ _STYLE = """
   .st-key-guide_next {margin-top: 2.6rem; padding-top: 1rem; border-top: 1px solid @LINE@; flex-wrap: wrap;}
   .guide-next-label {font-size: 0.78rem; opacity: 0.6; margin-right: 0.4rem;}
   [data-testid="stMarkdownContainer"]:has(> .guide-next-label) {margin-bottom: 0 !important;}
+
+  /* ---- no sidebar: one centred column, chrome in the top line (story.py) ---- */
+  [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"], [data-testid="stExpandSidebarButton"],
+  [data-testid="stSidebarNav"] {display: none !important;}
+  .block-container {max-width: 1320px !important; padding-top: 0.6rem !important; padding-left: 2.75rem !important;
+      padding-right: 2.75rem !important; margin: 0 auto;}
+  [data-testid="stHeader"] {height: 0; min-height: 0;}
+  [data-testid="stToolbar"] {top: 0.3rem;}
+  .st-key-topbar {padding: 0.35rem 0 0.2rem 0; margin-bottom: 0.4rem;}
+  .st-key-topbar [data-testid="stPageLink"] a {padding: 0 !important; background: none !important; min-height: 0;}
+  .st-key-topbar [data-testid="stPageLink"] p, .st-key-topbar [data-testid="stPopover"] button p {font-size: 0.86rem; color: #898781;}
+  .st-key-topbar [data-testid="stPageLink"] a:hover p {color: #fff;}
+  .tb-here {font-size: 0.86rem; color: #fff; font-weight: 640;}
+  /* Page links are words: no menu icons in the top line or the loop. */
+  .st-key-topbar [data-testid="stPageLink"] [data-testid="stIconMaterial"],
+  .st-key-loop [data-testid="stPageLink"] [data-testid="stIconMaterial"] {display: none;}
+  [data-testid="stAppDeployButton"] {display: none;}
+  .tb-note {font-size: 0.8rem; color: #5f6570;}
+
+  /* ---- the headline and the loop next to it ------------------------------- */
+  .story-h {font-size: 2.15rem !important; line-height: 1.12 !important; letter-spacing: -0.03em; font-weight: 700 !important;
+      margin: 0.1rem 0 0.4rem 0 !important; padding: 0 !important; max-width: 24ch;}
+  .story-h em {font-style: normal; color: #9ec5f4;}
+  .story-sub {color: #898781; font-size: 0.92rem; max-width: 68ch; margin: 0;}
+  .st-key-loop {position: relative; padding-left: 1.1rem; gap: 0 !important;}
+  .st-key-loop::before {content: ""; position: absolute; left: 0.27rem; top: 0.7rem; bottom: 1.6rem; width: 1px; background: #2c2f36;}
+  .lp {position: relative; display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.86rem; color: #898781; margin-top: 0.35rem;}
+  .lp::before {content: ""; position: absolute; left: -1.1rem; top: 0.38rem; width: 9px; height: 9px; border-radius: 50%;
+      background: #000; border: 1.5px solid #4a4f59;}
+  .lp.on::before {background: #3987e5; border-color: #3987e5; box-shadow: 0 0 0 3px rgba(57,135,229,.22);}
+  .lp-i {font-size: 0.7rem; color: #5f6570; font-weight: 700;}
+  .lp-n {flex: 1;} .lp.on .lp-n {color: #fff; font-weight: 640;}
+  .lp-v {color: #c3c2b7; font-weight: 640; font-variant-numeric: tabular-nums;} .lp.on .lp-v {color: #fff;}
+  [class*="st-key-lp_pages_"] {gap: 0.15rem 0.8rem !important; margin-top: -0.2rem;}
+  [class*="st-key-lp_pages_"] [data-testid="stPageLink"] a {padding: 0 !important; background: none !important; min-height: 0;}
+  [class*="st-key-lp_pages_"] [data-testid="stPageLink"] p {font-size: 0.76rem; color: #5f6570;}
+  [class*="st-key-lp_pages_"] [data-testid="stPageLink"] a:hover p {color: #fff;}
+  .lp-here {font-size: 0.76rem; color: #9ec5f4;}
+  .lp-again {font-size: 0.7rem; color: #5f6570; margin-top: 0.3rem;}
+  [data-testid="stMarkdownContainer"]:has(> .lp), [data-testid="stMarkdownContainer"]:has(> .lp-again),
+  [data-testid="stMarkdownContainer"]:has(> .lp-here), [data-testid="stMarkdownContainer"]:has(> .tb-here),
+  [data-testid="stMarkdownContainer"]:has(> .tb-note), [data-testid="stMarkdownContainer"]:has(> .story-more-note),
+  [data-testid="stMarkdownContainer"]:has(> .story-h) {margin-bottom: 0 !important;}
+
+  /* ---- buttons, variant C: no boxes. A thick blue rule under the main action, a dotted one under the rest. */
+  [data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-primary"], [data-testid="stBaseButton-tertiary"],
+  [data-testid="stPopoverButton"], [data-testid="stBaseButton-borderlessIcon"],
+  [data-testid="stDownloadButton"] button, [data-testid="stFormSubmitButton"] button {
+      background: none !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+      padding: 0 0 3px 0 !important; min-height: 0 !important; color: #c3c2b7 !important;
+      border-bottom: 2px dotted #4a4f59 !important; transition: border-color .15s, color .15s;}
+  [data-testid="stBaseButton-secondary"] p, [data-testid="stBaseButton-primary"] p, [data-testid="stPopoverButton"] p {font-weight: 620;}
+  [data-testid="stBaseButton-secondary"]:hover, [data-testid="stBaseButton-tertiary"]:hover, [data-testid="stPopoverButton"]:hover,
+  [data-testid="stDownloadButton"] button:hover, [data-testid="stFormSubmitButton"] button:hover {
+      color: #fff !important; border-bottom-color: #9ec5f4 !important;}
+  [data-testid="stBaseButton-primary"] {color: #fff !important; border-bottom: 3px solid #3987e5 !important;}
+  [data-testid="stBaseButton-primary"]:hover {border-bottom-color: #9ec5f4 !important;}
+  /* Icons in a tile's header stay icons: no rule under a "?" */
+  [class*="st-key-wgthd_"] button, [data-testid="stPopoverButton"]:has(> div > [data-testid="stIconMaterial"]:only-child) {
+      border-bottom: 0 !important; padding: 0 0.25rem !important;}
+  /* Choices (range, language, view switch): words, the chosen one underlined in blue. */
+  [data-testid="stButtonGroup"] button {background: none !important; border: 0 !important; box-shadow: none !important;
+      border-radius: 0 !important; padding: 0 0.1rem 3px 0.1rem !important; min-height: 0 !important; color: #5f6570 !important;
+      border-bottom: 2px solid transparent !important;}
+  [data-testid="stButtonGroup"] button:hover {color: #c3c2b7 !important;}
+  [data-testid="stButtonGroup"] [data-testid$="Active"] {color: #fff !important; border-bottom-color: #3987e5 !important;}
+  [data-testid="stButtonGroup"] > div {gap: 0.9rem !important;}
+  [data-testid="stButtonGroup"] p {font-size: 0.84rem;}
+
+  /* ---- details: a layer over the page, the old tiles in it without boxes ---- */
+  [data-testid="stDialog"] {background: rgba(0,0,0,0.94) !important;}
+  [data-testid="stDialog"] > div {background: #000 !important; box-shadow: none !important; border: 0 !important;}
+  [data-testid="stDialog"] div[role="dialog"] {width: min(1320px, 96vw) !important; max-width: none !important;
+      background: #000 !important; border: 0 !important; box-shadow: none !important; border-radius: 0 !important;}
+  [data-testid="stDialog"] [class*="st-key-wgt_"], [data-testid="stDialog"] [class*="st-key-kpi_"],
+  [data-testid="stDialog"] [class*="st-key-pnl_"] {background: transparent !important; border: 0 !important;
+      border-top: 1px solid #1f2126 !important; border-radius: 0 !important; box-shadow: none !important;
+      padding-left: 0; padding-right: 0; animation: none;}
+  [data-testid="stDialog"] [class*="st-key-wgt_"]:hover, [data-testid="stDialog"] [class*="st-key-kpi_"]:hover {transform: none;}
+  [class*="st-key-story_more_"] {margin-top: 0.4rem; padding-top: 0.6rem; border-top: 1px solid #16181b; gap: 0.8rem !important;}
+  .story-more-note {font-size: 0.8rem; color: #5f6570;}
+
+  /* ---- "Dalej": words with an arrow, no boxes ------------------------------ */
+  .st-key-guide_next {margin-top: 0.8rem !important; padding-top: 0.6rem !important; border-top: 0 !important; gap: 1.6rem !important;}
 </style>
 """
 
@@ -308,23 +392,26 @@ def clip(frame: pd.DataFrame, column: str = "day") -> pd.DataFrame:
 
 
 def range_picker() -> None:
-    """The one global filter, rendered once in the sidebar."""
-    st.sidebar.radio(
+    """The one global filter, in the top line (story.topbar)."""
+    if st.session_state.get("range_choice") not in WINDOWS:
+        st.session_state["range_choice"] = "90d"
+    st.segmented_control(
         i18n.tr(pl="Zakres", en="Range"),
         list(WINDOWS),
-        index=1,
+        required=True,
         key="range_choice",
         format_func=_window_label,
-        horizontal=True,
+        label_visibility="collapsed",
     )
 
 
 def language_picker() -> None:
     """Interface language, remembered for the next tab (i18n.py)."""
-    st.sidebar.segmented_control(
+    st.segmented_control(
         i18n.tr(pl="Język", en="Language"),
         list(i18n.LANGS),
         default=i18n.lang(),
+        required=True,
         key=i18n.KEY,
         format_func=lambda code: code.upper(),
         on_change=lambda: i18n.remember(st.session_state.get(i18n.KEY)),
@@ -332,28 +419,38 @@ def language_picker() -> None:
     )
 
 
-def footer() -> None:
-    """Warehouse status, kept out of the canvas."""
-    info = state()
-    st.sidebar.divider()
-    days, activities, routes = (int(info.get(k, 0) or 0) for k in ("days", "activities", "routes"))
-    counts = " · ".join([
-        f"**{days}** {i18n.plural(days, pl=('dzień', 'dni', 'dni'), en=('day', 'days'))}",
-        f"**{activities}** "
-        f"{i18n.plural(activities, pl=('aktywność', 'aktywności', 'aktywności'), en=('activity', 'activities'))}",
-        f"**{routes}** {i18n.plural(routes, pl=('trasa', 'trasy', 'tras'), en=('route', 'routes'))}",
-    ])
-    st.sidebar.caption(
-        f"{counts}\n\n"
-        f"{info.get('first_day')} → {info.get('last_day')}\n\n"
-        + i18n.tr(pl="zbudowano", en="built") + f": {info.get('built_at', '—')}"
-    )
+def pull_inline(was_busy: bool) -> None:
+    """The Garmin pull in the top line: one link, the time of the last pull next to it (sync.py)."""
     busy = sync.running()
-    with st.sidebar:
-        # Polls the lock file: every few seconds while a pull runs (to reload
-        # the page when it ends), once a minute otherwise (to notice the
-        # timer starting one).
-        st.fragment(run_every=3 if busy else 60)(_pull)(busy)
+    if busy != was_busy:
+        st.rerun()
+    record = sync.last()
+    tr = i18n.tr
+    with st.container(horizontal=True, key="tb_pull", vertical_alignment="center", gap="small"):
+        if busy:
+            st.markdown(f"<span class='tb-note'>{tr(pl='Pobieranie z Garmina…', en='Pulling from Garmin…')} "
+                        f"{tr(pl='od', en='since')} {_stamp(record.get('started_at'))}</span>",
+                        unsafe_allow_html=True, width="content")
+            return
+        if st.button(tr(pl="Pobierz z Garmina", en="Pull from Garmin"), key="pull_garmin"):
+            sync.start()
+            st.rerun()
+        if record.get("code") == 2:
+            note = tr(pl="token wygasł — etl/login.py", en="token expired — etl/login.py")
+        elif record and record.get("code") != 0:
+            note = tr(pl="ostatnie pobranie nie powiodło się — data/fetch.log", en="the last pull failed — data/fetch.log")
+        else:
+            note = _stamp(record.get("finished_at"))
+        st.markdown(f"<span class='tb-note'>{note}</span>", unsafe_allow_html=True, width="content")
+
+
+def status_lines() -> str:
+    """The warehouse in one line (the lab menu shows it)."""
+    info = state()
+    days, activities = (int(info.get(k, 0) or 0) for k in ("days", "activities"))
+    return (f"{days} {i18n.plural(days, pl=('dzień', 'dni', 'dni'), en=('day', 'days'))} · {activities} "
+            f"{i18n.plural(activities, pl=('aktywność', 'aktywności', 'aktywności'), en=('activity', 'activities'))} · "
+            + i18n.tr(pl="zbudowano", en="built") + f" {_stamp(info.get('built_at'))}")
 
 
 def _stamp(value: str | None) -> str:
