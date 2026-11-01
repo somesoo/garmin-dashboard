@@ -44,7 +44,7 @@ def recent_disciplines(sessions: pd.DataFrame, now: pd.Timestamp) -> set[str]:
 def render() -> None:
     tr = i18n.tr
     today, now = dt.date.today(), pd.Timestamp.now().floor("min")
-    bento.header(i18n.page("sport"), tr(
+    bento.header(i18n.view("sport"), tr(
         pl="Gotowość na każdy trening, nie tylko bieg — i co z tego wynika: trzy pomysły z tego, co już uprawiasz, "
            "coś nowego do spróbowania i to, czego brakowało w ostatnich tygodniach.",
         en="Readiness for any training, not just a run — and what follows: three ideas from what you already do, "

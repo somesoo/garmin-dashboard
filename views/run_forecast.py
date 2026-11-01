@@ -13,7 +13,7 @@ import routing
 import shell
 import theme as tz
 from running import forecast, physio, units
-from views import run_common as rc
+from views import physio as physio_view, run_common as rc, trends
 
 
 def render() -> None:
@@ -58,6 +58,14 @@ def render() -> None:
     with right:
         _methods(result, item)
         _anchor(result)
+
+    # What Garmin itself estimates, for comparison with the model above.
+    view = shell.clip(shell.daily())
+    left, right = bento.row(2, 2)
+    with left:
+        physio_view.predictions()
+    with right:
+        trends.vo2max(view, rows=2)
 
     _table(result, history)
     with bento.panel(tr(pl="Przygotowanie i założenia modelu", en="Preparation and the model's assumptions"),
@@ -124,10 +132,10 @@ def _table(result: dict, history: pd.DataFrame) -> None:
         caption=tr(pl="Nagłówki kolumn mają podpowiedzi po najechaniu.", en="Column headers have tooltips on hover."),
         terms=["realistic", "interval80", "confidence", "potential", "preparation", "vdot", "after_plan"],
         how=tr(pl="Zmiana 4/12 tyg.: ujemna = prognoza szybsza niż wtedy. „Na dzień startu” pojawia się tylko dla "
-                  "dystansu z wpisanym startem (strona Zawody, najbliższy): po planie, gdy plan obejmuje start, "
+                  "dystansu z wpisanym startem (Plan i zawody → Zawody i cele, najbliższy): po planie, gdy plan obejmuje start, "
                   "inaczej przy obecnym treningu.",
                en="Change 4/12 wk: negative = the forecast is faster than then. “On race day” appears only for a "
-                  "distance with a race entered (the Races page, the nearest one): after the plan when the plan "
+                  "distance with a race entered (Plan and races → Races and goals, the nearest one): after the plan when the plan "
                   "covers the race, otherwise with the current training."),
     ):
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", column_config=_columns())
@@ -158,9 +166,9 @@ def _confidence(result: dict, item: forecast.DistanceForecast) -> None:
         caption=tr(pl=f"{sure} · 8 na 10 startów między {low} a {high} (±{pm})",
                    en=f"{sure} · 8 races in 10 between {low} and {high} (±{pm})"),
         how=tr(pl="Najszybciej podnosi pewność mocny bieg (start, test) na dystansie bliskim docelowemu, powiązany "
-                  "ze startem na stronie Zawody.",
+                  "ze startem w zakładce Zawody i cele.",
                en="The fastest way to raise confidence is a hard run (a race, a test) at a distance close to the "
-                  "target, linked to a race on the Races page."),
+                  "target, linked to a race under Races and goals."),
     ):
         if reasons:
             note = tr(pl="Co poszerza przedział, od największego:", en="What widens the range, largest first:")

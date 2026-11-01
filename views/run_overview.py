@@ -13,7 +13,7 @@ import routing
 import shell
 import theme as tz
 from running import coach, sessions, units
-from views import run_common as rc
+from views import activities, run_common as rc
 
 WINDOWS = {"7d": 7, "30d": 30, "90d": 90}
 
@@ -52,6 +52,8 @@ def render() -> None:
                                            en="Click a row to open the session details.")):
         recent = frame.sort_values("start_local").tail(bento.table_rows(2))
         rc.pickable_runs(recent, key="overview_runs", height=bento.table_height(len(recent)), hint=False)
+
+    activities.run_charts(shell.clip(shell.table("activities")))
 
 
 def _volume_strip(frame: pd.DataFrame, end: pd.Timestamp) -> None:

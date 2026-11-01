@@ -161,7 +161,7 @@ def reason(value: Any) -> str:
     block = f"{get('km', 0):.1f} km" if get("km") is not None else ""
     name = get("name", "")
     texts = {
-        "manual": lambda: tr(pl="oznaczone ręcznie na stronie Zawody", en="marked by hand on the Races page"),
+        "manual": lambda: tr(pl="oznaczone ręcznie w zakładce Zawody i cele", en="marked by hand under Races and goals"),
         "name_race": lambda: tr(pl=f"nazwa „{name}” wskazuje na start lub test",
                                 en=f"the name “{name}” points to a race or a test"),
         "watch_reps": lambda: tr(pl=f"workout z zegarka: {get('reps')} powtórzeń z przerwami",
@@ -740,11 +740,11 @@ def warning(item: Any) -> str:
     if key == "close_a_races":
         first, second, weeks = item.get("first"), item.get("second"), f"{item.get('weeks', 0):g}".replace(".", ",")
         return tr(pl=f"„{first}” i „{second}” to oba starty A, {weeks} tyg. od siebie. Na dwa szczyty to za mało: "
-                     "drugi blok to tylko regeneracja, tydzień budowy i taper. Zmień jeden z nich na B na stronie "
-                     "Zawody — wtedy plan buduje przez niego do głównego celu (B: tylko lżejszy tydzień startu).",
+                     "drugi blok to tylko regeneracja, tydzień budowy i taper. Zmień jeden z nich na B w zakładce "
+                     "Zawody i cele — wtedy plan buduje przez niego do głównego celu (B: tylko lżejszy tydzień startu).",
                   en=f"“{first}” and “{second}” are both A races, {item.get('weeks', 0):g} weeks apart. That is too "
                      "little for two peaks: the second block is only recovery, a build week and a taper. Make one of "
-                     "them B on the Races page — the plan then builds through it to the main goal (B: only a lighter "
+                     "them B under Races and goals — the plan then builds through it to the main goal (B: only a lighter "
                      "race week).")
     if key == "custom":
         return str(item.get(i18n.lang()) or item.get("pl") or "")

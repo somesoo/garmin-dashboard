@@ -15,7 +15,7 @@ from views import sport as sp
 
 def render() -> None:
     tr = i18n.tr
-    bento.header(i18n.page("dyscypliny"), tr(
+    bento.header(i18n.view("dyscypliny"), tr(
         pl="Na co idzie czas, jak różnorodnie się ruszasz i co z katalogu jeszcze czeka — z tym, co trenuje "
            "i czego wymaga.",
         en="Where the time goes, how varied your movement is and what in the catalogue is still waiting — with "

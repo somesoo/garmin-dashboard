@@ -25,12 +25,14 @@ garmin-dashboard/
   i18n.py            język interfejsu (pl/en): tr(pl=, en=), plural, miesiące, tytuły stron
   glossary_en.py     angielski tekst słownika pojęć (te same klucze co glossary.TERMS)
   app.py             router (st.navigation) — bez logiki widoków
+  guide.py           prowadzenie: pytanie strony, pasek „Dalej”, przewodnik na Dziś
   routing.py         rejestr stron: przejście z widoku do widoku bez reloadu
   globe.py           opakowanie komponentu globu (dane + motyw + klik)
   globe_component/   statyczny komponent: index.html, globe.js, world.json,
                      vendor/ (d3-geo, d3-array), test.html (podgląd renderera)
   views/             po jednym module na stronę (atlas, routes, form, ...);
-                     run_*.py to grupa „Bieganie”
+                     run_*.py to grupa „Bieganie”, hubs.py — dwa widoki pod
+                     jednym wpisem menu; activities/trends to już tylko kafle
   running/           logika modułu biegowego (bez Streamlita): klasyfikacja,
                      prognoza, plan, biblioteka treningów (`library.py`),
                      magazyn celów, brief dla asystenta
@@ -364,7 +366,7 @@ Zachowania, które wyglądają jak magia, ale są celowe:
   `theme.backgroundColor` to kolor *wnętrza* widżetów (tabele, popovery) =
   kolor kafla; czarną stronę maluje `shell.page_style`.
 
-## Glob na stronie Atlas
+## Glob na stronie Historia (`atlas`)
 
 Hero Atlasu nie jest figurą plotly — to własny komponent Streamlita
 (`globe.py` + `globe_component/`). Powód jest wydajnościowy: obracający się
@@ -406,7 +408,7 @@ Jak to jest poskładane:
   osobnej mapy gęstości — to jest ta mapa.
 - **Strona *Trasy* nie ma wpisu w menu** (`st.Page(..., visibility="hidden")`):
   to szczegół jednej aktywności (mapa kolorowana metryką, profil, strumienie),
-  otwierany klikiem w wiersz Dziennika (*Aktywności*), w trening na globie
+  otwierany klikiem w wiersz Dziennika (pod globem na *Historii*), w trening na globie
   i przyciskiem „Mapa trasy” w *Treningu*; dla biegu ma powrót „Analiza
   treningu”. Jedyny widok szczegółów dla sportów innych niż bieg.
 - **Zoom**: kółko myszy, pinch na touchpadzie (Chrome/Firefox: ctrl+wheel,
@@ -487,7 +489,36 @@ z bounding boxu po wzorze Web Mercatora dla kafli 512 px (MapLibre); stała
 `app.py` jest wyłącznie routerem: strony to `st.Page` wskazujące na
 `views/<nazwa>.render`. Dodanie strony = nowy moduł w `views/` + wpis w `PAGES`
 (z własnym `url_path`, bo wszystkie funkcje nazywają się `render` i inaczej
-kolidują ścieżkami).
+kolidują ścieżkami) + pytanie i linki „Dalej” w `guide.py` (test pilnuje).
+
+**Menu jest ułożone według pytań, nie rodzajów danych** (przebudowa 2026-11-01,
+z 21 wpisów do 15): *Na co dzień* (Dziś, Sport, Historia), *Bieganie* (przegląd,
+Plan i zawody, prognoza, segmenty, Obciążenie), *Ciało* (Regeneracja, Sen),
+*Laboratorium* (Fizjologia, Statystyka, Insights, SQL, Słownik).
+
+- **Dwa widoki pod jednym wpisem** (`views/hubs.py`, `bento.switch` nad
+  nagłówkiem): Plan | Zawody i cele, Obciążenie biegowe | Forma (wszystkie
+  sporty), Gotowość i propozycje | Dyscypliny. Moduły widoków zostały osobne.
+  Tytuł wpisu w menu to `i18n.page(url)`, tytuł widoku `i18n.view(klucz)`.
+  Inna strona otwiera konkretny widok przez
+  `routing.goto_view(url, hubs.PLAN, "races")` (żądanie czeka pod
+  `<klucz>_request`, bo widżetu nie da się nadpisać w tym samym przebiegu).
+- **Strony szczegółów nie mają wpisu** (`visibility="hidden"`): *Trasy*
+  i *Trening* (`bieg`) — otwierane z list, globu i linków.
+- **Wchłonięte strony**: Aktywności → Dziennik pod globem na *Historii*
+  (`activities.log`) + dwa wykresy biegowe na przeglądzie biegania
+  (`activities.run_charts`); Trendy → długość snu na *Śnie*, kroki, masa ciała
+  i tabela tygodniowa na dole *Regeneracji*, VO2max obok prognoz Garmina na
+  *Prognozie* (`trends.*`, `physio.predictions`). Atlas nie ma już kafli HRV
+  i obciążenia — ich domem jest Regeneracja i Obciążenie.
+- **Prowadzenie gościa (`guide.py`)**, wołane przez router wokół każdej
+  strony: pytanie nad tytułem (`eyebrow`), pasek **Dalej** na dole
+  (`next_steps`: stałe `NEXT`, na *Dziś* liczone ze stanu — brak startu, start
+  ≤ 6 tyg., słaba noc) i przewodnik „Jak czytać ten dashboard” na *Dziś* do
+  schowania (`tour_done` w `data/ui.json`; przycisk w szynie przywraca).
+- **Strona domyślna ma w Streamlicie `url_path == ""`** — dlatego `_page`
+  przechodzi przez `routing.named`, a router pyta `routing.name(page)`. Bez tego
+  `routing.goto("dzis")` nie znajdował strony.
 
 Zasady układu, które trzymają spójność:
 
@@ -535,11 +566,13 @@ Zasady układu, które trzymają spójność:
 - Nowy wskaźnik = nowe hasło w `glossary.py` (co / po co / jak czytać);
   `tests/test_glossary.py` pilnuje, że każdy klucz z `terms=[...]` istnieje.
   Wszystko widać też na stronie *Słownik*. Tytuł nigdy nie idzie do figury.
-- *Dziś* (`views/today.py`) jest stroną startową: decyzja dnia to
-  `coach.next_session`, przyciski kafla wołają `plan.soften` / `plan.postpone`
-  (pojedyncza sesja, z regułą „mocne dni nie sąsiadują”).
-- Glob w *Atlasie* zostaje poza kaflem (hero na pełną szerokość w `globe_stage`,
-  na płaskim tle — bez poświaty), reszta Atlasu to zwykła mozaika.
+- *Dziś* (`views/today.py`) jest stroną startową i **jedyną odpowiedzią na „co
+  dziś”**: decyzja dnia to `coach.next_session`, przyciski kafla wołają
+  `plan.soften` / `plan.postpone` (pojedyncza sesja, z regułą „mocne dni nie
+  sąsiadują”); kafel „Poza bieganiem” bierze ranking z `sport/` — w dzień z
+  biegiem tylko dodatek, w dzień bez biegu dwie propozycje.
+- Glob na *Historii* zostaje poza kaflem (hero na pełną szerokość w `globe_stage`,
+  na płaskim tle — bez poświaty), reszta strony to zwykła mozaika i Dziennik.
 - **Chrome w szynie bocznej**: nawigacja, jeden globalny zakres czasu
   (`shell.range_picker`) i status hurtowni (`shell.footer`). Kanwa nie
   rezerwuje miejsca na kontrolki.

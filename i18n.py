@@ -34,9 +34,9 @@ SETTINGS = config.DATA / "ui.json"
 
 # Modules whose user-facing text is fully bilingual; the test keeps them so.
 # glossary.py is bilingual through glossary_en.py (its own parity test).
-BILINGUAL = ["app.py", "shell.py", "bento.py", "routing.py", "theme.py", "globe.py",
+BILINGUAL = ["app.py", "shell.py", "bento.py", "routing.py", "theme.py", "globe.py", "guide.py",
              *(f"views/{name}.py" for name in (
-                 "activities", "atlas", "form", "notebook", "physio", "recovery", "reference", "routes",
+                 "activities", "atlas", "form", "hubs", "notebook", "physio", "recovery", "reference", "routes",
                  "run_common", "run_forecast", "run_load", "run_overview", "run_plan", "run_races", "run_segments",
                  "run_session", "sleep", "sport", "sport_disciplines", "stats", "today", "trends")),
              *(f"sport/{name}.py" for name in ("catalog", "readiness", "recommend", "store", "text", "variety")),
@@ -157,36 +157,39 @@ def day_month(day: Any) -> str:
 # Menu groups and page titles, by the page's url_path. The url paths stay
 # Polish in both languages: they are addresses, and links keep working.
 _GROUPS = {
-    "overview": ("Przegląd", "Overview"),
+    "everyday": ("Na co dzień", "Everyday"),
     "running": ("Bieganie", "Running"),
-    "sport": ("Sport", "Sport"),
     "body": ("Ciało", "Body"),
-    "training": ("Trening", "Training"),
-    "analysis": ("Analiza", "Analysis"),
+    "lab": ("Laboratorium", "Lab"),
 }
 _PAGES = {
     "dzis": ("Dziś", "Today"),
-    "atlas": ("Atlas", "Atlas"),
+    "sport": ("Sport", "Sport"),
+    "atlas": ("Historia", "History"),
     "trasy": ("Trasy", "Routes"),
-    "aktywnosci": ("Aktywności", "Activities"),
-    "bieganie": ("Bieganie", "Running"),
+    "bieganie": ("Przegląd biegania", "Running overview"),
+    "plan": ("Plan i zawody", "Plan and races"),
     "prognoza": ("Prognoza wyników", "Race forecast"),
-    "plan": ("Plan treningowy", "Training plan"),
-    "zawody": ("Zawody i cele", "Races and goals"),
     "bieg": ("Trening", "Workout"),
     "segmenty": ("Segmenty", "Segments"),
-    "obciazenie-biegowe": ("Obciążenie biegowe", "Running load"),
-    "sport": ("Gotowość i propozycje", "Readiness and ideas"),
-    "dyscypliny": ("Dyscypliny", "Disciplines"),
+    "obciazenie-biegowe": ("Obciążenie", "Load"),
     "regeneracja": ("Regeneracja", "Recovery"),
     "sen": ("Rytm i sen", "Rhythm and sleep"),
-    "trendy": ("Trendy", "Trends"),
-    "forma": ("Forma", "Form"),
     "fizjologia": ("Fizjologia", "Physiology"),
     "statystyka": ("Statystyka", "Statistics"),
     "insights": ("Insights", "Insights"),
     "sql": ("SQL", "SQL"),
     "slownik": ("Słownik", "Glossary"),
+}
+# Views that share one menu entry (views/hubs.py): the switch label and the
+# view's own header.
+_VIEWS = {
+    "plan": ("Plan treningowy", "Training plan"),
+    "zawody": ("Zawody i cele", "Races and goals"),
+    "obciazenie-biegowe": ("Obciążenie biegowe", "Running load"),
+    "forma": ("Forma — wszystkie sporty", "Form — all sports"),
+    "sport": ("Gotowość i propozycje", "Readiness and ideas"),
+    "dyscypliny": ("Dyscypliny", "Disciplines"),
 }
 
 
@@ -198,4 +201,10 @@ def group(key: str) -> str:
 def page(url_path: str) -> str:
     """A page's title: the menu entry and the page header say the same."""
     pl, en = _PAGES[url_path]
+    return tr(pl=pl, en=en)
+
+
+def view(key: str) -> str:
+    """The title of one view inside a shared menu entry (Plan / Zawody…)."""
+    pl, en = _VIEWS[key]
     return tr(pl=pl, en=en)

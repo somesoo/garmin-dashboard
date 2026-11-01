@@ -318,9 +318,9 @@ def data_gaps(runs: pd.DataFrame, daily: pd.DataFrame, result: dict[str, Any],
                           "rate trend are less certain."))
     if not (runs.get("kind") == "race").any():
         gaps.append(tr(pl="Żaden bieg nie jest oznaczony jako start — prognoza opiera się na odcinkach treningowych. "
-                          "Wynik z zawodów dopisz na stronie Zawody (powiązanie z aktywnością).",
+                          "Wynik z zawodów dopisz w zakładce Zawody i cele (powiązanie z aktywnością).",
                        en="No run is marked as a race — the forecast rests on training stretches. Add a race result "
-                          "on the Races page (linked to the activity)."))
+                          "under Races and goals (linked to the activity)."))
     gaps.append(tr(pl="Odczuwane zmęczenie (RPE), ból i dolegliwości nie są zapisywane — nie ma ich w Garminie.",
                    en="Perceived exertion (RPE), pain and complaints are not recorded — Garmin does not have them."))
     if laps is None or laps.empty:

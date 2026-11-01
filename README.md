@@ -75,11 +75,11 @@ Bez tokenów wystarczy raz `.venv/bin/python etl/login.py`.
 | modele i statystyka | `analytics.py` | `pmc`, `load_weekly`, `critical_speed`, `riegel`, `efficiency`, `correlations`, `acf`, `changepoints`, `weekday_effects`, `circadian`, `sleep_regularity`, `intensity_distribution`, `quadrants`, `models.json` |
 | zapytania | `db.py` | DuckDB in-memory z widokami na parquet |
 | system wykresów | `theme.py` | paleta, buildery, mapy, glob — jedno miejsce na wygląd |
-| widoki | `app.py` + `views/` | router `st.navigation` i 11 stron |
+| widoki | `app.py` + `views/` + `guide.py` | router `st.navigation`: 4 grupy menu, prowadzenie po stronach |
 
 ### Co liczy warstwa analityczna
 
-- **Forma**: Performance Management Chart (CTL 42 d / ATL 7 d / TSB), tempo
+- **Forma** (Obciążenie → wszystkie sporty): Performance Management Chart (CTL 42 d / ATL 7 d / TSB), tempo
   narastania CTL, ACWR w dwóch wariantach (kroczący Gabbetta vs wykładniczy
   Williamsa), monotonia i strain Fostera, dopasowanie modelu Banistera
   z własnymi stałymi czasowymi i szacowaną długością taperu.
@@ -96,10 +96,21 @@ Bez tokenów wystarczy raz `.venv/bin/python etl/login.py`.
 - **Trasy**: ślad GPS na mapie kolorowany tempem / tętnem / wysokością, profil
   wysokości, tętno i tempo wzdłuż dystansu. Zmiana kolorowanej metryki nie
   resetuje widoku mapy.
-- **Atlas** (strona startowa): obrotowy glob ze skupiskami wszystkich aktywności,
+- **Historia**: obrotowy glob ze skupiskami wszystkich aktywności,
   który po przybliżeniu miasta zamienia się w mapę ciepła tras (ile razy
   przebiegnięty jest każdy odcinek), z filtrem sportu i przelotem do miast;
-  dalej stan na dziś, ranking miejsc i ostatnie treningi.
+  pod nim ranking miejsc, godziny według dyscypliny i pełny dziennik.
+
+### Jak się poruszać
+
+Stroną startową jest **Dziś**: trening z planu, stan regeneracji i propozycja
+z innych sportów. Przy pierwszym wejściu pokazuje się na niej krótki przewodnik
+(„Jak czytać ten dashboard”, do przywrócenia z szyny bocznej). Menu ma cztery
+grupy: **Na co dzień** (Dziś, Sport, Historia), **Bieganie** (przegląd, plan
+i zawody, prognoza, segmenty, obciążenie), **Ciało** (regeneracja, sen)
+i **Laboratorium** (fizjologia, statystyka, insights, SQL, słownik). Nad
+tytułem każdej strony jest pytanie, na które odpowiada, a na dole pasek
+**Dalej** z kolejnymi krokami.
 
 Surowy JSON jest źródłem prawdy — mapowanie można przepisać i odtworzyć tabele
 bez odpytywania API. Dzień raz pobrany nie jest pobierany ponownie, poza oknem

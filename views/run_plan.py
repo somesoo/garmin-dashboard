@@ -14,7 +14,7 @@ import shell
 import theme as tz
 import config
 from running import coach, forecast, garmin_workout as gw, library, plan as planning, store, text, units
-from views import run_common as rc
+from views import hubs, run_common as rc
 
 STATUS_ICONS = rc.STATUS_ICONS
 
@@ -33,12 +33,12 @@ _adjustment = text.adjustment_label
 def render() -> None:
     tr = i18n.tr
     bento.header(
-        i18n.page("plan"),
-        tr(pl="Jeden plan przez wszystkie starty ze strony Zawody. Startuje od tego, co faktycznie biegasz, rośnie do "
+        i18n.view("plan"),
+        tr(pl="Jeden plan przez wszystkie starty z zakładki Zawody i cele. Startuje od tego, co faktycznie biegasz, rośnie do "
               "szczytu dystansu (żaden bieg > 1,1× najdłuższego z 30 dni), akcenty z tygodnia na tydzień trudniejsze, "
               "siłownia 1–2× w tygodniu, przed każdym startem schodzi z objętości. Tempa z aktualnej formy, nie z "
               "celu.",
-           en="One plan through every race on the Races page. It starts from what you actually run, grows to the "
+           en="One plan through every race under Races and goals. It starts from what you actually run, grows to the "
               "distance's peak (no run > 1.1× the longest of 30 days), quality sessions get harder week by week, "
               "strength 1–2× a week, and it eases off before each race. Paces from your current form, not from the "
               "goal."),
@@ -99,13 +99,13 @@ def _create(frame: pd.DataFrame, result: dict, active: dict | None) -> None:
         return
     races = rc.upcoming_races(dt.date.today() + dt.timedelta(days=1))
     if not races:
-        st.info(tr(pl="Plan buduje się do startów — dodaj pierwszy na stronie Zawody.",
-                   en="The plan builds toward races — add the first one on the Races page."))
+        st.info(tr(pl="Plan buduje się do startów — dodaj pierwszy w zakładce Zawody i cele.",
+                   en="The plan builds toward races — add the first one under Races and goals."))
         if st.button(tr(pl="Zawody →", en="Races →"), key="plan_to_races"):
-            routing.goto("zawody")
+            routing.goto_view("plan", hubs.PLAN, "races")
         return
-    st.markdown(tr(pl="**Cele** (ze strony Zawody; dodanie, zmiana albo usunięcie startu przebudowuje plan od jutra):",
-                   en="**Goals** (from the Races page; adding, changing or removing a race rebuilds the plan from "
+    st.markdown(tr(pl="**Cele** (z zakładki Zawody i cele; dodanie, zmiana albo usunięcie startu przebudowuje plan od jutra):",
+                   en="**Goals** (from Races and goals; adding, changing or removing a race rebuilds the plan from "
                       "tomorrow):"))
     st.markdown("\n".join(
         f"- **{r['name']}** · {rc.race_label(r['distance'])} · {dt.date.fromisoformat(r['date']):%d.%m.%Y} · "

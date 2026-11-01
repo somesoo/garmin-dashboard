@@ -1,4 +1,5 @@
-"""Recovery: HRV, resting heart rate, readiness and the quadrants they form."""
+"""Recovery: HRV, resting heart rate, readiness and the quadrants they form;
+steps, body weight and the weekly table at the bottom (they move over months)."""
 
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import glossary
 import i18n
 import shell
 import theme as tz
+from views import trends
 
 
 def _status(value: float | None, low: float | None, high: float | None) -> str:
@@ -130,6 +132,14 @@ def render() -> None:
             t.chart(tz.trend(view, "day", {tr(pl="dzień", en="day"): ("stress_avg", "stress_avg_roll7"),
                                            tr(pl="sen", en="sleep"): ("sleep_stress", "sleep_stress_roll7")}),
                     table=view[["day", "stress_avg", "sleep_stress"]].tail(40))
+
+    # Slow-moving numbers: they change over months, so they close the page.
+    left, right = bento.row(2, 2)
+    with left:
+        trends.steps(view)
+    with right:
+        trends.weight(view)
+    trends.weekly(view)
 
 
 def _status_line(value: float | None, unit: str, low=None, high=None) -> str | None:

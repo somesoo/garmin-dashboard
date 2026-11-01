@@ -32,13 +32,12 @@ PY = sys.executable
 MB = 1024 * 1024
 
 PAGES = {
-    "Dziś": "today.render()", "Atlas": "atlas.render()", "Trasy": "routes.render()",
-    "Aktywności": "activities.render()", "Bieganie": "run_overview.render()",
-    "Prognoza": "run_forecast.render()", "Plan": "run_plan.render()", "Zawody": "run_races.render()",
-    "Trening": "run_session.render()", "Obciążenie": "run_load.render()", "Regeneracja": "recovery.render()",
-    "Sen": "sleep.render()", "Trendy": "trends.render()", "Forma": "form.render()",
-    "Fizjologia": "physio.render()", "Statystyka": "stats.render()", "Insights": "notebook.insights()",
-    "SQL": "notebook.sql()", "Słownik": "reference.render()",
+    "Dziś": "today.render()", "Sport": "hubs.sports()", "Historia": "atlas.render()", "Trasy": "routes.render()",
+    "Bieganie": "run_overview.render()", "Plan": "hubs.plan()", "Zawody": "run_races.render()",
+    "Prognoza": "run_forecast.render()", "Trening": "run_session.render()", "Segmenty": "run_segments.render()",
+    "Obciążenie": "hubs.load()", "Forma": "form.render()", "Regeneracja": "recovery.render()",
+    "Sen": "sleep.render()", "Fizjologia": "physio.render()", "Statystyka": "stats.render()",
+    "Insights": "notebook.insights()", "SQL": "notebook.sql()", "Słownik": "reference.render()",
 }
 
 

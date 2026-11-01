@@ -650,8 +650,8 @@ def generate_goals(
     start = settings.start or (dt.date.today() + dt.timedelta(days=1))
     goals = sorted((g for g in goals if g["date"] >= start.isoformat()), key=lambda g: g["date"])
     if not goals:
-        raise ValueError(tr(pl="Brak startów przed nami — dodaj cel na stronie Zawody.",
-                            en="No races ahead — add a goal on the Races page."))
+        raise ValueError(tr(pl="Brak startów przed nami — dodaj cel w zakładce Zawody i cele.",
+                            en="No races ahead — add a goal under Races and goals."))
     vdot = float(result["vdot"])
     lthr = result.get("lthr")
     zones = physio.hr_zones(result.get("hr_max"), (lthr or {}).get("bpm"))

@@ -11,13 +11,13 @@ import routing
 import shell
 import theme as tz
 from running import plan as planning, sessions
-from views import run_common as rc
+from views import hubs, run_common as rc
 
 
 def render() -> None:
     tr = i18n.tr
     bento.header(
-        i18n.page("obciazenie-biegowe"),
+        i18n.view("obciazenie-biegowe"),
         tr(pl="Wskaźniki pomagają zdecydować, czy dołożyć, czy odpuścić — nie diagnozują przetrenowania ani "
               "kontuzji. Ból, który zmienia sposób biegania, jest ważniejszy niż każdy wykres tutaj.",
            en="The indicators help decide whether to add or back off — they do not diagnose overtraining or injury. "
@@ -158,14 +158,14 @@ def _ratio(frame: pd.DataFrame) -> None:
         caption=tr(pl="Pas 0,8–1,3 to stopniowy przyrost — opis, nie granica bezpieczeństwa.",
                    en="The 0.8–1.3 band is a gradual increase — a description, not a safety limit."),
         how=tr(pl="Przy średniej z 28 dni poniżej 5 km/tydz. iloraz nie jest liczony — po przerwie każdy bieg "
-                  "dawałby „skok”. Obciążenie wszystkich sportów jest na stronie Forma.",
+                  "dawałby „skok”. Obciążenie wszystkich sportów jest w widoku Forma (przełącznik u góry).",
                en="With a 28-day average below 5 km/week the ratio is not computed — after a break every run "
-                  "would be a “jump”. Load across all sports is on the Form page."),
+                  "would be a “jump”. Load across all sports is in the Form view (the switch at the top)."),
     ) as t:
         with t.header:
             if st.button("", icon=":material/arrow_forward:", type="tertiary", key="load_to_form",
                          help=tr(pl="Obciążenie wszystkich sportów (Forma)", en="Load across all sports (Form)")):
-                routing.goto("forma")
+                routing.goto_view("obciazenie-biegowe", hubs.LOAD, "all")
         ratio_label = tr(pl="iloraz", en="ratio")
         figure = tz.timeseries(ratio, "day", {ratio_label: "ratio"}, y_title=ratio_label, end_labels=True,
                                decimals=2)

@@ -13,7 +13,7 @@ import i18n
 import routing
 import theme as tz
 from running import forecast, plan as planning, store, text, units
-from views import run_common as rc
+from views import hubs, run_common as rc
 
 def _priority_help() -> str:
     return i18n.tr(pl="A — start docelowy sezonu, B — ważny sprawdzian, C — start treningowy.",
@@ -25,7 +25,7 @@ def _priority_help() -> str:
 
 def render() -> None:
     bento.header(
-        i18n.page("zawody"),
+        i18n.view("zawody"),
         i18n.tr(pl="Starty zapisane tutaj trafiają do prognozy („po planie”), do planu i do briefu dla asystenta. "
                    "Dane leżą w `data/coach/races.json` — prywatnie, poza gitem.",
                 en="Races saved here feed the forecast (“after the plan”), the plan and the assistant's brief. "
@@ -80,7 +80,7 @@ def _no_plan(upcoming: list[dict], result: dict, today: dt.date) -> None:
             st.caption(tr(pl="Brakuje do celu przy obecnym treningu: ", en="Short of the goal with the current "
                                                                          "training: ") + " · ".join(gaps))
         if st.button(tr(pl="Ułóż plan →", en="Build the plan →"), key="races_build_plan", type="primary"):
-            routing.goto("plan")
+            routing.goto_view("plan", hubs.PLAN, "plan")
 
 
 def _race_card(race: dict, result: dict, today: dt.date, plan: dict | None) -> None:
@@ -163,7 +163,7 @@ def _race_numbers(race: dict, result: dict, today: dt.date, plan: dict | None) -
     columns = st.columns(3)
     if columns[0].button("Plan →" if covered else tr(pl="Ułóż plan →", en="Build the plan →"),
                          key=f"race_plan_{race['id']}", width="stretch"):
-        routing.goto("plan")
+        routing.goto_view("plan", hubs.PLAN, "plan")
     with columns[1].popover(tr(pl="Edytuj", en="Edit"), width="stretch"):
         _race_form(race, key=f"edit_{race['id']}")
     if columns[2].button(tr(pl="Usuń", en="Delete"), key=f"race_delete_{race['id']}", width="stretch"):

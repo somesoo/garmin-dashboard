@@ -168,6 +168,26 @@ def bullets(items: list[str]) -> None:
     st.markdown(f"<ul class='tile-list'>{rows}</ul>", unsafe_allow_html=True)
 
 
+def switch(key: str, options: dict[str, str]) -> str:
+    """Views that share one menu entry (Plan | Zawody): a segmented control
+    above the view's own header. Returns the chosen key, the first by default.
+
+    Another page opens a given view through ``routing.goto(url, **{f"{key}_request": view})``:
+    the widget key itself cannot be written once the widget exists in the run
+    that asks for the switch, so the request waits under its own key.
+    """
+    wanted = st.session_state.pop(f"{key}_request", None)
+    first = next(iter(options))
+    if wanted in options:
+        st.session_state[key] = wanted
+    elif st.session_state.get(key) not in options:
+        st.session_state[key] = first
+    with st.container(key=f"viewswitch_{key}"):
+        choice = st.segmented_control(i18n.tr(pl="Widok", en="View"), list(options), key=key,
+                                      format_func=options.get, label_visibility="collapsed")
+    return choice or first
+
+
 def header(title: str, note: str | None = None) -> None:
     """Page title and the one sentence that says what the page is for."""
     st.title(title)

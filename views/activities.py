@@ -1,4 +1,5 @@
-"""Activity log: the table, plus the two scatters that read it back."""
+"""Activity log (on the History page, under the globe) and the two run scatters
+(on the running overview). No page of its own any more."""
 
 from __future__ import annotations
 
@@ -16,42 +17,43 @@ COLUMNS = ["start_local", "sport", "name", "location", "distance_km", "duration_
            "elevation_gain_m"]
 
 
-def render() -> None:
+def log() -> None:
+    """The activity log of the selected range: every sport, newest on top, a
+    click opens the route (or the run analysis for a run without GPS)."""
     tr = i18n.tr
     activities = shell.clip(shell.table("activities"))
-    bento.header(i18n.page("aktywnosci"), tr(pl="Wszystkie treningi w wybranym zakresie, każdy sport.",
-                                             en="Every session in the selected range, every sport."))
-    if activities.empty:
-        st.caption(tr(pl="Brak aktywności w tym zakresie.", en="No activities in this range."))
-        return
-
-    sports = sorted(activities["sport"].dropna().unique())
-    picked = st.multiselect("Sport", sports, default=sports, key="activities_sport", label_visibility="collapsed",
-                            placeholder=tr(pl="wszystkie sporty", en="all sports"))
-    chosen = activities[activities["sport"].isin(picked)] if picked else activities
-    columns = bento.row(1, 1, 1, 1)
-    bento.stat(columns[0], tr(pl="Treningi", en="Sessions"), f"{int(chosen['activity_id'].count())}", key="a_count")
-    bento.stat(columns[1], tr(pl="Dystans", en="Distance"), f"{chosen['distance_km'].sum():.0f} km", key="a_km")
-    bento.stat(columns[2], tr(pl="Czas", en="Time"), f"{chosen['duration_min'].sum() / 60:.0f} h", key="a_h")
-    bento.stat(columns[3], "Load", f"{chosen['training_load'].sum():.0f}", key="a_load")
-    shown = activities[activities["sport"].isin(picked)] if picked else activities
-
-    frame = shown.sort_values("start_local", ascending=False)
-    ids = pd.to_numeric(frame["activity_id"], errors="coerce").tolist()
-    frame = frame[[c for c in COLUMNS if c in frame.columns]].copy()
-    frame["start_local"] = pd.to_datetime(frame["start_local"]).dt.strftime("%d.%m.%Y %H:%M")
-    if "pace_min_km" in frame.columns:
-        frame["pace_min_km"] = shell.pace_column(frame["pace_min_km"])
-    for column in ("best_1k_s", "best_5k_s"):
-        if column in frame.columns:
-            frame[column] = pd.to_numeric(frame[column], errors="coerce").map(
-                lambda v: shell.clock(v) if pd.notna(v) else None
-            )
-    frame = frame.rename(columns=shell.activity_labels())
-    _charts(shown)
     with bento.panel(tr(pl="Dziennik", en="Log"), key="activities_log",
-                     caption=tr(pl="Najnowsze na górze; tabelę można sortować. Kliknij wiersz, żeby otworzyć trasę.",
-                                en="Newest on top; the table can be sorted. Click a row to open the route.")):
+                     caption=tr(pl="Wszystkie treningi w wybranym zakresie, najnowsze na górze; tabelę można "
+                                   "sortować. Kliknij wiersz, żeby otworzyć trasę.",
+                                en="Every session in the selected range, newest on top; the table can be sorted. "
+                                   "Click a row to open the route.")) as header:
+        if activities.empty:
+            st.caption(tr(pl="Brak aktywności w tym zakresie.", en="No activities in this range."))
+            return
+        sports = sorted(activities["sport"].dropna().unique())
+        with header:
+            picked = st.multiselect("Sport", sports, default=sports, key="activities_sport",
+                                    label_visibility="collapsed", width=320,
+                                    placeholder=tr(pl="wszystkie sporty", en="all sports"))
+        shown = activities[activities["sport"].isin(picked)] if picked else activities
+        hours = shown["duration_min"].sum() / 60
+        st.caption(tr(pl=f"**{len(shown)}** · {shown['distance_km'].sum():.0f} km · {hours:.0f} h · "
+                         f"load {shown['training_load'].sum():.0f}",
+                      en=f"**{len(shown)}** · {shown['distance_km'].sum():.0f} km · {hours:.0f} h · "
+                         f"load {shown['training_load'].sum():.0f}"))
+
+        frame = shown.sort_values("start_local", ascending=False)
+        ids = pd.to_numeric(frame["activity_id"], errors="coerce").tolist()
+        frame = frame[[c for c in COLUMNS if c in frame.columns]].copy()
+        frame["start_local"] = pd.to_datetime(frame["start_local"]).dt.strftime("%d.%m.%Y %H:%M")
+        if "pace_min_km" in frame.columns:
+            frame["pace_min_km"] = shell.pace_column(frame["pace_min_km"])
+        for column in ("best_1k_s", "best_5k_s"):
+            if column in frame.columns:
+                frame[column] = pd.to_numeric(frame[column], errors="coerce").map(
+                    lambda v: shell.clock(v) if pd.notna(v) else None
+                )
+        frame = frame.rename(columns=shell.activity_labels())
         event = st.dataframe(frame, width="stretch", hide_index=True, height=440,
                              column_config=shell.activity_columns(), on_select="rerun", selection_mode="single-row",
                              key="activities_log_table")
@@ -76,7 +78,9 @@ def _open(activity_id: float) -> None:
         st.toast(i18n.tr(pl="Ta aktywność nie ma śladu GPS.", en="This activity has no GPS track."))
 
 
-def _charts(shown: pd.DataFrame) -> None:
+def run_charts(shown: pd.DataFrame) -> None:
+    """Pace over time and pace against heart rate, for the runs in ``shown``
+    (a slice of ``activities``). Drawn on the running overview."""
     runs = shown[shown["sport"].astype(str).str.contains("running", na=False)].copy()
     if runs.empty or not {"pace_min_km", "avg_hr"} <= set(runs.columns):
         return

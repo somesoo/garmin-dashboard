@@ -17,6 +17,19 @@ import streamlit as st
 import i18n
 
 _PAGES: dict[str, Any] = {}
+_NAMES: dict[int, str] = {}
+
+
+def named(page_object: Any, url_path: str) -> Any:
+    """Remember the page's own url_path: Streamlit reports ``""`` for the
+    default page, so without this "dzis" could not be found by name."""
+    _NAMES[id(page_object)] = url_path
+    return page_object
+
+
+def name(page_object: Any) -> str:
+    """The url_path a page was created with (also for the default page)."""
+    return _NAMES.get(id(page_object), str(page_object.url_path))
 
 
 def register(pages: dict[str, list[Any]]) -> None:
@@ -24,7 +37,7 @@ def register(pages: dict[str, list[Any]]) -> None:
     _PAGES.clear()
     for group in pages.values():
         for page_object in group:
-            _PAGES[str(page_object.url_path)] = page_object
+            _PAGES[name(page_object)] = page_object
 
 
 def page(url_path: str) -> Any | None:
@@ -50,3 +63,8 @@ def open_activity(activity_id: int) -> None:
 def open_run(activity_id: int) -> None:
     """Open one run on the running session page."""
     goto("bieg", run_activity_request=int(activity_id))
+
+
+def goto_view(url_path: str, switch: str, view: str) -> None:
+    """Open one view of a page that holds two (``bento.switch``, views/hubs.py)."""
+    goto(url_path, **{f"{switch}_request": view})

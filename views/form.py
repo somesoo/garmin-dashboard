@@ -19,7 +19,7 @@ def render() -> None:
 
     tr = i18n.tr
     bento.header(
-        i18n.page("forma"),
+        i18n.view("forma"),
         tr(pl="Model Banistera: każdy trening buduje wolną sprawność (CTL, 42 dni) i szybkie zmęczenie (ATL, 7 dni). "
               "Forma to ich różnica z dnia poprzedniego.",
            en="The Banister model: every session builds slow fitness (CTL, 42 days) and fast fatigue (ATL, 7 days). "

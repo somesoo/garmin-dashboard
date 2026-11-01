@@ -1,4 +1,5 @@
-"""Sleep and circadian structure: regularity, hypnogram, night profile, day map."""
+"""Sleep and circadian structure: regularity, length and score, hypnogram, night
+profile, day map."""
 
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ import glossary
 import i18n
 import shell
 import theme as tz
+from views import trends
 
 
 def render() -> None:
@@ -30,6 +32,13 @@ def render() -> None:
         _regularity()
         _thirds()
 
+    view = shell.clip(shell.daily())
+    left, right = bento.row(2, 2)
+    with left:
+        trends.sleep_length(view)
+    with right:
+        _score(view)
+
     _night()
 
     left, right = bento.row(2, 2)
@@ -37,6 +46,18 @@ def render() -> None:
         _profile()
     with right:
         _daymap()
+
+
+def _score(view: pd.DataFrame) -> None:
+    tr = i18n.tr
+    values = pd.to_numeric(view.get("sleep_score"), errors="coerce").dropna()
+    with bento.tile(tr(pl="Ocena snu Garmina", en="Garmin's sleep score"), key="sleep_score", terms=["sleep_score"],
+                    how=glossary.trend_how(),
+                    caption=tr(pl=f"średnio <b>{values.mean():.0f}</b> w zakresie",
+                               en=f"<b>{values.mean():.0f}</b> on average in range") if not values.empty else None) as t:
+        t.chart(tz.trend(view, "day", {tr(pl="ocena", en="score"): ("sleep_score", "sleep_score_roll7")}),
+                table=view[["day", "sleep_score", "sleep_qualifier"]].tail(40)
+                if "sleep_qualifier" in view.columns else view[["day", "sleep_score"]].tail(40))
 
 
 def _headline() -> None:

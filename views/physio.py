@@ -32,9 +32,8 @@ def render() -> None:
     left, right = bento.row(2, 2)
     with left:
         _economy()
-        _zones()
     with right:
-        _predictions()
+        _zones()
 
 
 def _cs_kpis(fitted: pd.DataFrame) -> None:
@@ -262,7 +261,8 @@ def _model_labels() -> dict[str, str]:
             "wysokointensywny": tr(pl="wysokointensywny", en="high-intensity"), "mieszany": tr(pl="mieszany", en="mixed")}
 
 
-def _predictions() -> None:
+def predictions() -> None:
+    """Garmin's race predictions; drawn on the forecast page, next to ours."""
     tr = i18n.tr
     frame = shell.daily()
     columns = [c for c in ("race_5k_s", "race_10k_s", "race_hm_s", "race_marathon_s") if c in frame.columns]

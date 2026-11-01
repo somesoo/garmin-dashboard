@@ -1,11 +1,11 @@
-"""Landing page: where the training happened, then how it is going.
+"""History: where the training happened and what it was.
 
 The globe is the hero because this athlete trains across countries -- the one
 fact a table of averages cannot show. It is a custom component (see
 ``globe.py``): it spins in the browser, costs the server nothing while it
 turns, and every marker is a control -- clicking a place asks which training to
-open. Everything below it answers "and what state am I in right now", in one
-column, newest first.
+open. Under it: places, hours per discipline and the full activity log. The
+state of the body lives on its own pages (Dziś, Regeneracja), not here.
 """
 
 from __future__ import annotations
@@ -15,11 +15,13 @@ import streamlit as st
 
 import globe
 import bento
-import glossary
 import i18n
 import routing
 import shell
 import theme as tz
+from sport import catalog
+from views import sport as sp
+from views.activities import log
 
 def _frames() -> dict[str, str]:
     return {"home": i18n.tr(pl="okolica", en="around home"), "world": i18n.tr(pl="świat", en="world")}
@@ -33,7 +35,6 @@ def render() -> None:
         routing.open_activity(int(wanted))
 
     activities = shell.table("activities")
-    frame = shell.daily()
     row = shell.latest_day()
     info = shell.state()
 
@@ -50,14 +51,10 @@ def render() -> None:
     _hero(activities)
     left, right = bento.row(2, 2)
     with left:
-        _now(frame, row)
-    with right:
-        _load()
-    left, right = bento.row(2, 2)
-    with left:
         _places(activities)
     with right:
-        _recent(activities)
+        _sports()
+    log()
 
 
 def _hero(activities: pd.DataFrame) -> None:
@@ -187,40 +184,22 @@ def _request(activity_id: int) -> None:
     st.session_state["atlas_open_activity"] = int(activity_id)
 
 
-def _now(frame: pd.DataFrame, row: pd.Series | None) -> None:
-    view = shell.clip(frame)
-    latest = i18n.tr(pl="ostatnio", en="latest")
-    with bento.tile("Readiness", key="atlas_readiness", terms=["readiness"], how=glossary.trend_how(),
-                    caption=f"{latest} <b>{row['readiness']:.0f}</b>"
-                    if row is not None and pd.notna(row.get("readiness")) else None) as t:
-        t.chart(tz.trend(view, "day", {"readiness": ("readiness", "readiness_roll7")}),
-                table=view[["day", "readiness"]].tail(40))
-    with bento.tile(i18n.tr(pl="HRV w nocy", en="Overnight HRV"), key="atlas_hrv", terms=["hrv"],
-                    how=glossary.trend_how(),
-                    caption=f"{latest} <b>{row['hrv_last_night']:.0f} ms</b>"
-                    if row is not None and pd.notna(row.get("hrv_last_night")) else None) as t:
-        t.chart(tz.trend(view, "day", {"HRV": ("hrv_last_night", "hrv_last_night_roll7")},
-                         band=("hrv_baseline_low", "hrv_baseline_high"), unit="ms"),
-                table=view[["day", "hrv_last_night"]].tail(40))
-
-
-def _load() -> None:
+def _sports() -> None:
+    """Hours per discipline in the selected range -- what the time went to."""
     tr = i18n.tr
-    pmc = shell.clip(shell.table("pmc"))
-    with bento.tile(tr(pl="Obciążenie i forma", en="Load and form"), rows=2, key="atlas_pmc",
-                    terms=["ctl", "atl", "tsb"],
-                    caption=tr(pl="Sprawność rośnie wolno, zmęczenie szybko. Pełny model: strona Forma.",
-                               en="Fitness rises slowly, fatigue fast. The full model: the Form page.")) as t:
-        if pmc.empty:
-            shell.missing("pmc", tr(pl="Uruchom `analytics.py`.", en="Run `analytics.py`."))
+    sessions = shell.clip(sp.frame(), "start_local")
+    with bento.tile(tr(pl="Na co idzie czas", en="Where the time goes"), rows=2, key="atlas_sports",
+                    caption=tr(pl="Godziny według dyscypliny w wybranym zakresie.",
+                               en="Hours by discipline in the selected range.")) as t:
+        if sessions.empty:
+            t.chart(None)
             return
-        t.chart(tz.stacked_panels(pmc, "day", [
-            {"title": "CTL / ATL", "series": {tr(pl="sprawność", en="fitness"): "ctl",
-                                              tr(pl="zmęczenie", en="fatigue"): "atl"},
-             "kind": "line", "height": 1.4},
-            {"title": tr(pl="Load dzienny", en="Daily load"), "series": {"load": "load_day"}, "kind": "bar",
-             "height": 0.8},
-        ], height=400), table=pmc[["day", "ctl", "atl", "tsb", "load_day"]].tail(40))
+        hours = (sessions.groupby("discipline")["minutes"].sum().div(60).round(1)
+                 .sort_values(ascending=False).head(10).reset_index())
+        discipline, column = tr(pl="dyscyplina", en="discipline"), tr(pl="godziny", en="hours")
+        hours[discipline] = hours["discipline"].map(catalog.label)
+        hours = hours.rename(columns={"minutes": column})[[discipline, column]]
+        t.chart(tz.hbars(hours, discipline, column, unit="h", decimals=1), table=hours)
 
 
 def _places(activities: pd.DataFrame) -> None:
@@ -254,22 +233,6 @@ def _places(activities: pd.DataFrame) -> None:
         t.chart(tz.hbars(top, place, count), table=places)
 
 
-def _recent(activities: pd.DataFrame) -> None:
-    if activities.empty:
-        return
-    recent = activities.sort_values("start_local", ascending=False).head(10).copy()
-    recent["start_local"] = pd.to_datetime(recent["start_local"]).dt.strftime("%d.%m %H:%M")
-    if "pace_min_km" in recent.columns:
-        recent["pace_min_km"] = shell.pace_column(recent["pace_min_km"])
-    columns = ["start_local", "sport", "name", "distance_km", "duration_min", "pace_min_km", "avg_hr",
-               "training_load", "location"]
-    shown = recent[[c for c in columns if c in recent.columns]].rename(columns=shell.activity_labels())
-    with bento.tile(i18n.tr(pl="Ostatnie aktywności", en="Recent activities"), rows=2, key="atlas_recent",
-                    caption=i18n.tr(pl="Wszystkie sporty, najnowsze na górze.",
-                                    en="All sports, newest on top.")) as t:
-        t.table(shown, column_config=shell.activity_columns())
-
-
 def _pick_dialog(pick: dict, activities: pd.DataFrame) -> None:
     """Body of the "which session" dialog; wrapped in st.dialog by the caller,
     so its title follows the interface language."""
@@ -300,6 +263,6 @@ def _pick_dialog(pick: dict, activities: pd.DataFrame) -> None:
         )
     if len(here) > 12:
         st.caption(tr(
-            pl=f"…i {len(here) - 12} starszych w tym miejscu — przybliż glob albo zajrzyj na stronę *Aktywności*.",
-            en=f"…and {len(here) - 12} older ones here — zoom the globe in or look at the *Activities* page.",
+            pl=f"…i {len(here) - 12} starszych w tym miejscu — przybliż glob albo przewiń do *Dziennika*.",
+            en=f"…and {len(here) - 12} older ones here — zoom the globe in or scroll down to the *Log*.",
         ))

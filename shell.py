@@ -144,6 +144,14 @@ _STYLE = """
   .st-key-globe_stage {margin: 0 -3.5rem;}
   .st-key-globe_stage [data-testid="stPlotlyChart"] {margin: 0;}
   hr {margin: 2.2rem 0 0 0; opacity: 0.25;}
+
+  /* ---- wayfinding (guide.py) ---------------------------------------------- */
+  .page-eyebrow {font-size: 0.78rem; opacity: 0.6; letter-spacing: 0.01em; margin-bottom: -0.6rem;}
+  [data-testid="stMarkdownContainer"]:has(> .page-eyebrow) {margin-bottom: 0 !important;}
+  [class*="st-key-viewswitch_"] {margin: 0.2rem 0 -0.4rem 0;}
+  .st-key-guide_next {margin-top: 2.6rem; padding-top: 1rem; border-top: 1px solid @LINE@; flex-wrap: wrap;}
+  .guide-next-label {font-size: 0.78rem; opacity: 0.6; margin-right: 0.4rem;}
+  [data-testid="stMarkdownContainer"]:has(> .guide-next-label) {margin-bottom: 0 !important;}
 </style>
 """
 

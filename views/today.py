@@ -7,17 +7,20 @@ tile live on their own pages, one click away (the arrow in a tile's header).
 from __future__ import annotations
 
 import datetime as dt
+import html
 
 import pandas as pd
 import streamlit as st
 
 import bento
+import guide
 import i18n
 import routing
 import shell
 import theme as tz
 from running import coach, plan as planning, store, units
-from views import run_common as rc
+from sport import catalog, readiness, recommend, store as sport_store
+from views import run_common as rc, sport as sp
 
 # coach.next_session names its decision with these codes (Polish, as data).
 SOFTEN, POSTPONE = "zamień na spokojny", "przesuń"  # i18n: key
@@ -35,6 +38,7 @@ def render() -> None:
     tr = i18n.tr
     today = dt.date.today()
     bento.header(i18n.page("dzis"), f"{i18n.weekdays(long=True)[today.weekday()].capitalize()}, {today:%d.%m.%Y}")
+    guide.tour()
 
     days = shell.daily().sort_values("day")
     row = shell.latest_day()
@@ -72,10 +76,13 @@ def render() -> None:
         else:
             rc.week_strip(active, frame, today)
 
-    left, right = bento.row(2, 2)
+    left, middle, right = bento.row(2, 1, 1)
     with left, bento.tile(tr(pl="Prognoza", en="Forecast"), key="today_forecast",
                           terms=["realistic", "interval80"]) as t:
         _forecast(t, result, active)
+    with middle, bento.tile(tr(pl="Poza bieganiem", en="Beyond running"), key="today_sport",
+                            terms=["sport_readiness", "sport_pick"]) as t:
+        _sport(t, today)
     with right, bento.tile(tr(pl="Ostatnie biegi", en="Recent runs"), key="today_recent", terms=["run_kind"]):
         _recent(frame)
 
@@ -211,6 +218,43 @@ def _forecast(tile, result: dict, active: dict | None) -> None:
     if goal and goal.get("goal_s"):
         time = units.fmt_time(goal["goal_s"])
         st.caption(i18n.tr(pl=f"Cel: {time}", en=f"Goal: {time}"))
+
+
+def _sport(tile, today: dt.date) -> None:
+    """The same morning answer for any sport: one decision page, not two. On a
+    day with a planned run the other sports are only an add-on; on a free day
+    they are the suggestion. The full ranking is on the Sport page."""
+    with tile.header:
+        if st.button("", icon=":material/arrow_forward:", type="tertiary", key="today_to_sport",
+                     help=i18n.page("sport")):
+            routing.goto("sport")
+    tr = i18n.tr
+    now = pd.Timestamp.now().floor("min")
+    sessions = sp.frame()
+    if sessions.empty:
+        st.caption(tr(pl="Brak aktywności.", en="No activities."))
+        return
+    state = readiness.assess(shell.daily(), shell.table("activities"), today, now, frame=sessions)
+    available = sport_store.available(sp.recent_disciplines(sessions, now))
+    planned = recommend.from_plan(store.current_plan(), today)
+    result = recommend.rank(state, sessions, today, available=available, before_key=planned["before_key"], now=now)
+    chosen = recommend.picks(result, state["level"])
+    score = f"{state['score']}/100 · " if state["score"] is not None else ""
+    st.markdown(f"<div class='tile-caption'>{score}{html.escape(catalog.level_label(state['level']))}</div>",
+                unsafe_allow_html=True)
+    if planned["today"]:
+        items = [chosen["addon"]] if chosen["addon"] else []
+        lead = tr(pl="Dziś jest bieg z planu; obok niego:", en="There is a run in the plan today; next to it:")
+    else:
+        items = chosen["main"][:2]
+        lead = tr(pl="Na dzień bez biegu:", en="For a day without a run:")
+    if not items:
+        st.caption(tr(pl="Nic nie pasuje do dzisiejszych warunków.", en="Nothing fits today's conditions."))
+        return
+    lines = [f"{catalog.label(item['discipline'])} — {catalog.level_label(item['level'])}, ~{item['minutes']} min"
+             for item in items]
+    st.markdown(f"<div class='tile-caption'>{html.escape(lead)}</div>", unsafe_allow_html=True)
+    bento.bullets(lines)
 
 
 def _recent(frame: pd.DataFrame) -> None:
