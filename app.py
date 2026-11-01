@@ -25,6 +25,7 @@ import shell  # noqa: E402
 import theme  # noqa: E402
 from views import (  # noqa: E402
     atlas,
+    day,
     hubs,
     notebook,
     physio,
@@ -63,7 +64,9 @@ def _page(render, url_path: str, icon: str, **kwargs) -> st.Page:
 # (views/hubs.py); detail pages have no entry and are opened from lists.
 PAGES = {
     i18n.group("everyday"): [
-        _page(today.render, "dzis", "today", default=True),
+        # The start page: the day in facts around a run (hero.py, hero_component/).
+        _page(day.render, "dzien", "wb_sunny", default=True),
+        _page(today.render, "dzis", "today"),
         _page(hubs.sports, "sport", "sports_gymnastics"),
         _page(atlas.render, "atlas", "public"),
         # No menu entry: opened from the log, the globe and a run's "Mapa trasy".

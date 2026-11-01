@@ -34,9 +34,9 @@ SETTINGS = config.DATA / "ui.json"
 
 # Modules whose user-facing text is fully bilingual; the test keeps them so.
 # glossary.py is bilingual through glossary_en.py (its own parity test).
-BILINGUAL = ["app.py", "shell.py", "bento.py", "routing.py", "theme.py", "globe.py", "guide.py",
+BILINGUAL = ["app.py", "shell.py", "bento.py", "routing.py", "theme.py", "globe.py", "guide.py", "hero.py",
              *(f"views/{name}.py" for name in (
-                 "activities", "atlas", "form", "hubs", "notebook", "physio", "recovery", "reference", "routes",
+                 "activities", "atlas", "day", "form", "hubs", "notebook", "physio", "recovery", "reference", "routes",
                  "run_common", "run_forecast", "run_load", "run_overview", "run_plan", "run_races", "run_segments",
                  "run_session", "sleep", "sport", "sport_disciplines", "stats", "today", "trends")),
              *(f"sport/{name}.py" for name in ("catalog", "readiness", "recommend", "store", "text", "variety")),
@@ -135,6 +135,22 @@ _WEEKDAYS_LONG = {
     "pl": ["poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota", "niedziela"],
     "en": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
 }
+_ENGLISH_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September",
+                   "October", "November", "December"]
+_MONTHS_LONG = {
+    "pl": ["styczeń", "luty", "marzec", "kwiecień", "maj", "czerwiec", "lipiec", "sierpień", "wrzesień",
+           "październik", "listopad", "grudzień"],
+    "en": _ENGLISH_MONTHS,
+}
+_MONTHS_OF = {
+    "pl": ["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca", "sierpnia", "września",
+           "października", "listopada", "grudnia"],
+    "en": _ENGLISH_MONTHS,
+}
+_ON_WEEKDAY = {
+    "pl": ["w poniedziałek", "we wtorek", "w środę", "w czwartek", "w piątek", "w sobotę", "w niedzielę"],
+    "en": ["on Monday", "on Tuesday", "on Wednesday", "on Thursday", "on Friday", "on Saturday", "on Sunday"],
+}
 
 
 def months() -> list[str]:
@@ -145,6 +161,16 @@ def months() -> list[str]:
 def weekdays(long: bool = False) -> list[str]:
     """Weekday names, Monday first (``date.weekday()`` indexes them)."""
     return pick(_WEEKDAYS_LONG if long else _WEEKDAYS)
+
+
+def month_name(index: int, genitive: bool = False) -> str:
+    """Full month name, January = 0: ``październik`` / ``1 listopada`` (a Polish date takes the genitive)."""
+    return pick(_MONTHS_OF if genitive else _MONTHS_LONG)[index]
+
+
+def on_weekday(index: int) -> str:
+    """``w niedzielę`` / ``on Sunday``, Monday = 0 (Polish: accusative, ``we`` before Tuesday)."""
+    return pick(_ON_WEEKDAY)[index]
 
 
 def day_month(day: Any) -> str:
@@ -163,6 +189,7 @@ _GROUPS = {
     "lab": ("Laboratorium", "Lab"),
 }
 _PAGES = {
+    "dzien": ("Dzień", "The day"),
     "dzis": ("Dziś", "Today"),
     "sport": ("Sport", "Sport"),
     "atlas": ("Historia", "History"),

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<title>Dzień</title>
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  body { color: var(--ink, #fff); font: 13px/1.45 "Source Sans Pro", -apple-system, "Segoe UI", sans-serif; }
+  #stage { position: relative; width: 100%; }
+  canvas, svg { position: absolute; left: 0; top: 0; pointer-events: none; }
+  .headline { position: absolute; left: 0; top: 4px; max-width: 46%; }
+  .headline .d { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted, #898781); }
+  .headline h1 { font-size: clamp(22px, 2.4vw, 36px); line-height: 1.1; letter-spacing: -.03em; font-weight: 700; margin: 6px 0 0; }
+  .headline h1 em { font-style: normal; color: var(--accent, #9ec5f4); }
+  .headline .m { font-size: 12px; color: var(--muted, #898781); margin-top: 8px; }
+  .headline .m b { color: var(--ink, #fff); font-weight: 600; }
+  .fact { position: absolute; display: flex; flex-direction: column; gap: 2px; opacity: 0; transition: opacity .45s;
+          cursor: pointer; border-radius: 8px; }
+  .fact.on { opacity: 1; }
+  .fact:hover .h { text-decoration: underline; text-decoration-color: var(--muted, #898781); text-underline-offset: 3px; }
+  .fact .g { font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--faint, #5f6570); font-weight: 600; margin-bottom: 1px; }
+  .fact .h { font-size: 16.5px; font-weight: 650; letter-spacing: -.01em; line-height: 1.25; }
+  .fact .t { color: var(--muted, #898781); }
+  .fact.r { text-align: right; align-items: flex-end; }
+  .fact.big .h { font-size: 20px; }
+  .reroll { background: none; border: 0; padding: 0; margin-top: 3px; font: inherit; font-size: 11px; color: var(--faint, #5f6570); cursor: pointer; align-self: inherit; }
+  .reroll:hover { color: var(--ink, #fff); }
+  .legend { position: absolute; left: 0; right: 0; display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 12px;
+            font-size: 11px; color: var(--muted, #898781); }
+  .legend i { display: inline-block; width: 14px; height: 4px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+  .legend i.ring { width: 9px; height: 9px; border: 1.5px solid var(--ink, #fff); border-radius: 50%; }
+  /* narrow screens: the map on top, the facts as a list under it */
+  .list { position: absolute; left: 0; right: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 16px 20px; }
+  .list .fact { position: static; opacity: 1; }
+  @media (max-width: 520px) { .list { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { .fact { transition: none; } }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv"></canvas><svg id="ln"></svg><div id="layer"></div></div>
+<script type="module">
+import { render } from "./hero.js";
+
+/* The Streamlit component protocol by hand, as in globe_component/: three postMessage calls. */
+function send(type, data) { window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, "*"); }
+const setFrameHeight = (height) => send("streamlit:setFrameHeight", { height });
+let clicks = 0;
+const onGo = (go) => { clicks += 1; send("streamlit:setComponentValue", { value: { clicks, go }, dataType: "json" }); };
+
+let args = null, trivia = 0, drawn = false;
+function paint() {
+  if (!args) return;
+  const height = render(document.getElementById("stage"), args, {
+    trivia, animate: !drawn,
+    onGo, onReroll: () => { trivia += 1; paint(); },
+  });
+  drawn = true;
+  setFrameHeight(height);
+}
+let timer;
+window.addEventListener("resize", () => { clearTimeout(timer); timer = setTimeout(paint, 120); });
+window.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type !== "streamlit:render") return;
+  const next = data.args || {};
+  // A new day or a new build redraws the track from the start; an ordinary rerun does not.
+  if (!args || next.token !== args.token) { drawn = false; trivia = 0; }
+  args = next;
+  paint();
+});
+send("streamlit:componentReady", { apiVersion: 1 });
+</script>
+</body>
+</html>

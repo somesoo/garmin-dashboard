@@ -30,6 +30,8 @@ garmin-dashboard/
   globe.py           opakowanie komponentu globu (dane + motyw + klik)
   globe_component/   statyczny komponent: index.html, globe.js, world.json,
                      vendor/ (d3-geo, d3-array), test.html (podgląd renderera)
+  hero.py            fakty dnia wokół biegu (czyste pandas) -> strona Dzień
+  hero_component/    statyczny komponent strony Dzień: ślad + układ faktów
   views/             po jednym module na stronę (atlas, routes, form, ...);
                      run_*.py to grupa „Bieganie”, hubs.py — dwa widoki pod
                      jednym wpisem menu; activities/trends to już tylko kafle
@@ -366,6 +368,40 @@ Zachowania, które wyglądają jak magia, ale są celowe:
   `theme.backgroundColor` to kolor *wnętrza* widżetów (tabele, popovery) =
   kolor kafla; czarną stronę maluje `shell.page_style`.
 
+## Strona Dzień (hero, `views/day.py`)
+
+Strona startowa: **fakty, nie sugestie**, ułożone wokół jednego biegu — bez
+siatki bento. Co zrobić, mówi *Dziś* (wpis niżej); tu jest tylko to, co się
+wydarzyło, zawsze na tle własnej normy.
+
+- **Który bieg**: dzisiejszy, jeśli już był (`hero.pick_run`); inaczej ostatni
+  sprzed dziś, wyblakły, a nagłówek mówi o sesji z planu (albo o ostatnim biegu,
+  gdy planu nie ma). Stan w `payload["state"]`: `done` / `planned` / `rest`.
+- **Fakty** (`hero.py`, czyste pandas, testy w `tests/test_hero.py`): bieg
+  (podsumowanie, najważniejszy fragment — powtórzenia z `workouts.reps`, inaczej
+  dryf tętna ≥ 6 uderzeń przy tym samym tempie ±3%, postoje, najszybszy pełny km,
+  porównanie z poprzednim biegiem ±15% dystansu), przerwa od ostatniego biegu,
+  sesja z planu, najbliższy start, noc wobec 7 poprzednich nocy (sen, pora snu
+  z `circadian`, fazy), HRV w % wobec 7 nocy (**nie** `hrv_deviation` — to ms),
+  Body Battery/readiness, ciekawostki (rotowane kliknięciem). Każdy ma
+  `priority`; fakt z miejscem na trasie ma `anchor` (`km` albo `lat`/`lon`).
+- **Układ liczy przeglądarka** (`hero_component/hero.js`): ślad na siatce
+  zajętości 8 px z otoczką, transformata odległości, a każdy fakt (po
+  priorytecie) bierze wolny prostokąt, który najciaśniej przylega do śladu —
+  kilka bliskich krawędzi wygrywa, więc tekst wchodzi we wcięcia i do środka
+  pętli. Fakt z kotwicą chce być blisko swojego miejsca, a jego linia nie może
+  przecinać cudzego tekstu. Wszystkie szerokości bloku (250…140 px) konkurują
+  naraz. Tekst wyrównuje się do strony, po której jest ślad.
+- **Mniej faktów na mniejszym ekranie** (`capacity`): ≥ 1400 px szerokości
+  komponentu 12, ≥ 1200 — 10, ≥ 1000 — 8, mniej — 6 (ciekawostka liczy się jako
+  jeden); czego nie da się zmieścić, wypada od końca. Poniżej 720 px mapa na
+  górze, fakty listą pod nią.
+- Kolor śladu = strefy tętna od HRmax biegu (`hr_max_used`, granice 70/80/87/93%),
+  Z1–Z3 niebieskie, Z4–Z5 kolory statusu. Klik w fakt otwiera stronę (`go`:
+  bieg, sen, regeneracja, plan/zawody, atlas); licznik `clicks` jak w globie.
+- Ładunek jest cache'owany po buildzie, dniu, języku i stemplu plików trenera;
+  zmiana `token` (build/dzień/język) rysuje ślad od nowa, zwykły rerun nie.
+
 ## Glob na stronie Historia (`atlas`)
 
 Hero Atlasu nie jest figurą plotly — to własny komponent Streamlita
@@ -492,7 +528,7 @@ z bounding boxu po wzorze Web Mercatora dla kafli 512 px (MapLibre); stała
 kolidują ścieżkami) + pytanie i linki „Dalej” w `guide.py` (test pilnuje).
 
 **Menu jest ułożone według pytań, nie rodzajów danych** (przebudowa 2026-11-01,
-z 21 wpisów do 15): *Na co dzień* (Dziś, Sport, Historia), *Bieganie* (przegląd,
+z 21 wpisów do 15, potem +Dzień): *Na co dzień* (Dzień, Dziś, Sport, Historia), *Bieganie* (przegląd,
 Plan i zawody, prognoza, segmenty, Obciążenie), *Ciało* (Regeneracja, Sen),
 *Laboratorium* (Fizjologia, Statystyka, Insights, SQL, Słownik).
 
@@ -566,7 +602,8 @@ Zasady układu, które trzymają spójność:
 - Nowy wskaźnik = nowe hasło w `glossary.py` (co / po co / jak czytać);
   `tests/test_glossary.py` pilnuje, że każdy klucz z `terms=[...]` istnieje.
   Wszystko widać też na stronie *Słownik*. Tytuł nigdy nie idzie do figury.
-- *Dziś* (`views/today.py`) jest stroną startową i **jedyną odpowiedzią na „co
+- *Dzień* (`views/day.py`) jest stroną startową — patrz „Strona Dzień” niżej.
+  *Dziś* (`views/today.py`) to **jedyna odpowiedź na „co
   dziś”**: decyzja dnia to `coach.next_session`, przyciski kafla wołają
   `plan.soften` / `plan.postpone` (pojedyncza sesja, z regułą „mocne dni nie
   sąsiadują”); kafel „Poza bieganiem” bierze ranking z `sport/` — w dzień z

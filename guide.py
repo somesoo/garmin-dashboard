@@ -35,6 +35,8 @@ TOUR_KEY = "tour_done"
 def _questions() -> dict[str, str]:
     tr = i18n.tr
     return {
+        "dzien": tr(pl="Co się dziś wydarzyło — w liczbach, na tle ostatnich dni?",
+                    en="What happened today — in numbers, against the last few days?"),
         "dzis": tr(pl="Co dziś zrobić — i czy organizm jest na to gotowy?",
                    en="What to do today — and is the body ready for it?"),
         "sport": tr(pl="Na jaki trening jestem dziś gotów, także poza bieganiem?",
@@ -63,6 +65,7 @@ def _questions() -> dict[str, str]:
 # Where each page leads: (url_path, switch, view). A view of a shared page
 # (views/hubs.py) is opened through its switch.
 NEXT: dict[str, list[tuple[str, str | None, str | None]]] = {
+    "dzien": [("dzis", None, None), ("sen", None, None), ("bieganie", None, None)],
     "sport": [("dzis", None, None), ("regeneracja", None, None), ("sport", hubs.SPORT, "disciplines")],
     "atlas": [("bieganie", None, None), ("sport", hubs.SPORT, "disciplines"), ("dzis", None, None)],
     "trasy": [("atlas", None, None), ("bieganie", None, None)],
