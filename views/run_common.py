@@ -26,6 +26,14 @@ confidence_label, confidence, race_label = text.confidence_label, text.confidenc
 effort_label, action_label, kind_label = text.effort_label, text.action_label, text.kind_label
 
 
+def stop_text(seconds: Any) -> str:
+    """Standing time with the timer running: ``0:36``; empty when none, ``—`` when unknown."""
+    value = pd.to_numeric(seconds, errors="coerce")
+    if pd.isna(value):
+        return "—"
+    return "" if value < 1 else units.fmt_time(value)
+
+
 def runs() -> pd.DataFrame:
     frame = shell.table("run_sessions")
     if frame.empty:

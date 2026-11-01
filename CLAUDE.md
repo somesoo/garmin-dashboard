@@ -459,7 +459,7 @@ z headless Chrome na konkretnym ujęciu):
 payload się nie zmienia, więc pobrany raz zostaje na zawsze) do
 `data/raw/details/<activity_id>.json`. `etl/load.py` rozpakowuje je do tabel
 `routes` (punkt trasy: `lat`, `lon`, `elevation_m`, `hr`, `speed_ms`,
-`pace_min_km`, `distance_km`, `cadence`, `power`) i `route_summary`
+`pace_min_km`, `distance_km`, `cadence`, `power`, `duration_s` — stoper, `moving_s` — czas w ruchu) i `route_summary`
 (bounding box, przewyższenie liczone na wygładzonym profilu).
 
 Mapy wymagają internetu — kafelki idą z CARTO/OpenStreetMap. Zoom liczy się
@@ -576,7 +576,8 @@ Tabele (materializuje je `analytics.main` przez `running.pipeline.build`):
 | `activity_segments` | aktywność + faza | `splitSummaries` z ETL: `INTERVAL_WARMUP/ACTIVE/RECOVERY/COOLDOWN` (workout z zegarka), `RWD_*` |
 | `run_laps` | bieg + okrążenie | z ETL: `distance_m`, `duration_s`, `pace_min_km`, `avg_hr`, `cadence` (×2), `intensity` (warmup/active/recovery/rest/cooldown), `step_index` |
 | `run_sessions` | bieg | kolumny `activities` + `kind` (recovery/easy/long/tempo/threshold/intervals/race), `kind_reason`, `kind_confidence`, `hr_max_used` |
-| `run_splits` | bieg + km | splity ze strumienia próbek (czas stopera `duration_s`), tętno, przewyższenie, kadencja (kroki obu nóg) |
+| `run_splits` | bieg + km | splity ze strumienia próbek (czas stopera `duration_s`), tętno, przewyższenie, kadencja (kroki obu nóg), `stop_s` (stanie na tym km) |
+| `run_stops` | bieg + postój | postoje ≥ 5 s ze stoperem w ruchu: `km`, `seconds`, `at_s`, `lat`/`lon`; w `run_sessions` suma `stop_s` (z krótkimi) i liczba `stops` |
 | `run_efforts` | bieg + dystans | najlepsze odcinki (1 km…maraton, blok workoutu), źródło, `vdot`, `hr_frac`, `near_max` |
 | `run_forecast` | tydzień + dystans | migawka prognozy liczona tylko z danych sprzed dnia: `realistic_s`, `low_s`/`high_s` (80%), `potential_s`, `garmin_s`, `vdot`, `prep` |
 
@@ -604,6 +605,12 @@ Pułapki:
   dostaje `kind = race` po przeliczeniu (`running.pipeline.rebuild`).
 - **HRmax to trzecie najwyższe maksimum biegów** (192), bo 201/196 to skoki
   czujnika. Etykiety typu treningu zależą od niego.
+- **Postoje (światła) są zbierane, nie korygowane** (`sessions.stops`, decyzja 2026-11-01).
+  Biegacz nie używa autopauzy, więc stanie siedzi w czasie stopera. Postój = Δ`duration_s` − Δ`moving_s`
+  między próbkami (zegarek liczy ruch co sekundę, więc rzadkie próbki nie gubią krótkich postojów).
+  Widok pokazuje go obok tempa: KPI, splity, segmenty (`passes` → `stop_s`), wspólne odcinki. Tempo,
+  VDOT, prognoza i plan zostają na czasie stopera. W interwałach przerwa na stojąco też jest postojem.
+  Analiza, czy przejść na tempo w ruchu do porównań: insight `2026-11-01-postoje-na-biegach`.
 - **Splity kilometrowe są ze strumienia ~400 próbek**: dokładność kilku sekund.
   `directRunCadence` liczy jedną nogę — mnożone ×2 (tak samo kadencja okrążeń).
 - **Okrążenia** (`get_activity_splits`, raz na bieg → `data/raw/splits/`, tabela

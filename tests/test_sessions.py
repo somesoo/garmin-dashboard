@@ -99,6 +99,42 @@ class Splits(unittest.TestCase):
         self.assertIsNone(sessions.best_segment(track(1, 3.0, 5.0), 5000))
 
 
+def with_stop(frame: pd.DataFrame, at_km: float, seconds: float) -> pd.DataFrame:
+    """The same run, but standing ``seconds`` at ``at_km`` with the timer running."""
+    frame = frame.copy()
+    frame["moving_s"] = frame["duration_s"]
+    after = frame["distance_km"] > at_km
+    frame.loc[after, "duration_s"] += seconds
+    return frame
+
+
+class Stops(unittest.TestCase):
+    def test_a_stop_is_found_where_it_happened_and_kept_in_the_split(self):
+        stopped = with_stop(track(1, 5.0, 5.0), 2.5, 40)
+        found = sessions.stops(stopped)
+        self.assertEqual(len(found), 1)
+        self.assertAlmostEqual(found["km"].iloc[0], 2.5, delta=0.05)
+        self.assertAlmostEqual(found["seconds"].iloc[0], 40, delta=1)
+        self.assertAlmostEqual(sessions.stopped_total(stopped), 40, delta=1)
+        splits = sessions.km_splits(stopped)
+        # Nothing is corrected: the third km is 40 s slower and says why.
+        self.assertAlmostEqual(splits["seconds"].iloc[2], 340, delta=2)
+        self.assertAlmostEqual(splits["stop_s"].iloc[2], 40, delta=1)
+        self.assertEqual(splits["stop_s"].drop(index=2).sum(), 0)
+
+    def test_short_blips_count_in_the_total_but_not_in_the_list(self):
+        stopped = with_stop(with_stop(track(1, 5.0, 5.0), 1.5, 3).drop(columns="moving_s"), 3.5, 20)
+        stopped["moving_s"] = track(1, 5.0, 5.0)["duration_s"]
+        self.assertEqual(sessions.stops(stopped)["seconds"].tolist(), [20.0])
+        self.assertAlmostEqual(sessions.stopped_total(stopped), 23, delta=1)
+
+    def test_without_moving_time_nothing_is_claimed(self):
+        plain = track(1, 5.0, 5.0)
+        self.assertTrue(sessions.stops(plain).empty)
+        self.assertIsNone(sessions.stopped_total(plain))
+        self.assertTrue(sessions.km_splits(plain)["stop_s"].isna().all())
+
+
 class Efforts(unittest.TestCase):
     def test_sources_and_gps_artefacts(self):
         rows = [

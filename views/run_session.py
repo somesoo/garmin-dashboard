@@ -92,8 +92,25 @@ def _summary(run: pd.Series) -> None:
     hr_max = run.get("hr_max_used")
     tr = i18n.tr
     bento.stat(columns[0], tr(pl="Dystans", en="Distance"), f"{run['distance_km']:.2f} km", key="s_km")
-    bento.stat(columns[1], tr(pl="Czas", en="Time"), units.fmt_time(run["duration_min"] * 60), key="s_time")
-    bento.stat(columns[2], tr(pl="Tempo", en="Pace"), units.fmt_pace(run["pace_min_km"]), key="s_pace")
+    stopped = pd.to_numeric(run.get("stop_s"), errors="coerce")
+    count = int(run.get("stops") or 0) if pd.notna(run.get("stops")) else 0
+    standing = None
+    if pd.notna(stopped) and stopped >= 1:
+        noun = i18n.plural(count, pl=("postój", "postoje", "postojów"), en=("stop", "stops"))
+        standing = tr(pl=f"w tym {units.fmt_time(stopped)} stania ({count} {noun})",
+                      en=f"incl. {units.fmt_time(stopped)} standing ({count} {noun})")
+    bento.stat(columns[1], tr(pl="Czas", en="Time"), units.fmt_time(run["duration_min"] * 60), key="s_time",
+               note=standing, help=tr(pl="Czas stopera. Postoje to sekundy, w których stoper szedł, a Ty nie "
+                                         "(światła, sznurówka) — liczą się do czasu i tempa.",
+                                      en="Timer time. Stops are seconds when the timer ran and you did not "
+                                         "(traffic lights, a shoelace) — they count in the time and pace."))
+    moving_pace = None
+    if pd.notna(stopped) and stopped >= 1 and run.get("distance_km"):
+        moving = run["duration_min"] * 60 - stopped
+        moving_pace = tr(pl=f"bez postojów {units.fmt_pace(moving / 60 / run['distance_km'])}",
+                         en=f"without stops {units.fmt_pace(moving / 60 / run['distance_km'])}")
+    bento.stat(columns[2], tr(pl="Tempo", en="Pace"), units.fmt_pace(run["pace_min_km"]), key="s_pace",
+               note=moving_pace)
     bento.stat(columns[3], tr(pl="Tętno śr. / maks.", en="Avg / max HR"),
                f"{hr:.0f} / {run.get('max_hr'):.0f}" if pd.notna(hr) else "—",
                key="s_hr", note=f"{hr / hr_max:.0%} HRmax ({hr_max:.0f})" if pd.notna(hr) and pd.notna(hr_max) else None)
@@ -285,17 +302,19 @@ def _shared(run: pd.Series, track: pd.DataFrame) -> None:
                          en=("run shares", "runs share"))
     with bento.tile(
         tr(pl="Wspólne odcinki z innymi biegami", en="Stretches shared with other runs"), key="shared",
-        terms=["shared_stretch", "efficiency_delta"],
+        terms=["shared_stretch", "efficiency_delta", "stops"],
         caption=tr(pl=f"{count} {shares} z tym biegiem co najmniej 400 m trasy, w tym samym kierunku. Zaznacz "
                       "wiersz, żeby zapisać odcinek jako segment albo otworzyć tamten bieg.",
                    en=f"{count} {shares} at least 400 m of route with this run, in the same direction. Select a row "
                       "to save the stretch as a segment or open that run."),
         how=tr(pl="Dla każdego innego biegu najdłuższy wspólny kawałek (ślady ≤ 35 m od siebie), zmierzony na obu. "
                   "Δ < 0: tutaj szybciej / niższe tętno. Efektywność to metry na uderzenie serca — rośnie, gdy "
-                  "biegniesz szybciej przy tym samym tętnie.",
+                  "biegniesz szybciej przy tym samym tętnie. „Postój” to stanie ze stoperem w ruchu na tym "
+                  "odcinku — jest w czasie i w Δ.",
                en="For every other run the longest shared piece (tracks ≤ 35 m apart), measured on both. Δ < 0: "
                   "faster / lower heart rate here. Efficiency is metres per heartbeat — it rises when you run "
-                  "faster at the same heart rate."),
+                  "faster at the same heart rate. “Stop” is standing with the timer running on the stretch — it "
+                  "is in the time and in Δ."),
     ) as t:
         shown = found.head(bento.table_rows(2)).reset_index(drop=True)
         event = st.dataframe(pd.DataFrame({
@@ -309,6 +328,8 @@ def _shared(run: pd.Series, track: pd.DataFrame) -> None:
             "Δ s/km": shown["d_pace_s"].round().astype("Int64"),
             tr(pl="Δ tętno", en="Δ HR"): shown["d_hr"].round().astype("Int64"),
             tr(pl="Δ efektywność %", en="Δ efficiency %"): shown["d_eff_pct"].round(1),
+            tr(pl="postój tu", en="stop here"): shown["stop_s"].map(rc.stop_text),
+            tr(pl="postój wtedy", en="stop then"): shown["stop_s_other"].map(rc.stop_text),
         }), hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
             key=f"shared_{activity_id}", height=bento.table_height(len(shown)))
         if len(found) > len(shown):
@@ -479,7 +500,7 @@ def _segments(run: pd.Series) -> None:
         notes.append(tr(pl=f"{len(mine)} {noun}. Kliknij wiersz, żeby otworzyć segment.",
                         en=f"{len(mine)} {noun}. Click a row to open the segment."))
     with bento.tile(
-        tr(pl="Dopasowane segmenty", en="Matched segments"), key="run_segments", terms=["segment"],
+        tr(pl="Dopasowane segmenty", en="Matched segments"), key="run_segments", terms=["segment", "stops"],
         caption=" ".join(notes),
         how=tr(pl="Twoje segmenty, „auto” (trasy przebiegnięte co najmniej 4 razy) i odcinki z interwałów "
                   "(każde powtórzenie w rankingu swojej długości). Miejsce liczy wszystkie przebiegi segmentu; "
@@ -513,6 +534,7 @@ def _segments(run: pd.Series) -> None:
                 tr(pl="czas", en="time"): units.fmt_time(item.seconds),
                 tr(pl="tempo", en="pace"): units.fmt_pace(item.pace_min_km, False),
                 heart: item.hr,
+                tr(pl="postój", en="stop"): rc.stop_text(getattr(item, "stop_s", None)),
                 tr(pl="miejsce", en="rank"): f"{item.rank}/{item.of}" + (" 🏆" if item.rank == 1 and item.of > 1 else ""),
                 tr(pl="do najlepszego", en="to the best"): "—" if item.seconds == best
                 else f"+{item.seconds - best:.0f} s",
@@ -717,10 +739,19 @@ def _splits(run: pd.Series) -> None:
             tr(pl="równo", en="even") if abs(second - first) <= 0.03 else tr(pl="druga wolniejsza",
                                                                              en="second half slower")
         caption = tr(pl=f"1. połowa {halves} — {verdict}", en=f"1st half {halves} — {verdict}")
+    stood = mine[pd.to_numeric(mine.get("stop_s"), errors="coerce") >= 5] if "stop_s" in mine.columns else mine.iloc[0:0]
+    if not stood.empty:
+        where = ", ".join(f"km {int(k)}: {units.fmt_time(v)}" for k, v in zip(stood["km"], stood["stop_s"]))
+        caption += tr(pl=f" · postoje {where}", en=f" · stops {where}")
     with bento.tile(tr(pl="Splity kilometrowe", en="Kilometre splits"), key="splits", caption=caption,
-                    how=tr(pl="Czas stopera, bez autopauzy. Ostatni odcinek może być niepełny. Wyżej = szybciej.",
+                    terms=["stops"],
+                    how=tr(pl="Czas stopera, bez autopauzy. Ostatni odcinek może być niepełny. Wyżej = szybciej. "
+                              "Pusty punkt = na tym kilometrze stałeś co najmniej 5 s ze stoperem w ruchu (światła) "
+                              "— ten czas jest w tempie, kolumna „postój” mówi ile.",
                            en="Stopwatch time, without auto-pause. The last split may be partial. Higher = "
-                              "faster.")) as t:
+                              "faster. A hollow point = on that kilometre you stood for at least 5 s with the "
+                              "timer running (traffic lights) — that time is in the pace, the “stop” column says "
+                              "how much.")) as t:
         if mine.empty:
             st.caption(tr(pl="Ten bieg nie ma strumienia próbek (np. bieżnia albo brak GPS).",
                           en="This run has no sample stream (e.g. a treadmill or no GPS)."))
@@ -732,14 +763,21 @@ def _splits(run: pd.Series) -> None:
         if figure is not None:
             tz.pace_axis(figure, mine["pace_min_km"], robust=True)
             figure.update_xaxes(title_text=tr(pl="kilometr", en="kilometre"), dtick=1)
-            figure.update_traces(customdata=mine["pace_min_km"].map(lambda v: units.fmt_pace(v)),
-                                 hovertemplate="km %{x}: %{customdata}<extra></extra>")
+            standing = pd.to_numeric(mine["stop_s"], errors="coerce") if "stop_s" in mine.columns \
+                else pd.Series(float("nan"), index=mine.index)
+            label = tr(pl="postój", en="stop")
+            figure.update_traces(
+                customdata=[f"{units.fmt_pace(v)}" + (f" · {label} {units.fmt_time(s)}" if s >= 5 else "")
+                            for v, s in zip(mine["pace_min_km"], standing.fillna(0))],
+                hovertemplate="km %{x}: %{customdata}<extra></extra>",
+                marker={"symbol": ["circle-open" if s >= 5 else "circle" for s in standing.fillna(0)]})
         t.chart(figure, table=pd.DataFrame({
             "km": mine["km"], tr(pl="długość", en="length"): mine["length_km"],
             tr(pl="czas", en="time"): mine["seconds"].map(units.fmt_time),
             pace: mine["pace_min_km"].map(lambda v: units.fmt_pace(v, False)), tr(pl="tętno", en="HR"): mine["hr"],
             tr(pl="w górę m", en="up m"): mine["elev_gain_m"], tr(pl="w dół m", en="down m"): mine["elev_loss_m"],
             tr(pl="kadencja", en="cadence"): mine["cadence"],
+            tr(pl="postój", en="stop"): mine["stop_s"].map(rc.stop_text) if "stop_s" in mine.columns else "—",
         }), key=f"splits_{int(run['activity_id'])}")
 
 

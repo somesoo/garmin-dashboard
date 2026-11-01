@@ -596,6 +596,9 @@ DETAIL_METRICS = {
     "sumDistance": "distance_km",
     # Timer time (auto-pause excluded): what the watch's own km splits use.
     "sumDuration": "duration_s",
+    # Timer time spent moving: timer minus this = standing with the clock running
+    # (traffic lights). Cumulative, so it survives the down-sampling below.
+    "sumMovingDuration": "moving_s",
     "directTimestamp": "timestamp_ms",
     "directRunCadence": "cadence",
     "directPower": "power",

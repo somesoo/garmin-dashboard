@@ -328,6 +328,16 @@ TERMS: dict[str, Term] = {
             "Do ~5 s/km i kilku uderzeń — równo. Ostatni wyraźnie wolniejszy przy tętnie pod sufitem — tempo "
             "za ambitne albo za krótkie przerwy. Ujemny rozjazd (przyspieszanie) — był zapas.",
         ),
+        "stops": (
+            "Postoje",
+            "Sekundy, w których stoper szedł, a Ty stałeś — światła, przejście, sznurówka. Zegarek liczy osobno "
+            "czas w ruchu; różnica między nim a stoperem to postój. Na liście są postoje od 5 s.",
+            "Bez autopauzy postój siedzi w czasie i w tempie: kilometr ze światłami wygląda na słabszy, segment "
+            "przebiegnięty z czerwonym na przejściu — na gorszy wynik. Liczba mówi, ile z różnicy to stanie.",
+            "Tempo, splity i segmenty zostają w czasie stopera — nic nie jest korygowane. Przy porównaniu dwóch "
+            "przebiegów odejmij różnicę postojów od różnicy czasu, zanim nazwiesz to formą. „Bez postojów” "
+            "przy tempie to tempo w ruchu. W interwałach przerwa na stojąco też jest postojem.",
+        ),
         "same_route": (
             "Ta sama trasa",
             "Biegi, których ślady GPS pokrywają się w co najmniej 80% (w obie strony, siatka ~50 m) "

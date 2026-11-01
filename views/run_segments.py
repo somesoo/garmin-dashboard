@@ -224,17 +224,19 @@ def _trend(passes: pd.DataFrame, segment: dict) -> None:
     ) as t:
         kind, time, heart, when = (tr(pl="typ", en="type"), tr(pl="czas", en="time"), tr(pl="tętno", en="HR"),
                                    tr(pl="kiedy", en="when"))
+        stop = tr(pl="postój", en="stop")
         hard, long_, easy = tr(pl="mocny", en="hard"), tr(pl="długi", en="long"), tr(pl="spokojny", en="easy")
         points = passes.assign(**{
             kind: passes["kind"].map(lambda k: hard if k in ("tempo", "threshold", "intervals", "race")
                                      else long_ if k == "long" else easy),
             time: passes["seconds"].map(units.fmt_time),
             heart: passes["hr"],
+            stop: passes["stop_s"].map(rc.stop_text) if "stop_s" in passes.columns else "—",
         })
         figure = tz.scatter(points, "start_local", "pace_min_km", color=kind, color_kind="categorical",
-                            hover=(time, heart), x_title="", y_title="", pace_y=True, reverse_y=True)
+                            hover=(time, heart, stop), x_title="", y_title="", pace_y=True, reverse_y=True)
         t.chart(figure, table=points.assign(**{when: points["start_local"].dt.strftime("%d.%m.%Y")})[
-            [when, kind, time, "pace_min_km", heart]].rename(columns={"pace_min_km": tr(pl="tempo", en="pace")}),
+            [when, kind, time, "pace_min_km", heart, stop]].rename(columns={"pace_min_km": tr(pl="tempo", en="pace")}),
             key=f"segment_trend_{segment['id']}")
 
 
@@ -251,6 +253,7 @@ def _ranking(passes: pd.DataFrame, suffix: str) -> None:
             tr(pl="tempo", en="pace"): shown["pace_min_km"].map(lambda v: units.fmt_pace(v, False)),
             tr(pl="tętno", en="HR"): shown["hr"].round().astype("Int64"),
             tr(pl="od km", en="from km"): shown["at_km"],
+            tr(pl="postój", en="stop"): shown["stop_s"].map(rc.stop_text) if "stop_s" in shown.columns else "—",
         }), hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
             key=f"segment_ranking_table_{suffix}", height=bento.table_height(len(shown)))
         rows = getattr(getattr(event, "selection", None), "rows", None) or []

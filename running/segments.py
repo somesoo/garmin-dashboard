@@ -60,8 +60,10 @@ LOOP_EXTENT_M, LOOP_RATIO = 400.0, 3.0
 
 
 def path(track: pd.DataFrame) -> pd.DataFrame:
-    """The track every 10 m: ``m`` (watch distance), ``s`` (timer), lat, lon, hr."""
-    columns = ["m", "s", "lat", "lon", "hr"]
+    """The track every 10 m: ``m`` (watch distance), ``s`` (timer), lat, lon, hr
+    and ``stop`` (cumulative seconds standing with the timer running; NaN
+    without moving time in the stream)."""
+    columns = ["m", "s", "lat", "lon", "hr", "stop"]
     if track is None or track.empty or not {"lat", "lon", "distance_km"} <= set(track.columns):
         return pd.DataFrame(columns=columns)
     track = track.sort_values("seq") if "seq" in track.columns else track
@@ -72,11 +74,14 @@ def path(track: pd.DataFrame) -> pd.DataFrame:
         "lat": pd.to_numeric(track["lat"], errors="coerce").values,
         "lon": pd.to_numeric(track["lon"], errors="coerce").values,
         "hr": pd.to_numeric(track["hr"], errors="coerce").values if "hr" in track.columns else np.nan,
+        "moving": pd.to_numeric(track["moving_s"], errors="coerce").values if "moving_s" in track.columns else np.nan,
     }).dropna(subset=["m", "lat", "lon"])
     if frame["s"].isna().all() and "timestamp_ms" in track.columns:
         stamps = pd.to_numeric(track["timestamp_ms"], errors="coerce")
         frame["s"] = ((stamps - stamps.min()) / 1000).reindex(frame.index).values
     frame = frame.dropna(subset=["s"])
+    frame["stop"] = (frame["s"] - frame["moving"]).clip(lower=0).cummax() \
+        if frame["moving"].notna().sum() > 5 else np.nan
     frame = frame[(frame["m"].diff().fillna(0) >= 0) & (frame["s"].diff().fillna(0) >= 0)]
     frame = frame.drop_duplicates("m")
     if len(frame) < 3:
@@ -87,6 +92,8 @@ def path(track: pd.DataFrame) -> pd.DataFrame:
         out[column] = np.interp(grid, frame["m"], frame[column])
     hr = frame.dropna(subset=["hr"])
     out["hr"] = np.interp(grid, hr["m"], hr["hr"]) if len(hr) >= 2 else np.full(len(grid), np.nan)
+    stop = frame.dropna(subset=["stop"])
+    out["stop"] = np.interp(grid, stop["m"], stop["stop"]) if len(stop) >= 2 else np.full(len(grid), np.nan)
     return pd.DataFrame(out)
 
 
@@ -194,6 +201,15 @@ def _groups(mask: np.ndarray) -> list[np.ndarray]:
     return np.split(index, np.flatnonzero(np.diff(index) > 1) + 1)
 
 
+def _standing(points: pd.DataFrame, i: int, j: int) -> float:
+    """Seconds stood with the timer running between path rows ``i`` and ``j``
+    (already inside the stretch's ``seconds``); NaN when unknown."""
+    if "stop" not in points.columns:
+        return np.nan
+    value = float(points["stop"].iloc[j] - points["stop"].iloc[i])
+    return round(max(value, 0.0), 0) if np.isfinite(value) else np.nan
+
+
 def passes(segment: dict[str, Any], points: pd.DataFrame) -> list[dict[str, Any]]:
     """Every time this path runs the segment start to end."""
     checkpoints = np.asarray(segment.get("points") or [], dtype=float)
@@ -227,6 +243,7 @@ def passes(segment: dict[str, Any], points: pd.DataFrame) -> list[dict[str, Any]
         found.append({
             "_end": j,
             "seconds": round(elapsed, 1),
+            "stop_s": _standing(points, i, j),
             "pace_min_km": elapsed / 60 / (length / 1000),
             "hr": round(float(np.nanmean(beats)), 0) if np.isfinite(beats).any() else np.nan,
             "at_km": round(float(metres[i] - metres[0]) / 1000, 2),
@@ -240,7 +257,7 @@ def efforts(segment_list: list[dict[str, Any]], tracks: dict[int, pd.DataFrame],
     """Every pass of every segment by every run with a track, ranked per
     segment (1 = fastest)."""
     columns = ["segment_id", "activity_id", "start_local", "kind", "pass", "at_km", "seconds", "pace_min_km",
-               "hr", "rank", "of"]
+               "hr", "stop_s", "rank", "of"]
     if not segment_list or not tracks or runs is None or runs.empty:
         return pd.DataFrame(columns=columns)
     meta = runs.set_index("activity_id")
@@ -283,7 +300,8 @@ def shared(activity_id: int, tracks: dict[int, pd.DataFrame], runs: pd.DataFrame
     """For one run: the longest stretch it shares with each other run (same
     direction, >= 400 m), timed on both. ``d_pace_s`` < 0 = this run faster."""
     columns = ["other_id", "start_local", "kind", "km_from", "km_to", "length_m", "seconds", "seconds_other",
-               "pace", "pace_other", "hr", "hr_other", "d_pace_s", "d_hr", "d_eff_pct", "segment"]
+               "pace", "pace_other", "hr", "hr_other", "d_pace_s", "d_hr", "d_eff_pct", "stop_s", "stop_s_other",
+               "segment"]
     tracks = routable(tracks)
     me = tracks.get(int(activity_id))
     if me is None or me.empty or runs is None or runs.empty:
@@ -339,6 +357,7 @@ def shared(activity_id: int, tracks: dict[int, pd.DataFrame], runs: pd.DataFrame
             "d_hr": hr - there["hr"] if pd.notna(hr) and pd.notna(there["hr"]) else np.nan,
             "d_eff_pct": (efficiency / efficiency_other - 1) * 100
             if pd.notna(efficiency) and pd.notna(efficiency_other) else np.nan,
+            "stop_s": _standing(me, i, j), "stop_s_other": there.get("stop_s"),
             "segment": segment,
         })
     frame = pd.DataFrame(rows, columns=columns)

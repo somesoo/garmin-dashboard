@@ -52,6 +52,16 @@ class Segments(unittest.TestCase):
                                   "start_local": pd.to_datetime(["2026-10-01", "2026-10-08", "2026-10-09"])})
         self.segment = {"id": "s", **segments.cut(self.routes[self.routes["activity_id"] == 1], 0.2, 1.2)}
 
+    def test_a_pass_says_how_long_it_stood(self):
+        stopped = self.routes[self.routes["activity_id"] == 2].copy()
+        stopped["moving_s"] = stopped["duration_s"]
+        stopped.loc[stopped["distance_km"] > 0.7, "duration_s"] += 30
+        routes = pd.concat([self.routes[self.routes["activity_id"] != 2], stopped])
+        found = segments.efforts([self.segment], segments.paths(routes), self.runs).set_index("activity_id")
+        self.assertAlmostEqual(found.at[2, "seconds"], 300, delta=8)
+        self.assertAlmostEqual(found.at[2, "stop_s"], 30, delta=1)
+        self.assertTrue(np.isnan(found.at[1, "stop_s"]))  # no moving time in the stream: unknown
+
     def test_cut_keeps_length_and_checkpoints(self):
         self.assertAlmostEqual(self.segment["length_m"], 1000, delta=15)
         self.assertGreater(len(self.segment["points"]), 40)

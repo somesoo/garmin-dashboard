@@ -35,7 +35,7 @@ def build(
     ctx = context(activities, daily)
     runs, hr_max, daily = ctx["runs"], ctx["hr_max"], ctx["daily"]
     if runs.empty:
-        return {"run_sessions": pd.DataFrame(), "run_splits": pd.DataFrame(),
+        return {"run_sessions": pd.DataFrame(), "run_splits": pd.DataFrame(), "run_stops": pd.DataFrame(),
                 "run_efforts": pd.DataFrame(), "run_forecast": pd.DataFrame()}
 
     first = sessions.classify(runs, segments, routes, hr_max, manual=manual)
@@ -50,7 +50,7 @@ def build(
     history = forecast.history(final, efforts, daily, hr_max=hr_max, step_days=7)
     final["hr_max_used"] = hr_max
 
-    splits = []
+    splits, stops, standing = [], [], {}
     if routes is not None and not routes.empty:
         ids = set(final["activity_id"])
         for activity_id, track in routes.groupby("activity_id"):
@@ -59,9 +59,20 @@ def build(
             table = sessions.km_splits(track)
             if not table.empty:
                 splits.append(table.assign(activity_id=int(activity_id)))
+            # Stops with the timer running: collected, not corrected (pace stays timer time).
+            found = sessions.stops(track)
+            total = sessions.stopped_total(track)
+            if total is not None:
+                standing[int(activity_id)] = (len(found), total)
+            if not found.empty:
+                stops.append(found.assign(activity_id=int(activity_id)))
+    ids = final["activity_id"].astype(int)
+    final["stops"] = ids.map(lambda a: standing[a][0] if a in standing else None)
+    final["stop_s"] = ids.map(lambda a: standing[a][1] if a in standing else None)
     return {
         "run_sessions": final,
         "run_splits": pd.concat(splits, ignore_index=True) if splits else pd.DataFrame(),
+        "run_stops": pd.concat(stops, ignore_index=True) if stops else pd.DataFrame(),
         "run_efforts": efforts,
         "run_forecast": history,
     }

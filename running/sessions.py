@@ -266,6 +266,7 @@ def _clock(track: pd.DataFrame) -> pd.DataFrame:
     else:
         seconds = (pd.to_numeric(track["timestamp_ms"], errors="coerce") - track["timestamp_ms"].min()) / 1000
     frame = pd.DataFrame({"m": metres.values, "s": seconds.values})
+    frame["stop"] = _standing(track, seconds).values
     for column in ("hr", "elevation_m", "cadence"):
         frame[column] = pd.to_numeric(track[column], errors="coerce").values if column in track.columns else np.nan
     # directRunCadence counts one foot; the activity summary (and every
@@ -273,9 +274,88 @@ def _clock(track: pd.DataFrame) -> pd.DataFrame:
     if frame["cadence"].notna().any() and frame["cadence"].median() < 120:
         frame["cadence"] = frame["cadence"] * 2
     frame = frame.dropna(subset=["m", "s"])
+    if frame["stop"].notna().any():
+        frame["stop"] = frame["stop"].ffill().fillna(0).cummax()
     # Distance and timer never go backwards; a GPS hiccup that says otherwise is dropped.
     frame = frame[(frame["m"].diff().fillna(0) >= 0) & (frame["s"].diff().fillna(0) >= 0)]
     return frame.reset_index(drop=True)
+
+
+def _standing(track: pd.DataFrame, seconds: pd.Series) -> pd.Series:
+    """Cumulative seconds on the timer without moving (timer - moving time).
+
+    The watch accumulates moving time every second, so the difference between
+    two samples ten seconds apart still says exactly how long the runner stood
+    in between. NaN when the stream has no moving time.
+    """
+    if "moving_s" not in track.columns:
+        return pd.Series(np.nan, index=track.index)
+    moving = pd.to_numeric(track["moving_s"], errors="coerce")
+    if moving.notna().sum() <= 5:
+        return pd.Series(np.nan, index=track.index)
+    return (seconds - moving).clip(lower=0)
+
+
+MIN_STOP_S = 5.0
+
+
+def stops(track: pd.DataFrame, minimum: float = MIN_STOP_S) -> pd.DataFrame:
+    """Every stop with the timer running (traffic lights, a shoelace, a gate).
+
+    A stop is a run of consecutive sample intervals in which the timer moved
+    and moving time did not; ``seconds`` is the standing time, ``km`` where it
+    happened. Stops shorter than ``minimum`` are dropped from the list but
+    still count in a run's total (``stopped_total``). Nothing is corrected
+    here: pace, splits and segments keep the timer time; this only says how
+    much of it was standing.
+    """
+    columns = ["stop", "km", "seconds", "at_s", "lat", "lon"]
+    if track is None or track.empty or "distance_km" not in track.columns or "moving_s" not in track.columns:
+        return pd.DataFrame(columns=columns)
+    ordered = track.sort_values("seq") if "seq" in track.columns else track
+    clock = _clock(ordered)
+    if clock["stop"].isna().all() or len(clock) < 2:
+        return pd.DataFrame(columns=columns)
+    located = ordered.assign(_m=pd.to_numeric(ordered["distance_km"], errors="coerce") * 1000)
+    gained = clock["stop"].diff().fillna(clock["stop"].iloc[0]).to_numpy()
+    rows, current = [], None
+    for index, step in enumerate(gained):
+        if step >= 0.5:
+            if current is None:
+                current = {"start": index, "seconds": 0.0}
+            current["seconds"] += float(step)
+            continue
+        if current is not None:
+            rows.append(current)
+            current = None
+    if current is not None:
+        rows.append(current)
+    out = []
+    for item in rows:
+        if item["seconds"] < minimum:
+            continue
+        at = clock.iloc[item["start"]]
+        near = located.iloc[(located["_m"] - at["m"]).abs().argsort()[:1]]
+        out.append({
+            "km": round(float(at["m"]) / 1000, 2),
+            "seconds": round(item["seconds"], 0),
+            "at_s": round(float(at["s"]) - item["seconds"], 0) if item["start"] else 0.0,
+            "lat": float(near["lat"].iloc[0]) if "lat" in near.columns else np.nan,
+            "lon": float(near["lon"].iloc[0]) if "lon" in near.columns else np.nan,
+        })
+    frame = pd.DataFrame(out, columns=columns[1:])
+    frame.insert(0, "stop", range(1, len(frame) + 1))
+    return frame
+
+
+def stopped_total(track: pd.DataFrame) -> float | None:
+    """All standing seconds of a run, short ones included; None without moving time."""
+    if track is None or track.empty or "moving_s" not in track.columns:
+        return None
+    clock = _clock(track)
+    if clock.empty or clock["stop"].isna().all():
+        return None
+    return round(float(clock["stop"].iloc[-1]), 0)
 
 
 def km_splits(track: pd.DataFrame) -> pd.DataFrame:
@@ -286,7 +366,7 @@ def km_splits(track: pd.DataFrame) -> pd.DataFrame:
     not to the tenth the watch shows. The last, partial split is kept and
     marked by its length.
     """
-    columns = ["km", "length_km", "seconds", "pace_min_km", "hr", "elev_gain_m", "elev_loss_m", "cadence"]
+    columns = ["km", "length_km", "seconds", "pace_min_km", "hr", "elev_gain_m", "elev_loss_m", "cadence", "stop_s"]
     if track is None or track.empty or "distance_km" not in track.columns:
         return pd.DataFrame(columns=columns)
     clock = _clock(track)
@@ -295,6 +375,8 @@ def km_splits(track: pd.DataFrame) -> pd.DataFrame:
     total = float(clock["m"].iloc[-1])
     edges = list(np.arange(0, total, 1000.0)) + [total]
     times = np.interp(edges, clock["m"], clock["s"])
+    # Standing time of each kilometre (part of ``seconds``, not taken out of it).
+    standing = np.interp(edges, clock["m"], clock["stop"]) if clock["stop"].notna().all() else None
     rows = []
     for index in range(1, len(edges)):
         start, end = edges[index - 1], edges[index]
@@ -315,6 +397,7 @@ def km_splits(track: pd.DataFrame) -> pd.DataFrame:
                 "elev_gain_m": round(float(step.clip(lower=0).sum()), 1) if len(elevation) > 1 else None,
                 "elev_loss_m": round(float(-step.clip(upper=0).sum()), 1) if len(elevation) > 1 else None,
                 "cadence": round(float(inside["cadence"].mean()), 0) if inside["cadence"].notna().any() else None,
+                "stop_s": round(float(standing[index] - standing[index - 1]), 0) if standing is not None else None,
             }
         )
     return pd.DataFrame(rows, columns=columns)

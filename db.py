@@ -46,6 +46,7 @@ DERIVED_TABLES = (
     "quadrants",
     "run_sessions",
     "run_splits",
+    "run_stops",
     "run_efforts",
     "run_forecast",
 )

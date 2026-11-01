@@ -319,6 +319,18 @@ TERMS: dict[str, tuple[str, str, str, str]] = {
         "— pace too ambitious or recoveries too short. A negative fade (speeding up) — there was something "
         "left.",
     ),
+    "stops": (
+        "Stops",
+        "Seconds when the timer ran and you stood — traffic lights, a crossing, a shoelace. The watch counts "
+        "moving time separately; the difference between it and the timer is the stop. The list shows stops "
+        "from 5 s.",
+        "Without auto-pause a stop sits in the time and in the pace: a kilometre with traffic lights looks "
+        "weaker, a segment run into a red light — a worse result. The number says how much of the gap is "
+        "standing.",
+        "Pace, splits and segments stay in timer time — nothing is corrected. When comparing two passes, take "
+        "the difference in stops off the difference in time before calling it form. “Without stops” under "
+        "the pace is the moving pace. In intervals a standing recovery is a stop too.",
+    ),
     "same_route": (
         "Same route",
         "Runs whose GPS tracks overlap by at least 80% (both ways, a ~50 m grid) with distances "
