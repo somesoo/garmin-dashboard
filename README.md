@@ -103,10 +103,13 @@ Bez tokenów wystarczy raz `.venv/bin/python etl/login.py`.
 
 ### Jak się poruszać
 
-Stroną startową jest **Dziś**: trening z planu, stan regeneracji i propozycja
-z innych sportów. Przy pierwszym wejściu pokazuje się na niej krótki przewodnik
-(„Jak czytać ten dashboard”, do przywrócenia z szyny bocznej). Menu ma cztery
-grupy: **Na co dzień** (Dziś, Sport, Historia), **Bieganie** (przegląd, plan
+Stroną startową jest **Dzień**: ostatni bieg na środku ekranu, a wokół niego
+fakty dnia — najważniejszy fragment biegu, postoje, noc na tle tygodnia, HRV,
+najbliższy start, ciekawostki (na mniejszym ekranie mniej faktów). Zaraz pod nim
+**Dziś**: trening z planu, stan regeneracji i propozycja z innych sportów. Przy
+pierwszym wejściu na Dziś pokazuje się krótki przewodnik („Jak czytać ten
+dashboard”, do przywrócenia z szyny bocznej). Menu ma cztery
+grupy: **Na co dzień** (Dzień, Dziś, Sport, Historia), **Bieganie** (przegląd, plan
 i zawody, prognoza, segmenty, obciążenie), **Ciało** (regeneracja, sen)
 i **Laboratorium** (fizjologia, statystyka, insights, SQL, słownik). Nad
 tytułem każdej strony jest pytanie, na które odpowiada, a na dole pasek
