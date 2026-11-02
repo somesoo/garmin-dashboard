@@ -75,10 +75,28 @@ DAY_MEANS = {
     f"{Q}RespiratoryRate": "sleep_respiration",
     f"{Q}OxygenSaturation": "spo2_avg",
 }
+DAY_MEANS[f"{Q}AppleSleepingWristTemperature"] = "wrist_temp_c"
+# Measured overnight: an evening reading counts for the next morning.
+NIGHT_TYPES = {f"{Q}AppleSleepingWristTemperature", f"{Q}RespiratoryRate", f"{Q}OxygenSaturation"}
 DAY_LAST = {f"{Q}BodyMass": "weight_kg", f"{Q}BodyFatPercentage": "body_fat_pct"}
 HEART_RATE = f"{Q}HeartRate"
+HRV = f"{Q}HeartRateVariabilitySDNN"
+STEPS = f"{Q}StepCount"
 SLEEP = f"{C}SleepAnalysis"
-WANTED = set(DAY_SUMS) | set(DAY_MEANS) | set(DAY_LAST) | {HEART_RATE, SLEEP}
+# Apple Watch samples written during a workout, averaged over its time window.
+WORKOUT_MEANS = {
+    f"{Q}RunningPower": "avg_power",
+    f"{Q}RunningStrideLength": "stride_m",
+    f"{Q}RunningVerticalOscillation": "vertical_oscillation_cm",
+    f"{Q}RunningGroundContactTime": "ground_contact_ms",
+    f"{Q}WorkoutEffortScore": "effort_score",
+    f"{Q}EstimatedWorkoutEffortScore": "effort_score_estimated",
+}
+HR_RECOVERY = f"{Q}HeartRateRecoveryOneMinute"
+WANTED = set(DAY_SUMS) | set(DAY_MEANS) | set(DAY_LAST) | set(WORKOUT_MEANS) | {HEART_RATE, SLEEP, HR_RECOVERY}
+# HR zones as %HRmax (Garmin's default zones), lower edges of Z2..Z5.
+ZONE_EDGES = (0.6, 0.7, 0.8, 0.9)
+NORM_NIGHTS, NORM_MIN = 60, 14
 
 SLEEP_VALUES = {
     "HKCategoryValueSleepAnalysisAsleepCore": "light",
@@ -316,6 +334,10 @@ def daily_totals(records: pd.DataFrame) -> pd.DataFrame:
         frames.append(best)
     means = records[records["type"].isin(list(DAY_MEANS))]
     if not means.empty:
+        # A night's readings belong to its morning, like sleep: one taken at 23:30
+        # is the same night as one at 03:00.
+        evening = means["type"].isin(list(NIGHT_TYPES)) & (pd.to_datetime(means["start"]).dt.hour >= 18)
+        means = means.assign(day=means["day"] + pd.to_timedelta(evening.astype(int), unit="D"))
         frames.append(means.groupby(["day", "type"])["value"].mean().unstack("type").rename(columns=DAY_MEANS))
     last = records[records["type"].isin(list(DAY_LAST))].sort_values("start")
     if not last.empty:
@@ -466,25 +488,78 @@ def _dedupe(workouts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return kept
 
 
+class _Timeline:
+    """Rows sorted by time, sliced by a window in O(log n) -- a watch export has
+    millions of samples and every workout asks for its own few minutes."""
+
+    def __init__(self, frame: pd.DataFrame, column: str):
+        self.frame = frame.sort_values(column, ignore_index=True)
+        self.times = self.frame[column].to_numpy("datetime64[ns]")
+
+    def between(self, start: dt.datetime, end: dt.datetime) -> pd.DataFrame:
+        lo = np.searchsorted(self.times, np.datetime64(start, "ns"), side="left")
+        hi = np.searchsorted(self.times, np.datetime64(end, "ns"), side="right")
+        return self.frame.iloc[lo:hi]
+
+
+def _zone_seconds(samples: pd.DataFrame, end: dt.datetime, hr_max: float) -> list[float | None]:
+    """Seconds in Z1..Z5 (%HRmax, Garmin's default zones); each sample lasts until the next (<= 60 s)."""
+    if len(samples) < 3 or not hr_max:
+        return [None] * 5
+    times = samples["t"].to_numpy("datetime64[ns]")
+    following = np.append(times[1:], np.datetime64(end, "ns"))
+    seconds = np.clip((following - times).astype("timedelta64[s]").astype(float), 0, 60)
+    zone = np.searchsorted(np.array(ZONE_EDGES) * hr_max, samples["bpm"].to_numpy(float), side="right")
+    return [round(float(seconds[zone == z].sum())) for z in range(5)]
+
+
+def _cadence(steps: pd.DataFrame, minutes: float | None) -> float | None:
+    """Steps per minute (both feet) from the busiest step source inside the workout."""
+    if steps.empty or not minutes:
+        return None
+    best = steps.groupby("source")["value"].sum().max()
+    cadence = best / minutes
+    return round(float(cadence), 1) if 60 <= cadence <= 240 else None
+
+
 def activities(export: Export, hr_rest: float, today: dt.date) -> pd.DataFrame:
     heart = export.heart_rate
-    rows = []
+    heart_line = _Timeline(heart, "t")
+    record_line = _Timeline(export.records, "start")
+    rows, inside_hr = [], {}
     for w in _dedupe(export.workouts):
         if not w["start"]:
             continue
         end = w["end"] or w["start"] + dt.timedelta(minutes=w["duration_min"] or 0)
         avg_hr, max_hr = w["avg_hr"], w["max_hr"]
-        if avg_hr is None and not heart.empty:
-            inside = heart[(heart["t"] >= w["start"]) & (heart["t"] <= end)]["bpm"]
-            if len(inside) >= 3:
-                avg_hr, max_hr = round(float(inside.mean()), 1), float(inside.max())
+        samples = heart_line.between(w["start"], end)
+        if avg_hr is None and len(samples) >= 3:
+            avg_hr, max_hr = round(float(samples["bpm"].mean()), 1), float(samples["bpm"].max())
+        window = record_line.between(w["start"], end)
+        extras = {column: (round(float(v.mean()), 2) if len(v := window[window["type"] == kind]["value"]) else None)
+                  for kind, column in WORKOUT_MEANS.items()}
+        # The effort score may be rated (or estimated) a few minutes after the workout ends.
+        late = record_line.between(w["start"], end + dt.timedelta(minutes=15))
+        for kind in (f"{Q}WorkoutEffortScore", f"{Q}EstimatedWorkoutEffortScore"):
+            scores = late[late["type"] == kind]["value"]
+            if len(scores):
+                extras[WORKOUT_MEANS[kind]] = float(scores.iloc[-1])
+        after = record_line.between(end, end + dt.timedelta(minutes=10))
+        recovery = after[after["type"] == HR_RECOVERY]["value"]
+        extras["hr_recovery_1min"] = float(recovery.iloc[0]) if len(recovery) else None
+        extras["cadence"] = _cadence(window[window["type"] == STEPS], w["duration_min"])
+        if extras["stride_m"] is not None and extras["stride_m"] > 3:  # written in cm by some apps
+            extras["stride_m"] = round(extras["stride_m"] / 100, 2)
+        key = activity_id(w["source"], w["start"])
+        inside_hr[key] = (samples, end)
         sport = SPORTS.get(w["type"], _snake(w["type"]))
         if sport == "running" and w["indoor"]:
             sport = "treadmill_running"
         distance, duration = w["distance_km"], w["duration_min"]
         speed = distance / (duration / 60) if distance and duration else None
         rows.append({
-            "activity_id": activity_id(w["source"], w["start"]),
+            **extras,
+            "activity_id": key,
             "start_local": pd.Timestamp(w["start"]),
             "name": w["type"],
             "sport": sport,
@@ -501,10 +576,13 @@ def activities(export: Export, hr_rest: float, today: dt.date) -> pd.DataFrame:
         })
     columns = ["activity_id", "start_local", "name", "sport", "distance_km", "duration_min", "moving_min",
                "pace_min_km", "speed_kmh", "avg_hr", "max_hr", "calories", "elevation_gain_m", "route_file",
-               "data_source"]
+               "data_source", *WORKOUT_MEANS.values(), "hr_recovery_1min", "cadence"]
     df = pd.DataFrame(rows, columns=columns)
     hr_max = hr_max_estimate(df["max_hr"].dropna(), export.birth_date, today)
     df["hr_max_used"] = hr_max
+    zones = [_zone_seconds(*inside_hr[k], hr_max) for k in df["activity_id"]]
+    for index in range(5):
+        df[f"hr_z{index + 1}_s"] = [z[index] for z in zones]
     df["training_load"] = [trimp(d, h, hr_rest, hr_max, export.sex) for d, h in zip(df["duration_min"], df["avg_hr"])]
     df["load_source"] = np.where(df["training_load"].notna(), "trimp", None)
     df["source"] = "apple"
@@ -603,7 +681,8 @@ def build(export: Export, today: dt.date | None = None, skip: Iterable[dt.date] 
 
     today = today or dt.date.today()
     sessions = sleep_sessions(export.sleep)
-    parts = [daily_totals(export.records), heart_extremes(export.heart_rate), sleep_daily(sessions)]
+    parts = [daily_totals(export.records), heart_extremes(export.heart_rate), sleep_daily(sessions),
+             nightly_hrv(sessions, export.records)]
     daily = parts[0]
     for part in parts[1:]:
         daily = daily.merge(part, on="day", how="outer") if not part.empty else daily
@@ -617,7 +696,8 @@ def build(export: Export, today: dt.date | None = None, skip: Iterable[dt.date] 
             daily[column] = daily[column].round()
     daily["source"] = "apple"
     daily = schema.daily(daily)
-    daily = load.add_derived(load.mask_nights(daily.sort_values("day"), {d: "" for d in skip}))
+    daily = load.mask_nights(daily.sort_values("day").reset_index(drop=True), {d: "" for d in skip})
+    daily = load.add_derived(hrv_norm(daily))
 
     rest = pd.to_numeric(daily.get("rhr"), errors="coerce").dropna() if "rhr" in daily.columns else pd.Series()
     hr_rest = float(rest.median()) if len(rest) else 60.0
@@ -630,9 +710,76 @@ def build(export: Export, today: dt.date | None = None, skip: Iterable[dt.date] 
         "daily": daily,
         "activities": schema.activities(acts.drop(columns=["route_file"])),
         "sleep_stages": sleep_stages(sessions, skip),
+        "night_series": night_series(sessions, export.heart_rate, export.records, skip),
         "routes": route_points,
         "route_summary": route_summary,
     }
+
+
+def _session_window(session: dict[str, Any]) -> tuple[dt.datetime, dt.datetime]:
+    margin = dt.timedelta(minutes=15)
+    return session["start"] - margin, session["end"] + margin
+
+
+def nightly_hrv(sessions: list[dict[str, Any]], records: pd.DataFrame) -> pd.DataFrame:
+    """Overnight HRV per morning: the mean of the watch's SDNN readings inside the sleep.
+
+    Daytime readings are left out on purpose -- after a walk or a coffee SDNN
+    says something else, and Garmin's ``hrv_last_night`` is overnight too, so
+    the pages read both the same way (each against the person's own norm).
+    """
+    columns = ["day", "hrv_last_night", "hrv_kind"]
+    readings = records[records["type"] == HRV] if not records.empty else records
+    if readings.empty or not sessions:
+        return pd.DataFrame(columns=columns)
+    line = _Timeline(readings, "start")
+    rows = []
+    for session in sessions:
+        inside = line.between(*_session_window(session))["value"]
+        if len(inside):
+            rows.append({"day": session["day"], "hrv_last_night": round(float(inside.mean()), 1), "hrv_kind": "sdnn"})
+    return pd.DataFrame(rows, columns=columns)
+
+
+def hrv_norm(daily: pd.DataFrame) -> pd.DataFrame:
+    """The person's own normal range for overnight HRV: 10th-90th percentile of the
+    60 nights before (at least 14) -- Garmin's "balanced" band has no Apple twin."""
+    out = daily.copy()
+    nights = out.dropna(subset=["hrv_last_night"])
+    if len(nights) < NORM_MIN + 1:
+        return out
+    values = nights["hrv_last_night"].astype(float).shift(1)
+    rolling = values.rolling(NORM_NIGHTS, min_periods=NORM_MIN)
+    out.loc[nights.index, "hrv_baseline_low"] = rolling.quantile(0.10).round(1).to_numpy()
+    out.loc[nights.index, "hrv_baseline_high"] = rolling.quantile(0.90).round(1).to_numpy()
+    out.loc[nights.index, "hrv_norm"] = np.where(out.loc[nights.index, "hrv_baseline_low"].notna(), "own", None)
+    return out
+
+
+def night_series(sessions: list[dict[str, Any]], heart: pd.DataFrame, records: pd.DataFrame,
+                 skip: Iterable[dt.date] = ()) -> pd.DataFrame:
+    """Overnight heart rate and HRV readings in the long format Garmin's night series has."""
+    skipped = set(skip)
+    heart_line = _Timeline(heart, "t") if not heart.empty else None
+    readings = records[records["type"] == HRV] if not records.empty else records
+    hrv_line = _Timeline(readings, "start") if not readings.empty else None
+    rows = []
+    for session in sessions:
+        if session["day"].date() in skipped:
+            continue
+        window = _session_window(session)
+        if heart_line is not None:
+            for t, bpm in heart_line.between(*window)[["t", "bpm"]].itertuples(index=False):
+                rows.append((session["day"], "hr", t, float(bpm)))
+        if hrv_line is not None:
+            for t, value in hrv_line.between(*window)[["start", "value"]].itertuples(index=False):
+                rows.append((session["day"], "hrv", t, float(value)))
+    df = pd.DataFrame(rows, columns=["day", "metric", "t_local", "value"])
+    if df.empty:
+        return df
+    df["t_local"] = pd.to_datetime(df["t_local"])
+    df["minutes_from_midnight"] = df["t_local"].dt.hour * 60 + df["t_local"].dt.minute
+    return df
 
 
 def main() -> int:
@@ -652,7 +799,6 @@ def main() -> int:
     # Garmin-only tables stay present and empty, so every view finds its table.
     for name, frame in (("activity_segments", pd.DataFrame(columns=["activity_id"])),
                         ("run_laps", pd.DataFrame(columns=["activity_id"])),
-                        ("night_series", pd.DataFrame(columns=["day", "metric", "t_local", "value"])),
                         ("intraday", pd.DataFrame(columns=["t_local", "stress", "body_battery", "hour"]))):
         load.write_table(frame, name)
     daily, acts = tables["daily"], tables["activities"]

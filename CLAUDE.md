@@ -152,9 +152,21 @@ katalog `data/`.
   największą liczbą minut snu na poranek (core → light, samo „w łóżku” = `sleep_h`
   bez faz, `sleep_in_bed_only`); trening zapisany przez dwie aplikacje (±2 min) liczy
   się raz; plik trasy wspólny dla kilku treningów (błąd nazw Stravy) jest odrzucany.
-  HRV z Health to **SDNN** → `hrv_sdnn`, nigdy `hrv_last_night` (RMSSD Garmina).
+  **HRV**: Garmin zapisuje RMSSD, Apple Watch SDNN — inne wielkości. Osoba ma jedno
+  źródło, więc `hrv_last_night` niesie nocną miarę *tej osoby*, a `hrv_kind`
+  (`rmssd`/`sdnn`) mówi którą; dwie miary nigdy nie są w jednej serii. U Apple to
+  średnia odczytów SDNN z okna snu (dzienne odczyty tylko w `hrv_sdnn`), norma
+  `hrv_baseline_low/high` = 10.–90. percentyl 60 poprzednich nocy (min. 14),
+  `hrv_norm = own`; teksty („Twoja norma” / „norma Garmina”) daje
+  `facts.hrv_norm_words`. Watch dokłada: `night_series` (tętno i HRV w oknie snu),
+  `wrist_temp_c`, `spo2_avg`, `sleep_respiration` (pomiar wieczorny = noc kończąca
+  się rano), a na trening moc, krok, oscylację, kontakt z podłożem, kadencję z
+  kroków zegarka, strefy tętna (%HRmax), `effort_score`, `hr_recovery_1min`.
   `training_load` = TRIMP Banistera (`load_source = "trimp"`, HRmax = max(trzecie
   najwyższe maksimum, 208 − 0,7·wiek)). Wspólne kolumny obu źródeł: `etl/schema.py`.
+- **Dane w kształcie Apple Watcha bez zegarka**: `tools/synthetic_watch.py out.zip`
+  (ziarnisty, spójna fizjologia: mocny dzień → wyższe tętno spoczynkowe i niższe HRV)
+  → osoba `demo` (`tenant add demo --source apple`). Nigdy do katalogu prawdziwej osoby.
 - Testy: `tests/__init__.py` zamyka cały przebieg w tymczasowym rejestrze;
   `tests.helpers.person()` / `people({...}, current=...)` dają własną osobę.
 - Plan dalszych etapów (źródło Apple, API + PWA, SaaS): `TASKS.md`.

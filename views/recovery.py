@@ -54,12 +54,14 @@ def render() -> None:
     view = shell.clip(frame)
     runs = rc.runs()
     told = facts.recovery(frame, runs, shell.cutoff())
+    words = facts.hrv_norm_words(frame)
     story.frame_page(
         "regeneracja", headline=told["headline"],
-        sub=tr(pl="Nocne HRV, średnia z 7 nocy i norma Garmina. Pomarańczowe kreski na dole to poranki po mocnym "
-                  "treningu. Pod spodem — bodziec (kilometry) i druga odpowiedź (sen) na tej samej osi czasu.",
-               en="Overnight HRV, the 7-night mean and Garmin's normal. Orange ticks at the bottom are mornings after "
-                  "a hard session. Below — the stimulus (kilometres) and the other response (sleep) on the same time axis."),
+        sub=tr(pl=f"{words['measure']}, średnia z 7 nocy i {words['short']}. Pomarańczowe kreski na dole to poranki "
+                  "po mocnym treningu. Pod spodem — bodziec (kilometry) i druga odpowiedź (sen) na tej samej osi czasu.",
+               en=f"{words['measure']}, the 7-night mean and {words['short']}. Orange ticks at the bottom are mornings "
+                  "after a hard session. Below — the stimulus (kilometres) and the other response (sleep) on the same "
+                  "time axis."),
         hero=lambda: _hero(view, runs, told),
         more=tr(pl="tętno spoczynkowe, readiness, kwadranty, Body Battery, stres, kroki, waga, tydzień po tygodniu",
                 en="resting heart rate, readiness, quadrants, Body Battery, stress, steps, weight, week by week"),

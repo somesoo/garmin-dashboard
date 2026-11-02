@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -131,6 +132,27 @@ class Segments(unittest.TestCase):
             self.assertEqual([s["name"] for s in store.segments()], ["prosta"])
             store.delete_segment(saved["id"])
             self.assertEqual(store.segments(), [])
+
+
+class SameEnds(unittest.TestCase):
+    def test_auto_segments_never_share_an_id(self):
+        """Runs of one loop every day (the synthetic Apple Watch export): start and
+        finish coincide, so two stretches can share both ends -- and the id."""
+        import datetime as dt
+        import tempfile
+
+        from etl import apple
+        from tools import synthetic_watch
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "watch.zip"
+            path.write_bytes(synthetic_watch.generate(days=60, seed=7, today=dt.date(2026, 11, 2)))
+            tables = apple.build(apple.parse(path), today=dt.date(2026, 11, 2))
+        runs = tables["activities"][tables["activities"]["sport"] == "running"]
+        found = segments.frequent(segments.paths(tables["routes"]), runs)
+        self.assertTrue(found, "the loop must yield auto segments for the test to mean anything")
+        ids = [item["id"] for item in found]
+        self.assertEqual(len(ids), len(set(ids)))
 
 
 if __name__ == "__main__":

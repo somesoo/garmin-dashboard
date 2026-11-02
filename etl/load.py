@@ -280,6 +280,12 @@ def build_daily() -> pd.DataFrame:
         df = df.merge(races, on="day", how="left")
 
     df["source"] = "garmin"
+    # Which HRV this is and whose normal the band is: Garmin's overnight RMSSD and
+    # its "balanced" range. An Apple person has SDNN and an own range (etl/apple.py).
+    if "hrv_last_night" in df.columns:
+        df["hrv_kind"] = np.where(df["hrv_last_night"].notna(), "rmssd", None)
+    if "hrv_baseline_low" in df.columns:
+        df["hrv_norm"] = np.where(df["hrv_baseline_low"].notna(), "garmin", None)
     return add_derived(mask_nights(schema.daily(df), excluded_nights()))
 
 

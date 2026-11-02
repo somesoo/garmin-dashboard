@@ -139,8 +139,29 @@ class Parsed(unittest.TestCase):
         self.assertAlmostEqual(day["weight_kg"], 74.84, places=2)
         self.assertAlmostEqual(day["hrv_sdnn"], 55.0)
 
-    def test_sdnn_never_lands_in_the_garmin_rmssd_column(self):
-        self.assertTrue(self.tables["daily"]["hrv_last_night"].isna().all())
+    def test_overnight_sdnn_is_marked_as_sdnn(self):
+        """One person has one source, so overnight SDNN fills the HRV column -- named by hrv_kind,
+        never mixed with Garmin's RMSSD in one series."""
+        night = self.daily.loc[dt.date(2026, 4, 21)]
+        self.assertAlmostEqual(night["hrv_last_night"], 55.0)
+        self.assertEqual(night["hrv_kind"], "sdnn")
+        self.assertEqual(set(self.tables["daily"]["hrv_kind"].dropna()), {"sdnn"})
+        series = self.tables["night_series"]
+        self.assertEqual(set(series["metric"]), {"hrv"})
+        self.assertTrue((series["day"] == pd.Timestamp("2026-04-21")).all())
+
+    def test_own_hrv_norm_from_previous_nights(self):
+        days = pd.date_range("2026-01-01", periods=40)
+        frame = pd.DataFrame({"day": days, "hrv_last_night": [50.0 + (i % 10) for i in range(40)],
+                              "hrv_baseline_low": float("nan"), "hrv_baseline_high": float("nan"),
+                              "hrv_norm": None})
+        normed = apple.hrv_norm(frame)
+        self.assertTrue(normed["hrv_baseline_low"].iloc[:apple.NORM_MIN].isna().all(), "needs 14 nights first")
+        last = normed.iloc[-1]
+        self.assertEqual(last["hrv_norm"], "own")
+        # The 39 nights before: 50..58 four times each, 59 three times (linear interpolation).
+        self.assertAlmostEqual(last["hrv_baseline_low"], 50.8, places=1)
+        self.assertAlmostEqual(last["hrv_baseline_high"], 58.0, places=1)
 
     def test_staged_night_wins_over_in_bed_and_nap(self):
         night = self.daily.loc[dt.date(2026, 4, 21)]

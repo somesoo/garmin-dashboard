@@ -17,9 +17,14 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
       w `hrv_sdnn`, nigdy w `hrv_last_night`; TRIMP Banistera jako `training_load` dla
       Apple; core → light. Przebudowa Garmina na danych X: identyczne wartości, tylko
       nowe kolumny. Wszystkie 18 widoków renderuje się dla obu osób.
-  - [ ] Teksty stron zależne od źródła („norma Garmina” na Regeneracji u osoby Apple),
-        wykres HRV z `hrv_sdnn` dla osoby z Apple Watchem, chowanie kafli Garmin-only
-        (Body Battery, readiness, stres) zamiast pustych.
+  - [x] HRV z Apple Watcha (nocne SDNN, własna norma, `hrv_kind`), teksty „Twoja norma”,
+        TRIMP / effort score w Treningu, typy Watcha (temperatura, SpO2, oddech, moc,
+        dynamika, strefy, HR recovery), `night_series` z zegarka.
+  - [x] Syntetyczny eksport Apple Watcha (`tools/synthetic_watch.py`, osoba `demo`).
+  - [ ] Chowanie kafli Garmin-only (Body Battery, stres, ocena snu) zamiast pustych —
+        wymaga przestawienia rzędów bento (suma kolumn = 4).
+  - [ ] Po przyjściu zegarka: eksport z prawdziwego Watcha, porównanie z `demo`
+        (nazwy typów, jednostki, `WorkoutEvent` z okrążeniami → `run_laps`).
 - [x] 4a. Import `export.zip`: `GARMIN_USER=y python -m etl.apple import <zip>` →
       `raw/apple/exports/`, budowa w `etl/apple.py`. Eksport Y: 444 dni, 39 treningów.
       **W eksporcie Y nie ma Apple Watcha**: tętno, sen z fazami i biegi 2025-08…2026-04

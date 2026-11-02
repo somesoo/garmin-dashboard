@@ -457,8 +457,13 @@ def frequent(tracks: dict[int, pd.DataFrame], runs: pd.DataFrame, saved: list[di
         if found["activity_id"].nunique() >= min_runs:
             start, end = segment["points"][0], segment["points"][-1]
             key = f"{start[0]:.4f},{start[1]:.4f},{end[0]:.4f},{end[1]:.4f}"
+            segment_id = "auto-" + hashlib.sha1(key.encode()).hexdigest()[:8]
+            # The id is the ends: on a loop run every day two stretches can share
+            # both ends (start = finish) -- one corridor, so it is kept once.
+            if any(item["id"] == segment_id for item in accepted):
+                continue
             accepted.append({
-                **segment, "id": "auto-" + hashlib.sha1(key.encode()).hexdigest()[:8], "auto": True,
+                **segment, "id": segment_id, "auto": True,
                 "name": f"{_place(meta.at[activity_id, 'name'] if 'name' in meta.columns else '')} · "
                         f"{segment['length_m'] / 1000:.1f} km",
                 "activity_id": int(activity_id),

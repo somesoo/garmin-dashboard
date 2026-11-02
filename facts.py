@@ -96,6 +96,27 @@ def hard_days(runs: pd.DataFrame) -> set[dt.date]:
     return set(pd.to_datetime(runs.loc[runs["kind"].isin(HARD), "start_local"]).dt.date)
 
 
+def hrv_norm_words(daily: pd.DataFrame) -> dict[str, str]:
+    """Whose normal the HRV band is, in the forms the sentences need.
+
+    Garmin's own "balanced" range for a Garmin person; for an Apple Watch person
+    (SDNN, etl/apple.py) the 10th-90th percentile of their previous 60 nights.
+    """
+    tr = i18n.tr
+    kinds = daily["hrv_norm"].dropna() if "hrv_norm" in daily.columns else pd.Series(dtype=object)
+    if len(kinds) and kinds.iloc[-1] == "own":
+        return {"name": tr(pl="Twoja norma (10.–90. percentyl z 60 nocy)", en="Your normal (10th–90th pct of 60 nights)"),
+                "short": tr(pl="Twoja norma", en="your normal"),
+                "below": tr(pl="poniżej Twojej normy", en="below your normal"),
+                "within": tr(pl="wciąż w Twojej normie", en="still within your normal"),
+                "measure": tr(pl="Nocne HRV (SDNN z Apple Watcha)", en="Overnight HRV (SDNN from the Apple Watch)")}
+    return {"name": tr(pl="Norma Garmina", en="Garmin's normal"),
+            "short": tr(pl="norma Garmina", en="Garmin's normal"),
+            "below": tr(pl="poniżej normy Garmina", en="below Garmin's normal"),
+            "within": tr(pl="wciąż w normie Garmina", en="still within Garmin's normal"),
+            "measure": tr(pl="Nocne HRV", en="Overnight HRV")}
+
+
 def recovery(daily: pd.DataFrame, runs: pd.DataFrame, since: pd.Timestamp | None) -> dict[str, Any]:
     """Headline and satellites for the HRV hero on Regeneracja.
 
@@ -132,8 +153,8 @@ def recovery(daily: pd.DataFrame, runs: pd.DataFrame, since: pd.Timestamp | None
         out["headline"] = tr(pl=f"HRV {word} — {change:+.0f}% wobec tygodnia.", en=f"HRV {word} — {change:+.0f}% against the week.")
 
     sats = out["satellites"]
-    norm = tr(pl=f" Norma Garmina: {low:.0f}–{high:.0f}.", en=f" Garmin's normal: {low:.0f}–{high:.0f}.") \
-        if low is not None and high is not None else ""
+    words = hrv_norm_words(daily)
+    norm = f" {words['name']}: {low:.0f}–{high:.0f}." if low is not None and high is not None else ""
     sats.append(sat("r", tr(pl="Ostatnia noc", en="Last night"),
                     tr(pl=f"{hrv:.0f} ms — {change:+.0f}% wobec tygodnia", en=f"{hrv:.0f} ms — {change:+.0f}% against the week"),
                     tr(pl=f"Średnia 7 poprzednich nocy: {mean:.0f} ms.", en=f"Mean of the 7 nights before: {mean:.0f} ms.") + norm,
@@ -148,8 +169,7 @@ def recovery(daily: pd.DataFrame, runs: pd.DataFrame, since: pd.Timestamp | None
         day, value = roll.idxmin(), float(roll.min())
         row = frame[frame["day"] == day].iloc[0]
         lo = _num(row.get("hrv_baseline_low"))
-        where = (tr(pl=" — poniżej normy Garmina.", en=" — below Garmin's normal.") if lo is not None and value < lo
-                 else tr(pl=" — wciąż w normie Garmina.", en=" — still within Garmin's normal."))
+        where = f" — {words['below']}." if lo is not None and value < lo else f" — {words['within']}."
         sats.append(sat("l", tr(pl="Najniżej", en="Lowest"), f"{_dec(value, 1)} ms · {_date(day)}",
                         tr(pl="Najniższa średnia 7 nocy w tym okresie", en="The lowest 7-night mean in this period") + where,
                         anchor=(day, value)))

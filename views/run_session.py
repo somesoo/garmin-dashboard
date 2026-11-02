@@ -132,10 +132,19 @@ def _character(run: pd.Series) -> None:
         columns[0].metric(tr(pl="Przewyższenie", en="Elevation gain"), f"{gain:.0f} m" if pd.notna(gain) else "—")
         columns[1].metric(tr(pl="Kadencja", en="Cadence"), f"{cadence:.0f}" if pd.notna(cadence) else "—",
                           help=tr(pl="kroki/min, obie nogi", en="steps/min, both feet"))
-        columns[2].metric("Load", f"{load:.0f}" if pd.notna(load) else "—",
-                          help=tr(pl="Load Garmina", en="Garmin's load"))
-        columns[3].metric("TE", f"{te:.1f} / {run.get('te_anaerobic', 0) or 0:.1f}" if pd.notna(te) else "—",
-                          help=tr(pl="Training Effect tlenowy / beztlenowy", en="Aerobic / anaerobic Training Effect"))
+        trimp = run.get("load_source") == "trimp"
+        columns[2].metric("TRIMP" if trimp else "Load", f"{load:.0f}" if pd.notna(load) else "—",
+                          help=tr(pl="TRIMP Banistera z tętna (Apple Health nie podaje obciążenia)",
+                                  en="Banister's TRIMP from heart rate (Apple Health has no load)") if trimp
+                          else tr(pl="Load Garmina", en="Garmin's load"))
+        effort = run.get("effort_score")
+        if pd.isna(te) and effort is not None and pd.notna(effort):
+            columns[3].metric(tr(pl="Wysiłek", en="Effort"), f"{effort:.0f} / 10",
+                              help=tr(pl="Ocena wysiłku treningu z Apple Watcha (1–10)",
+                                      en="Workout effort score from the Apple Watch (1–10)"))
+        else:
+            columns[3].metric("TE", f"{te:.1f} / {run.get('te_anaerobic', 0) or 0:.1f}" if pd.notna(te) else "—",
+                              help=tr(pl="Training Effect tlenowy / beztlenowy", en="Aerobic / anaerobic Training Effect"))
 
 
 def _plan_line(run: pd.Series) -> str | None:

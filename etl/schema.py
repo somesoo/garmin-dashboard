@@ -26,7 +26,7 @@ DAILY = (
     "sleep_awake_h", "sleep_nap_h", "sleep_awake_count", "sleep_restless", "sleep_stress", "sleep_respiration",
     "sleep_start", "sleep_end", "sleep_feedback", "sleep_insight",
     "overnight_hrv", "sleep_rhr", "hrv_last_night", "hrv_weekly", "hrv_high_5min", "hrv_status",
-    "hrv_baseline_low", "hrv_baseline_high", "hrv_sdnn",
+    "hrv_baseline_low", "hrv_baseline_high", "hrv_kind", "hrv_norm", "hrv_sdnn", "wrist_temp_c", "exercise_min",
     "readiness", "readiness_level", "readiness_feedback", "acute_load", "acwr_percent", "recovery_time_h",
     "f_sleep", "f_hrv", "f_recovery", "f_sleep_history", "f_stress_history",
     "vo2max", "fitness_age", "training_status", "training_status_code", "training_status_feedback",
@@ -35,7 +35,7 @@ DAILY = (
     "weight_kg", "body_fat_pct", "body_water_pct", "muscle_mass_kg",
 )
 # Text columns: empty as None (object), numbers as NaN (float).
-DAILY_TEXT = {"source", "stress_qualifier", "sleep_qualifier", "sleep_feedback", "sleep_insight", "hrv_status",
+DAILY_TEXT = {"source", "hrv_kind", "hrv_norm", "stress_qualifier", "sleep_qualifier", "sleep_feedback", "sleep_insight", "hrv_status",
               "readiness_level", "readiness_feedback", "training_status", "training_status_code",
               "training_status_feedback", "load_ratio_status", "load_balance_feedback"}
 
