@@ -1,7 +1,7 @@
 // Offline shell: the app's own files from the cache, data never (app.js keeps
 // the last summary itself, behind the person's key). Bump VERSION on change.
 "use strict";
-const VERSION = "gd-shell-1";
+const VERSION = "gd-shell-2";
 const SHELL = ["./", "index.html", "app.js", "app.css", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", (event) => {

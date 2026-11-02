@@ -377,6 +377,37 @@ def migrate(args: argparse.Namespace) -> int:
     return 0
 
 
+EDITABLE = ("name", "source")
+
+
+def update(user_id: str, **fields: str) -> User:
+    """Change what a person may change about themselves (account page): name, source.
+
+    Without a registry (the single-user layout) one is created first, so the
+    person's choice has somewhere to live; their data stays where it is.
+    """
+    unknown = set(fields) - set(EDITABLE)
+    if unknown:
+        raise ValueError(f"nie do zmiany: {', '.join(sorted(unknown))}")
+    if "source" in fields and fields["source"] not in SOURCES:
+        raise ValueError(f"źródło: {', '.join(SOURCES)}")
+    if "name" in fields:
+        fields["name"] = " ".join(str(fields["name"]).split())[:60]
+        if not fields["name"]:
+            raise ValueError("pusta nazwa")
+    payload = _read_registry()
+    if payload is None:
+        payload = {"users": {LEGACY_ID: {"name": LEGACY_ID, "source": "garmin", "root": ".", "insights": True,
+                                         "local": True}}}
+    if user_id not in payload["users"]:
+        raise NoUser(f"nie ma osoby {user_id!r}")
+    entry = {**payload["users"][user_id], **fields}
+    _user(user_id, entry)  # validate before writing
+    payload["users"][user_id] = entry
+    _write_registry(payload)
+    return get(user_id)
+
+
 def archive(person: User) -> bytes:
     """Everything the person owns, as one zip (the right to a copy of one's data)."""
     import io

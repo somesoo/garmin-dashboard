@@ -29,6 +29,7 @@ e-mail never falls through to "local".
 from __future__ import annotations
 
 import argparse
+import html
 import ipaddress
 import os
 import secrets
@@ -123,6 +124,11 @@ def gate() -> tenant.User:
         for key in list(st.session_state.keys()):
             del st.session_state[key]
     st.session_state[tenant.SESSION_KEY] = person.id
+    if person.name == person.id and can_sign_out():
+        # First sign-in of someone added by id only: greet them by their Google name.
+        google_name = str(st.user.get("name") or "").strip()
+        if google_name:
+            person = tenant.update(person.id, name=google_name)
     return person
 
 
@@ -131,18 +137,39 @@ def can_sign_out() -> bool:
 
 
 def _refused(presented: str | None) -> None:
+    """The sign-in page: one centred card -- what this is, one button, one line on privacy."""
     tr = i18n.tr
-    st.title("Garmin Dashboard")
-    if presented:
-        st.error(tr(pl=f"Konto {presented} nie ma tu dostępu do żadnych danych.",
-                    en=f"The account {presented} has no data here."))
-        if can_sign_out():
-            st.button(tr(pl="Wyloguj", en="Sign out"), on_click=st.logout, type="primary")
-        return
-    if _oidc_configured():
-        st.info(tr(pl="Zaloguj się, żeby zobaczyć swoje dane.", en="Sign in to see your data."))
-        st.button(tr(pl="Zaloguj", en="Sign in"), on_click=st.login, type="primary")
-        return
+    import shell
+
+    with st.container(horizontal=True, key="signin_lang"):
+        st.space("stretch")
+        shell.language_picker()
+    _, middle, _ = st.columns([1, 1.4, 1])
+    with middle, st.container(key="signin_card"):
+        st.markdown(f"<div class='signin-mark'></div><h1 class='signin-title'>Dashboard</h1>"
+                    f"<p class='signin-sub'>{tr(pl='Sen, regeneracja, trening — z Twojego zegarka, tylko dla Ciebie.', en='Sleep, recovery, training — from your watch, for you only.')}</p>",
+                    unsafe_allow_html=True)
+        if presented:
+            st.markdown(f"<p class='signin-note'>"
+                        + tr(pl="To konto nie ma tu jeszcze dostępu:", en="This account has no access here yet:")
+                        + f"<br><b>{html.escape(presented)}</b><br>"
+                        + tr(pl="Poproś osobę, która prowadzi ten dashboard, o dodanie tego adresu — albo zaloguj się "
+                                "innym kontem.",
+                             en="Ask the person who runs this dashboard to add this address — or sign in with another "
+                                "account.")
+                        + "</p>", unsafe_allow_html=True)
+            if can_sign_out():
+                st.button(tr(pl="Zaloguj innym kontem", en="Use another account"), on_click=st.logout,
+                          type="primary", width="stretch")
+            return
+        if _oidc_configured():
+            st.button(tr(pl="Zaloguj przez Google", en="Sign in with Google"), on_click=st.login, type="primary",
+                      icon=":material/login:", width="stretch")
+            st.markdown("<p class='signin-note'>" + tr(
+                pl="Widzisz wyłącznie swoje dane. Google podaje nam tylko Twój adres e-mail i imię — nic więcej.",
+                en="You see only your own data. Google gives us only your e-mail address and name — nothing else.")
+                + "</p>", unsafe_allow_html=True)
+            return
     st.warning(tr(
         pl="Nie wiadomo, czyje dane pokazać. Ten serwer ma kilka osób, a połączenie nie niesie tożsamości "
            "(ustaw logowanie Google: `python -m auth setup` albo `GARMIN_AUTH_HEADER` za `tailscale serve`).",

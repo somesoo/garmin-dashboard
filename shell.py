@@ -176,6 +176,14 @@ _STYLE = """
   [data-testid="stMarkdownContainer"]:has(> .view-title) {margin-bottom: 0 !important;}
   [data-testid="stAppDeployButton"] {display: none;}
   .tb-note {font-size: 0.8rem; color: #5f6570;}
+  /* Sign-in (auth._refused): one flat, centred card -- the app icon's ring, a title, one button. */
+  .st-key-signin_card {margin-top: 14vh; text-align: center; gap: 0.9rem;}
+  .signin-mark {width: 54px; height: 54px; margin: 0 auto 0.4rem; border-radius: 50%;
+                border: 9px solid #3987e5; box-sizing: border-box; position: relative;}
+  .signin-mark::after {content: ""; position: absolute; inset: 13px; border-radius: 50%; background: #fafafa;}
+  .signin-title {font-size: 1.9rem !important; font-weight: 680 !important; margin: 0 !important; padding: 0 !important;}
+  .signin-sub {color: #9aa0a6; margin: 0.2rem 0 0.6rem; font-size: 0.98rem;}
+  .signin-note {color: #8a9099; font-size: 0.82rem; line-height: 1.45; margin-top: 0.4rem;}
 
   /* ---- the headline and the loop next to it ------------------------------- */
   .story-h {font-size: 2.15rem !important; line-height: 1.12 !important; letter-spacing: -0.03em; font-weight: 700 !important;
@@ -473,18 +481,6 @@ def status_lines() -> str:
     return (f"{days} {i18n.plural(days, pl=('dzień', 'dni', 'dni'), en=('day', 'days'))} · {activities} "
             f"{i18n.plural(activities, pl=('aktywność', 'aktywności', 'aktywności'), en=('activity', 'activities'))} · "
             + i18n.tr(pl="zbudowano", en="built") + f" {_stamp(info.get('built_at'))}")
-
-
-def person_line() -> None:
-    """Whose data this is, in the lab menu -- only when the server has more than one person."""
-    if len(tenant.users()) < 2:
-        return
-    import auth
-
-    person = tenant.current()
-    st.caption(i18n.tr(pl=f"Dane: {person.name}", en=f"Data of: {person.name}"))
-    if auth.can_sign_out():
-        st.button(i18n.tr(pl="Wyloguj", en="Sign out"), on_click=st.logout, key="sign_out", type="tertiary")
 
 
 def _stamp(value: str | None) -> str:

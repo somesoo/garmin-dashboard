@@ -16,6 +16,8 @@ garmin-dashboard/
   etl/login.py       odświeżenie tokenów hasłem (raz na rok / po zmianie hasła)
   etl/apple.py       Apple Health export.zip -> te same tabele (osoba z source: apple)
   etl/apple_push.py  codzienne paczki z iPhone'a (Skrót / Health Auto Export) + łączenie z eksportem
+  views/account.py   strona Konto: profil, źródło (Garmin z przeglądarki / Apple), telefon, klucze, prawa; pierwsze wejście
+  etl/garmin_auth.py logowanie do Garmin Connect z przeglądarki (hasło raz, kod MFA w sesji)
   api.py             HTTP obok dashboardu: POST /api/ingest/apple, GET /api/manifest|db|summary,
                      PWA pod /api/app/; tokeny per osoba
   summary.py         JSON dla telefonu: nagłówki z facts.py, liczby dnia wobec normy, serie (cache per build)

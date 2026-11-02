@@ -42,7 +42,7 @@ STAGE_PAGES = {
     "goal": ["plan", "dzis"],
 }
 EVERYDAY = ["dzien", "dzis", "atlas"]
-LAB = ["statystyka", "insights", "sql", "slownik", "urzadzenia"]
+LAB = ["statystyka", "insights", "sql", "slownik"]
 
 
 def stage_of(url_path: str) -> str | None:
@@ -140,12 +140,39 @@ def topbar(current: str) -> None:
             st.caption(shell.status_lines())
             import guide
             guide.rail()
-            shell.person_line()
         st.space("stretch")
         shell.range_picker()
         shell.language_picker()
         if tenant.current().source == "garmin":
             st.fragment(run_every=3 if sync.running() else 60)(shell.pull_inline)(sync.running())
+        _account_chip(current)
+
+
+def _account_chip(current: str) -> None:
+    """The signed-in person at the end of the top line: their name opens the account page."""
+    import auth
+
+    person = tenant.current()
+    page = routing.page("konto")
+    label = person.name if tenant.registered() else i18n.page("konto")
+    if page is not None and current != "konto":
+        st.page_link(page, label=label, icon=":material/account_circle:")
+    else:
+        st.markdown(f"<span class='tb-here'>{label}</span>", unsafe_allow_html=True, width="content")
+    if auth.can_sign_out():
+        st.button(i18n.tr(pl="Wyloguj", en="Sign out"), on_click=st.logout, key="tb_sign_out", type="tertiary")
+
+
+def topbar_minimal() -> None:
+    """The top line while there is no data yet: the name, the language, signing out."""
+    import auth
+
+    with st.container(horizontal=True, key="topbar", vertical_alignment="center", gap="medium"):
+        st.markdown(f"<span class='tb-here'>{tenant.current().name}</span>", unsafe_allow_html=True, width="content")
+        st.space("stretch")
+        shell.language_picker()
+        if auth.can_sign_out():
+            st.button(i18n.tr(pl="Wyloguj", en="Sign out"), on_click=st.logout, key="tb_sign_out", type="tertiary")
 
 
 def frame_page(current: str, *, headline: str, sub: str | None, hero: Callable[[], None],

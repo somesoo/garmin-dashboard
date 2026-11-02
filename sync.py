@@ -115,8 +115,8 @@ def due(hours: float, now: dt.datetime | None = None) -> bool:
     return edge is None or (now or dt.datetime.now()) >= edge
 
 
-def start() -> bool:
-    """Start ``etl/run.py`` detached; False when a pull is already running."""
+def start(args: list[str] | None = None) -> bool:
+    """Start ``etl/run.py`` detached (``args``: e.g. ``["--backfill", "2025-11-01"]``); False when one is running."""
     person = tenant.current()
     # For an Apple person the run only rebuilds (the API starts it after a push).
     if running():
@@ -130,7 +130,7 @@ def start() -> bool:
     )
     with log.open("w", encoding="utf-8") as out:
         subprocess.Popen(
-            [sys.executable, str(ROOT / "etl" / "run.py")],
+            [sys.executable, str(ROOT / "etl" / "run.py"), *(args or [])],
             cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
             env={**os.environ, "GARMIN_USER": person.id}, **detach,
         )

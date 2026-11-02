@@ -19,7 +19,7 @@ const WORDS = {
     hrv_chart: "HRV noc po nocy, średnia 7 nocy i pas normy", sleep_chart: "Długość snu",
     km_chart: "Kilometry biegu tygodniowo", data_from: "dane z", offline: "offline — ostatnia kopia",
     online: "aktualne", setup_title: "Połącz z dashboardem",
-    setup_text: "Na komputerze: Laboratorium → Urządzenia → „Utwórz klucz do odczytu”. Wklej go tutaj — zostaje tylko na tym telefonie.",
+    setup_text: "Na komputerze: Konto (imię w prawym górnym rogu) → „Utwórz klucz do odczytu”. Wklej go tutaj — zostaje tylko na tym telefonie.",
     setup_button: "Połącz", bad_key: "Klucz nie działa (odwołany albo literówka).", no_data: "Brak danych — jeszcze nic nie przyszło.",
     key_revoked: "Klucz został odwołany — połącz ponownie.", disconnect: "Rozłącz", min: "min", km: "km",
     sports: { running: "Bieg", treadmill_running: "Bieżnia", walking: "Spacer", hiking: "Wędrówka", cycling: "Rower",
@@ -33,7 +33,7 @@ const WORDS = {
     hrv_chart: "HRV night by night, 7-night mean and the normal band", sleep_chart: "Sleep length",
     km_chart: "Running kilometres per week", data_from: "data from", offline: "offline — last copy",
     online: "up to date", setup_title: "Connect to the dashboard",
-    setup_text: "On the computer: Lab → Devices → “Make a read key”. Paste it here — it stays on this phone only.",
+    setup_text: "On the computer: Account (your name, top right) → “Make a read key”. Paste it here — it stays on this phone only.",
     setup_button: "Connect", bad_key: "The key does not work (revoked or mistyped).", no_data: "No data yet — nothing has arrived.",
     key_revoked: "The key was revoked — connect again.", disconnect: "Disconnect", min: "min", km: "km",
     sports: { running: "Run", treadmill_running: "Treadmill", walking: "Walk", hiking: "Hike", cycling: "Ride",
@@ -332,7 +332,7 @@ function chrome() {
 }
 
 (function pairFromLink() {
-  // A link from the Devices page may carry the key in the fragment: it never
+  // A link from the Account page may carry the key in the fragment: it never
   // reaches a server log, and is wiped from the address bar at once.
   const match = location.hash.match(/token=(gd_[A-Za-z0-9_-]+)/);
   if (match) {

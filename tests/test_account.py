@@ -1,10 +1,11 @@
-"""views/devices.py in a headless app run: a key is made, shown once, and only its hash is kept."""
+"""views/account.py in a headless app run: a key is made, shown once, and only its hash is kept."""
 
 from __future__ import annotations
 
 import unittest
 from pathlib import Path
 
+import pandas as pd
 from streamlit.testing.v1 import AppTest
 
 import api
@@ -16,8 +17,8 @@ SCRIPT = f"""
 import sys; sys.path.insert(0, {str(ROOT)!r})
 import streamlit as st, tenant
 st.session_state[tenant.SESSION_KEY] = "y"
-from views import devices
-devices.render()
+from views import account
+account.render()
 """
 
 
@@ -41,8 +42,9 @@ class Devices(unittest.TestCase):
             for who in ("x", "y"):
                 folder = tenant.get(who).root / "tables"
                 folder.mkdir(parents=True)
-                (folder / "daily.parquet").write_text("p")
+                pd.DataFrame({"day": [pd.Timestamp("2026-11-01")], "steps": [100]}).to_parquet(folder / "daily.parquet")
             at = AppTest.from_string(SCRIPT, default_timeout=60).run()
+            self.assertFalse(at.exception)
             self.assertTrue(at.button(key="dev_erase").disabled)
             at.text_input(key="dev_erase_name").input("Ygrek").run()
             self.assertFalse(at.button(key="dev_erase").disabled)

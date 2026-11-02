@@ -41,7 +41,7 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
   - [ ] Zbudować i przetestować Skrót na prawdziwym iPhonie (format w DOSTEP.md);
         sprawdzić Health Auto Export na prawdziwej paczce.
 - [x] Logowanie Google (`st.login`, `python -m auth setup`, tylko zweryfikowany e-mail),
-      serwer na 127.0.0.1 przy kilku osobach, strona **Urządzenia** (wgranie eksportu,
+      serwer na 127.0.0.1 przy kilku osobach, strona **Konto** (wgranie eksportu,
       klucze do wysyłki i odczytu, odwołanie). Sign in with Apple wymaga płatnego konta.
   - [ ] Utworzyć klienta OAuth w Google Cloud i przejść logowanie w przeglądarce.
 - [x] 5. API dla aplikacji (`/api/manifest`, `/api/db` SQLite, `/api/summary?lang=`) i PWA
@@ -50,7 +50,7 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
       Zamiast sql.js w telefonie — JSON ~10 KB (mniej kodu, bez drugiej implementacji liczb).
       Sprawdzone: renderowanie `app.js` w Node na prawdziwym API (PL/EN, odwołany klucz).
   - [ ] Obejrzeć na prawdziwym S23 i iPhonie (bez przeglądarki tutaj nie było zrzutów).
-- [x] 6a. Prawa osoby na stronie Urządzenia: archiwum wszystkich swoich danych (bez
+- [x] 6a. Prawa osoby na stronie Konto: archiwum wszystkich swoich danych (bez
       sekretów: hashy kluczy, tokenów Garmina, cache) i usunięcie wszystkiego po wpisaniu
       nazwy; `python -m tenant remove <id> --yes` usuwa też wpis z rejestru.
 - [ ] 6. SaaS: zgoda i polityka (dane zdrowotne = art. 9 RODO), eksport/usunięcie

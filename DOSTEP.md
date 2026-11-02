@@ -20,6 +20,22 @@ każdą stroną. Ta instrukcja ustawia to od zera.
 - Osoba z Apple: `GARMIN_USER=<id> .venv/bin/python -m etl.apple import export.zip`
   (Zdrowie → profil → Eksportuj wszystkie dane).
 
+## Jak to wygląda dla znajomego
+
+1. Otwiera adres → ekran z jednym przyciskiem **Zaloguj przez Google** (konto spoza
+   listy dostaje „to konto nie ma jeszcze dostępu” i „Zaloguj innym kontem”).
+2. Pierwsze wejście bez danych → od razu strona **Konto** z „Zacznijmy”: wybiera
+   źródło (Garmin / Apple Health) i je łączy — Garmin e-mailem i hasłem (hasło użyte
+   raz, nie zapisywane; kod weryfikacyjny Garmina obsługiwany), Apple eksportem z
+   aplikacji Zdrowie. Garmin od razu pobiera rok historii.
+3. Gdy przyjdą pierwsze dane, dashboard otwiera się sam. Imię z Google trafia do
+   profilu przy pierwszym logowaniu (do zmiany w Konto → Profil).
+4. Potem imię w prawym górnym rogu = Konto: źródło, telefon, klucze, pobranie lub
+   usunięcie swoich danych, wylogowanie.
+
+Administrator dodaje tylko e-mail: `python -m tenant add <id> --identity <gmail>`
+(+ test user w Google Cloud). Resztę osoba robi sama.
+
 ## 2. HTTPS przez Tailscale (bez wystawiania portów do internetu)
 
 Znajomi instalują Tailscale i dostają zaproszenie do Twojej sieci (albo
@@ -74,7 +90,7 @@ Przy więcej niż jednej osobie `serve.py` uruchamia obok dashboardu API
 tailscale serve --bg --set-path /api http://127.0.0.1:8502
 ```
 
-Osoba z Apple Watchem robi resztę sama na stronie **Laboratorium → Urządzenia**:
+Osoba z Apple Watchem robi resztę sama na stronie **Konto (imię w prawym górnym rogu)**:
 
 1. *Historia z Apple Health*: wgrywa `export.zip` (Zdrowie → zdjęcie profilu →
    Eksportuj wszystkie dane) — raz, na start.
@@ -103,7 +119,7 @@ Klucz *do odczytu* (ta sama strona) otwiera `GET /api/manifest` i `GET /api/db`
 
 Ta sama ścieżka `/api` serwuje aplikację: `https://<komputer>.<tailnet>.ts.net/api/app/`.
 
-1. **Urządzenia → Utwórz klucz do odczytu** — strona pokazuje klucz i link
+1. **Konto → Utwórz klucz do odczytu** — strona pokazuje klucz i link
    `…/api/app/#token=…` (klucz we fragmencie adresu nie trafia do serwera ani logów).
 2. **Android**: otwórz link w Chrome → *Zainstaluj aplikację*.
    **iPhone**: Safari → *Udostępnij → Do ekranu początkowego*, otwórz aplikację z ekranu
@@ -138,11 +154,11 @@ da się podrobić.
 | podrobiony nagłówek tożsamości | serwer na 127.0.0.1, nagłówek tylko gdy `GARMIN_AUTH_HEADER` ustawiony |
 | niezweryfikowany e-mail | odrzucany (`email_verified`) |
 | dane w gicie | `data/`, `secrets.toml`, `export*.zip` w `.gitignore` |
-| klucz telefonu wycieknie | klucz otwiera jedną osobę i jeden zakres; odwołanie na stronie Urządzenia |
+| klucz telefonu wycieknie | klucz otwiera jedną osobę i jeden zakres; odwołanie na stronie Konto |
 | aplikacja na telefonie | CSP: tylko własne pliki i własny adres, bez ramek; klucz we fragmencie linku |
 
 ## Prawa każdej osoby
 
-Na stronie **Urządzenia → Twoje dane** każdy sam: pobiera archiwum wszystkiego, co
+Na stronie **Konto → Twoje dane** każdy sam: pobiera archiwum wszystkiego, co
 o nim jest (bez sekretów), albo usuwa wszystko (po wpisaniu swojej nazwy). Administrator:
 `.venv/bin/python -m tenant remove <id> --yes` usuwa też wpis z rejestru.

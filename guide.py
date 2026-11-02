@@ -59,7 +59,7 @@ def _questions() -> dict[str, str]:
         "insights": tr(pl="Jakie wnioski już wyciągnęliśmy?", en="What conclusions have we drawn so far?"),
         "sql": tr(pl="Własne pytanie do danych.", en="Your own question to the data."),
         "slownik": tr(pl="Co znaczy ten wskaźnik?", en="What does this indicator mean?"),
-        "urzadzenia": tr(pl="Skąd biorą się moje dane i co ma do nich dostęp?",
+        "konto": tr(pl="Skąd biorą się moje dane i co ma do nich dostęp?",
                          en="Where does my data come from, and what can reach it?"),
     }
 
@@ -85,7 +85,7 @@ NEXT: dict[str, list[tuple[str, str | None, str | None]]] = {
     "insights": [("sql", None, None), ("slownik", None, None)],
     "sql": [("insights", None, None), ("slownik", None, None)],
     "slownik": [("dzis", None, None)],
-    "urzadzenia": [("dzien", None, None), ("regeneracja", None, None)],
+    "konto": [("dzien", None, None), ("regeneracja", None, None)],
 }
 
 _VIEW_TITLES = {("plan", "races"): "zawody", ("plan", "plan"): "plan", ("obciazenie-biegowe", "all"): "forma",

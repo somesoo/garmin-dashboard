@@ -27,9 +27,9 @@ import shell  # noqa: E402
 import story  # noqa: E402
 import theme  # noqa: E402
 from views import (  # noqa: E402
+    account,
     atlas,
     day,
-    devices,
     hubs,
     notebook,
     physio,
@@ -56,8 +56,9 @@ st.markdown(shell.page_style(theme.mode()), unsafe_allow_html=True)
 # Whose data this run reads -- before anything touches the warehouse (auth.py, tenant.py).
 auth.gate()
 
-if not shell.has_data():
-    shell.no_data_screen()
+# No data yet (a friend's first visit, a fresh server): the account page is the
+# whole app until a source is chosen and something has arrived.
+ONBOARDING = not shell.has_data()
 
 
 def _page(render, url_path: str, icon: str, **kwargs) -> st.Page:
@@ -76,6 +77,8 @@ PAGES = {
         _page(today.render, "dzis", "today"),
         _page(hubs.sports, "sport", "sports_gymnastics"),
         _page(atlas.render, "atlas", "public"),
+        # Who I am, where my data comes from, my phone and my keys (views/account.py).
+        _page(account.render, "konto", "account_circle"),
         # No menu entry: opened from the log, the globe and a run's "Mapa trasy".
         _page(routes.render, "trasy", "route", visibility="hidden"),
     ],
@@ -98,19 +101,24 @@ PAGES = {
         _page(notebook.insights, "insights", "lightbulb"),
         _page(notebook.sql, "sql", "terminal"),
         _page(reference.render, "slownik", "menu_book"),
-        _page(devices.render, "urzadzenia", "devices"),
     ],
 }
 
 # Views navigate by url_path through this registry (see routing.py).
+if ONBOARDING:
+    PAGES = {i18n.group("everyday"): [_page(account.render, "konto", "account_circle", default=True)]}
+
 routing.register(PAGES)
 
 # No sidebar: the loop on every page (story.py) is the navigation, and the top
 # line carries the everyday pages, the lab, the range, the language and the pull.
 page = st.navigation(PAGES, position="hidden")
 
-story.topbar(routing.name(page))
-
-guide.eyebrow(routing.name(page))
-page.run()
-guide.next_steps(routing.name(page))
+if ONBOARDING:
+    story.topbar_minimal()
+    page.run()
+else:
+    story.topbar(routing.name(page))
+    guide.eyebrow(routing.name(page))
+    page.run()
+    guide.next_steps(routing.name(page))
