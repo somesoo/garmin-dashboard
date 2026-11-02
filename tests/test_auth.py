@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import auth
@@ -78,6 +82,14 @@ class Identify(unittest.TestCase):
         self.enter(*_context({}, ip=None))
         self.assertEqual(self.who(), (None, None))
 
+    def test_unverified_email_is_refused(self):
+        self.enterContext(people(TWO))
+        user = mock.Mock(is_logged_in=True)
+        user.get.side_effect = {"email": "x@example.com", "email_verified": False}.get
+        self.enter(mock.patch.object(auth, "_oidc_configured", return_value=True),
+                   mock.patch.object(auth.st, "user", user), *_context({}, ip=None))
+        self.assertEqual(self.who(), (None, "x@example.com"))
+
     def test_oidc_email_picks_the_person(self):
         self.enterContext(people(TWO))
         user = mock.Mock(is_logged_in=True)
@@ -85,6 +97,34 @@ class Identify(unittest.TestCase):
         self.enter(mock.patch.object(auth, "_oidc_configured", return_value=True),
                    mock.patch.object(auth.st, "user", user), *_context({}, ip="192.168.1.20"))
         self.assertEqual(self.who(), ("x", "x@example.com"))
+
+
+class Setup(unittest.TestCase):
+    def test_secrets_file_is_private_and_refuses_plain_http(self):
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(auth, "SECRETS", Path(folder) / "s.toml"), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(auth.setup(["http://example.com"]), 1)
+            self.assertEqual(auth.setup(["https://mac.tail1234.ts.net/"]), 0)
+            text = auth.SECRETS.read_text()
+            self.assertIn('redirect_uri = "https://mac.tail1234.ts.net/oauth2callback"', text)
+            self.assertEqual(auth.SECRETS.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(auth.setup(["https://other"]), 1, "an existing file is not overwritten")
+
+
+class ServeFlags(unittest.TestCase):
+    def test_several_people_bind_to_localhost_and_pass_secrets(self):
+        import serve
+
+        with people(TWO), tempfile.TemporaryDirectory() as folder:
+            secrets_file = Path(folder) / "secrets.toml"
+            secrets_file.write_text("[auth]\n")
+            with mock.patch.object(auth, "SECRETS", secrets_file):
+                flags = serve.security_flags([])
+                self.assertIn("127.0.0.1", flags)
+                self.assertIn(str(secrets_file), flags)
+                self.assertNotIn("127.0.0.1", serve.security_flags(["--server.address", "0.0.0.0"]))
+        with people({"x": {}}), mock.patch.object(auth, "SECRETS", Path("/nonexistent/secrets.toml")):
+            self.assertEqual(serve.security_flags([]), ["--browser.gatherUsageStats", "false"])
 
 
 if __name__ == "__main__":

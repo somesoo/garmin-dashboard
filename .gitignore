@@ -27,3 +27,6 @@ globe_component/cache/
 
 # Health exports dropped next to the code (Apple Health export.zip): personal data, never in git.
 export*.zip
+
+# Sign-in secrets (auth.py keeps them in data/secrets.toml); never in git wherever they land.
+secrets.toml

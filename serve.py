@@ -45,6 +45,33 @@ def code_stamp() -> float:
     return newest
 
 
+def security_flags(given: list[str]) -> list[str]:
+    """Streamlit options that keep several people's health data private.
+
+    - the sign-in secrets (``data/secrets.toml``, auth.py) are passed explicitly:
+      Streamlit would otherwise only look next to the working directory;
+    - with more than one person the server listens on 127.0.0.1 only, so the
+      way in is the HTTPS proxy in front (``tailscale serve``) -- a trusted
+      sign-in header from anywhere else would be a forgery;
+    - no usage statistics leave the browser.
+    An option given on the command line wins.
+    """
+    import auth
+    import tenant
+
+    def unset(name: str) -> bool:
+        return not any(arg == f"--{name}" or arg.startswith(f"--{name}=") for arg in given)
+
+    flags = []
+    if auth.SECRETS.exists() and unset("secrets.files"):
+        flags += ["--secrets.files", str(auth.SECRETS)]
+    if len(tenant.users()) > 1 and unset("server.address"):
+        flags += ["--server.address", "127.0.0.1"]
+    if unset("browser.gatherUsageStats"):
+        flags += ["--browser.gatherUsageStats", "false"]
+    return flags
+
+
 def stop_if_stale() -> int:
     try:
         record = json.loads(RECORD.read_text(encoding="utf-8"))
@@ -75,5 +102,5 @@ if __name__ == "__main__":
     lifecycle.idle_exit()
     sync.auto()
     theme = [] if any(arg.startswith("--theme.") for arg in sys.argv[1:]) else THEME
-    sys.argv = ["streamlit", "run", str(ROOT / "app.py"), *theme, *sys.argv[1:]]
+    sys.argv = ["streamlit", "run", str(ROOT / "app.py"), *theme, *security_flags(sys.argv[1:]), *sys.argv[1:]]
     sys.exit(cli.main())

@@ -1,5 +1,7 @@
 garminconnect>=0.3.17
-streamlit>=1.40
+streamlit>=1.45
+# Google sign-in (st.login, auth.py) needs it; unused while there is one person.
+Authlib>=1.3.2
 duckdb>=1.1
 pandas>=2.2
 pyarrow>=17
