@@ -681,7 +681,7 @@ def _garmin(active: dict) -> None:
     tokens etl/fetch.py uses, which a server without them does not have."""
     from pathlib import Path
 
-    if not (Path(config.TOKENSTORE).expanduser() / "garmin_tokens.json").exists():
+    if not (Path(config.tokenstore()).expanduser() / "garmin_tokens.json").exists():
         return
     today = dt.date.today()
     actions = gw.sync_actions(active, today, 7)

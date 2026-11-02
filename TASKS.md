@@ -2,6 +2,31 @@
 
 ## Do zrobienia
 
+### Wiele osób → SaaS (plan 2026-11-02, zasady w CLAUDE.md → „Wiele osób”)
+
+Osoba X — Garmin, osoba Y — Apple Watch (iPhone); dane całkowicie osobne.
+Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
+
+- [x] 1. Osobne dane: `tenant.py` (rejestr, `data/users/<id>/`, migracja),
+      ścieżki per osoba, cache per osoba, SQL zamknięty w katalogu osoby,
+      pobieranie per osoba, insighty tylko dla swojej osoby.
+- [x] 2. Kto patrzy: `auth.py` — jedna osoba bez logowania, OIDC (`st.login`),
+      nagłówek `tailscale serve`, przeglądarka lokalna; nieznany = odmowa.
+- [ ] 3. Model wielu źródeł: kolumna `source`, kanoniczny schemat `daily`/`activities`;
+      **HRV Apple = SDNN, Garmin = RMSSD — nigdy w jednej serii**; własne obciążenie
+      z tętna (TRIMP) dla obu źródeł, bo Apple nie ma `training_load`; fazy snu
+      (core → light); strony bez danych źródła (Body Battery, readiness) chowają kafle.
+- [ ] 4. Źródło Apple: import `export.zip` (XML + `workout-routes/*.gpx`) do
+      `data/users/<id>/raw/apple/`, potem `/ingest/apple` dla Skrótów iOS
+      (codziennie, 3 ostatnie dni, idempotentnie). `export.zip` osoby Y leży dziś
+      w katalogu repo (gitignorowany) — przenieść do `data/users/y/import/`.
+- [ ] 5. API (`/manifest`, `/db` SQLite, `/pages/*.json?lang=`) + PWA dla iPhone'a
+      i Androida (sql.js, Service Worker, Web Push), tokeny per osoba.
+- [ ] 6. SaaS: zgoda i polityka (dane zdrowotne = art. 9 RODO), eksport/usunięcie
+      konta, szyfrowanie, kopie per osoba, hosting (nie eve302).
+      **Ryzyko**: `garminconnect` to nieoficjalny login — dla obcych użytkowników
+      trzeba oficjalnego Garmin Developer Program.
+
 ### Angielska wersja interfejsu (`i18n.py`, zasady w CLAUDE.md → „Języki”)
 
 - [x] **Etap 1** — moduł `i18n.py`, przełącznik PL/EN w szynie, menu i tytuły

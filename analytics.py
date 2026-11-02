@@ -937,7 +937,7 @@ def main() -> int:
         written[name] = int(len(table))
 
     models = {"banister": banister_fit(frame, ef)}
-    (config.TABLES / "models.json").write_text(
+    (config.tables() / "models.json").write_text(
         json.dumps(models, indent=2, default=str), encoding="utf-8"
     )
 

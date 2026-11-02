@@ -49,7 +49,7 @@ def first_value(mapping: Any) -> dict[str, Any]:
 
 
 def raw_days(metric: str) -> list[tuple[dt.date, Any]]:
-    folder = config.RAW / metric
+    folder = config.raw() / metric
     if not folder.is_dir():
         return []
     out = []
@@ -69,7 +69,7 @@ def excluded_nights() -> dict[dt.date, str]:
     drops the night of 16th -> 17th. Raw files stay untouched; the mask is
     applied on every build, so removing an entry restores the night.
     """
-    payload = read(config.EXCLUDED_NIGHTS)
+    payload = read(config.excluded_nights())
     out = {}
     for key, reason in (payload if isinstance(payload, dict) else {}).items():
         try:
@@ -315,7 +315,7 @@ def add_derived(df: pd.DataFrame) -> pd.DataFrame:
 
 def build_activities() -> pd.DataFrame:
     """One row per activity, deduplicated across overlapping month files."""
-    folder = config.RAW / "activities"
+    folder = config.raw() / "activities"
     if not folder.is_dir():
         return pd.DataFrame(columns=["activity_id"])
 
@@ -563,7 +563,7 @@ RACE_FIELDS = {
 
 def race_predictions() -> pd.DataFrame:
     """Garmin's own race-time predictions, one row per day."""
-    folder = config.RAW / "race"
+    folder = config.raw() / "race"
     if not folder.is_dir():
         return pd.DataFrame(columns=["day"])
     rows = {}
@@ -615,7 +615,7 @@ def build_segments() -> pd.DataFrame:
     (``RWD_*``). Several reps of the same phase arrive as one row with
     ``splits`` > 1, so this is the rep count and total, not each rep.
     """
-    folder = config.RAW / "activities"
+    folder = config.raw() / "activities"
     columns = ["activity_id", "split_type", "splits", "distance_m", "duration_s",
                "avg_speed_ms", "max_speed_ms", "ascent_m"]
     if not folder.is_dir():
@@ -654,7 +654,7 @@ def build_laps() -> pd.DataFrame:
     cuts a 1.2 km rep into 1000 m + 200 m laps. Cadence is doubled like in the
     detail streams (Garmin reports one leg).
     """
-    folder = config.RAW / "splits"
+    folder = config.raw() / "splits"
     columns = ["activity_id", "lap", "start_utc", "distance_m", "duration_s", "moving_s", "pace_min_km",
                "avg_hr", "max_hr", "cadence", "elevation_gain_m", "intensity", "step_index"]
     if not folder.is_dir():
@@ -691,7 +691,7 @@ def build_routes() -> tuple[pd.DataFrame, pd.DataFrame]:
     giving each metric's position, so the mapping has to be rebuilt per
     activity -- the column order is not stable between activities.
     """
-    folder = config.RAW / "details"
+    folder = config.raw() / "details"
     if not folder.is_dir():
         return pd.DataFrame(columns=["activity_id"]), pd.DataFrame(columns=["activity_id"])
 
@@ -779,12 +779,12 @@ def write_table(df: pd.DataFrame, name: str) -> Path:
     parquet must never be visible under the real name. On Windows the swap can
     briefly collide with a reader, hence the retries.
     """
-    config.TABLES.mkdir(parents=True, exist_ok=True)
-    target = config.TABLES / f"{name}.parquet"
+    config.tables().mkdir(parents=True, exist_ok=True)
+    target = config.tables() / f"{name}.parquet"
     # The staging name carries the pid: a backfill rebuilding tables while
     # another process runs the loader would otherwise swap the same temp file
     # out from under it.
-    tmp = config.TABLES / f"{name}.parquet.{os.getpid()}.part"
+    tmp = config.tables() / f"{name}.parquet.{os.getpid()}.part"
     df.to_parquet(tmp, index=False)
     for attempt in range(5):
         try:
@@ -831,8 +831,8 @@ def main() -> int:
         "routes": int(len(route_summary)),
         "excluded_nights": sorted(str(d) for d in excluded_nights()),
     }
-    config.STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    config.STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    config.state_file().parent.mkdir(parents=True, exist_ok=True)
+    config.state_file().write_text(json.dumps(state, indent=2), encoding="utf-8")
     print(
         f"tabele przebudowane: {state['days']} dni "
         f"({state['first_day']} .. {state['last_day']}), "

@@ -23,6 +23,7 @@ import glossary
 import i18n
 import routing
 import sync
+import tenant
 
 # Plain ground, cards on top: black in dark mode, a flat neutral in light.
 # Each mode: canvas, sidebar, widget, edge, inner highlight, resting shadow,
@@ -332,7 +333,7 @@ def _sql(sql: str, build: str) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def _models(build: str) -> dict:
-    path = config.TABLES / "models.json"
+    path = config.tables() / "models.json"
     if not path.exists():
         return {}
     try:
@@ -342,7 +343,13 @@ def _models(build: str) -> dict:
 
 
 def build_id() -> str:
-    return db.state().get("built_at", "none")
+    """The cache key of everything read from the warehouse: whose it is and when it was built.
+
+    Every ``@st.cache_data`` takes this as an argument, and the cache is shared
+    by all sessions of the process -- without the person in it, two people with
+    a build from the same second (or none yet) would get each other's tables.
+    """
+    return f"{tenant.current().id}@{db.state().get('built_at', 'none')}"
 
 
 def table(name: str) -> pd.DataFrame:
@@ -456,6 +463,18 @@ def status_lines() -> str:
     return (f"{days} {i18n.plural(days, pl=('dzień', 'dni', 'dni'), en=('day', 'days'))} · {activities} "
             f"{i18n.plural(activities, pl=('aktywność', 'aktywności', 'aktywności'), en=('activity', 'activities'))} · "
             + i18n.tr(pl="zbudowano", en="built") + f" {_stamp(info.get('built_at'))}")
+
+
+def person_line() -> None:
+    """Whose data this is, in the lab menu -- only when the server has more than one person."""
+    if len(tenant.users()) < 2:
+        return
+    import auth
+
+    person = tenant.current()
+    st.caption(i18n.tr(pl=f"Dane: {person.name}", en=f"Data of: {person.name}"))
+    if auth.can_sign_out():
+        st.button(i18n.tr(pl="Wyloguj", en="Sign out"), on_click=st.logout, key="sign_out", type="tertiary")
 
 
 def _stamp(value: str | None) -> str:
@@ -621,6 +640,15 @@ def has_data() -> bool:
 
 def no_data_screen() -> None:
     st.title("Garmin Dashboard")
+    person = tenant.current()
+    if person.source != "garmin":
+        st.info(i18n.tr(
+            pl=f"{person.name}: brak danych. Import z Apple Health (export.zip, Skróty) jeszcze nie jest gotowy — "
+               "to kolejny etap.",
+            en=f"{person.name}: no data yet. The Apple Health import (export.zip, Shortcuts) is not ready yet — "
+               "it is the next stage.",
+        ))
+        st.stop()
     st.warning(i18n.tr(
         pl="Brak danych. Uruchom `Dashboard.command` (macOS), `Dashboard.cmd` (Windows) albo "
            "`.venv/bin/python etl/run.py` (Linux).",

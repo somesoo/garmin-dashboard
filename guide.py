@@ -170,7 +170,7 @@ def next_steps(url_path: str) -> None:
 
 def _settings() -> dict[str, Any]:
     try:
-        value = json.loads(i18n.SETTINGS.read_text(encoding="utf-8"))
+        value = json.loads(i18n.settings_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return value if isinstance(value, dict) else {}
@@ -180,8 +180,8 @@ def _remember(done: bool) -> None:
     current = _settings()
     current[TOUR_KEY] = done
     try:
-        i18n.SETTINGS.parent.mkdir(parents=True, exist_ok=True)
-        i18n.SETTINGS.write_text(json.dumps(current, indent=2), encoding="utf-8")
+        i18n.settings_path().parent.mkdir(parents=True, exist_ok=True)
+        i18n.settings_path().write_text(json.dumps(current, indent=2), encoding="utf-8")
     except OSError:
         pass  # the session still hides it; only the next visit shows it again
     st.session_state[TOUR_KEY] = done

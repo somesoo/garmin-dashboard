@@ -26,8 +26,8 @@ from etl import load  # noqa: E402
 
 def save(nights: dict[dt.date, str]) -> None:
     payload = {str(day): reason for day, reason in sorted(nights.items())}
-    config.EXCLUDED_NIGHTS.parent.mkdir(parents=True, exist_ok=True)
-    config.EXCLUDED_NIGHTS.write_text(
+    config.excluded_nights().parent.mkdir(parents=True, exist_ok=True)
+    config.excluded_nights().write_text(
         json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 

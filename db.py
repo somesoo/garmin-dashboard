@@ -54,9 +54,18 @@ TABLE_NAMES = BASE_TABLES + DERIVED_TABLES
 
 
 def connect() -> duckdb.DuckDBPyConnection:
+    """Views over the current person's tables -- and nothing else on disk.
+
+    The SQL tab and the insights run whatever SQL they are given. DuckDB can
+    read any file (``read_parquet('<someone else>/tables/daily.parquet')``,
+    ``read_csv('/etc/passwd')``), so once the views exist the connection is
+    fenced to this person's tables directory and the fence is locked: a query
+    cannot widen it again.
+    """
+    folder = config.tables()
     con = duckdb.connect(":memory:")
     for name in TABLE_NAMES:
-        path = config.TABLES / f"{name}.parquet"
+        path = folder / f"{name}.parquet"
         if path.exists():
             # The path is inlined rather than bound: a view definition cannot
             # carry a prepared parameter, and queries against it would fail.
@@ -65,6 +74,10 @@ def connect() -> duckdb.DuckDBPyConnection:
                 f"CREATE OR REPLACE VIEW {name} AS "
                 f"SELECT * FROM read_parquet('{literal}')"
             )
+    allowed = (str(folder.resolve()) + "/").replace("'", "''")
+    con.execute(f"SET allowed_directories = ['{allowed}']")
+    con.execute("SET enable_external_access = false")
+    con.execute("SET lock_configuration = true")
     return con
 
 
@@ -78,17 +91,17 @@ def query(sql: str) -> pd.DataFrame:
 
 
 def table(name: str) -> pd.DataFrame:
-    path = config.TABLES / f"{name}.parquet"
+    path = config.tables() / f"{name}.parquet"
     if not path.exists():
         return pd.DataFrame()
     return pd.read_parquet(path)
 
 
 def state() -> dict[str, Any]:
-    if not config.STATE_FILE.exists():
+    if not config.state_file().exists():
         return {}
     try:
-        return json.loads(config.STATE_FILE.read_text(encoding="utf-8"))
+        return json.loads(config.state_file().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
 

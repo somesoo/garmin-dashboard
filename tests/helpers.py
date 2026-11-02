@@ -1,9 +1,13 @@
-"""Synthetic runs, tracks and daily rows with known answers."""
+"""Synthetic runs, tracks and daily rows with known answers -- and throwaway people."""
 
 from __future__ import annotations
 
+import contextlib
 import sys
+import tempfile
 from pathlib import Path
+from typing import Iterator
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -11,6 +15,46 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+import tenant  # noqa: E402
+
+
+def _point_registry(stack: contextlib.ExitStack, base: Path) -> None:
+    for name, value in (("REGISTRY", base / "users.json"), ("USERS", base / "users"),
+                        ("SECRET", base / "server.secret")):
+        stack.enter_context(mock.patch.object(tenant, name, value))
+
+
+@contextlib.contextmanager
+def people(entries: dict[str, dict], current: str | None = None) -> Iterator[Path]:
+    """A registry of ``entries`` in a temporary directory; ``current`` is the person
+    of the block (None: nobody chosen). Yields the directory standing in for data/."""
+    with tempfile.TemporaryDirectory() as folder, contextlib.ExitStack() as stack:
+        base = Path(folder)
+        _point_registry(stack, base)
+        tenant._write_registry({"users": {uid: {"name": uid, **entry} for uid, entry in entries.items()}})
+        if current:
+            stack.enter_context(tenant.use(current))
+        yield base
+
+
+@contextlib.contextmanager
+def person(user_id: str = "test", **entry) -> Iterator[tenant.User]:
+    """One throwaway person, current for the block: stores, settings and locks land in a temp dir."""
+    with people({user_id: entry}, current=user_id):
+        yield tenant.current()
+
+
+def sandbox_package() -> None:
+    """Point the whole test run at an empty registry with one person, for good.
+
+    Called from tests/__init__.py: a test that forgets ``person()`` writes to a
+    temp dir, never to the real data/ next to the code.
+    """
+    base = Path(tempfile.mkdtemp(prefix="garmin-tests-"))
+    stack = contextlib.ExitStack()
+    _point_registry(stack, base)
+    tenant._write_registry({"users": {"test": {"name": "test"}}})
 
 
 def run(activity_id: int, day: str, km: float, pace: float, *, hr: float | None = 145, max_hr: float = 175,

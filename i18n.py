@@ -30,11 +30,16 @@ import config
 LANGS = {"pl": "Polski", "en": "English"}
 DEFAULT = "pl"
 KEY = "lang"
-SETTINGS = config.DATA / "ui.json"
+
+
+def settings_path():
+    """The current person's ``ui.json`` (tenant.py): language and the tour are one person's choice."""
+    return config._person().ui_settings
+
 
 # Modules whose user-facing text is fully bilingual; the test keeps them so.
 # glossary.py is bilingual through glossary_en.py (its own parity test).
-BILINGUAL = ["app.py", "shell.py", "bento.py", "routing.py", "theme.py", "globe.py", "guide.py", "hero.py",
+BILINGUAL = ["app.py", "auth.py", "shell.py", "bento.py", "routing.py", "theme.py", "globe.py", "guide.py", "hero.py",
              "story.py", "facts.py", "herochart.py",
              *(f"views/{name}.py" for name in (
                  "activities", "atlas", "day", "form", "hubs", "notebook", "physio", "recovery", "reference", "routes",
@@ -50,8 +55,10 @@ BILINGUAL = ["app.py", "shell.py", "bento.py", "routing.py", "theme.py", "globe.
 def saved() -> str:
     """The language remembered from the last choice in the rail."""
     try:
-        value = json.loads(SETTINGS.read_text(encoding="utf-8")).get(KEY)
-    except (OSError, ValueError, AttributeError):
+        value = json.loads(settings_path().read_text(encoding="utf-8")).get(KEY)
+    except (OSError, ValueError, AttributeError, LookupError):
+        # LookupError: nobody signed in yet (tenant.NoUser) -- the sign-in screen
+        # still has to speak some language.
         return DEFAULT
     return value if value in LANGS else DEFAULT
 
@@ -60,15 +67,19 @@ def remember(value: str) -> None:
     if value not in LANGS:
         return
     try:
-        current = json.loads(SETTINGS.read_text(encoding="utf-8"))
+        path = settings_path()
+    except LookupError:
+        return  # nobody signed in: the session keeps the choice
+    try:
+        current = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(current, dict):
             current = {}
     except (OSError, ValueError):
         current = {}
     current[KEY] = value
     try:
-        SETTINGS.parent.mkdir(parents=True, exist_ok=True)
-        SETTINGS.write_text(json.dumps(current, indent=2), encoding="utf-8")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(current, indent=2), encoding="utf-8")
     except OSError:
         pass  # the session still has it; only the next tab falls back
 

@@ -71,7 +71,8 @@ def hr_max(frame: pd.DataFrame) -> float | None:
 def store_stamp() -> str:
     """Changes whenever a race or plan file is written."""
     parts = []
-    for path in [store.RACES, *sorted(store.PLANS.glob("*.json"))] if store.PLANS.is_dir() else [store.RACES]:
+    plans = store.plans_dir()
+    for path in [store.races_path(), *(sorted(plans.glob("*.json")) if plans.is_dir() else [])]:
         if path.exists():
             parts.append(f"{path.name}:{path.stat().st_mtime_ns}")
     return "|".join(parts)

@@ -1,26 +1,22 @@
 import datetime as dt
 import json
 import os
-import tempfile
 import unittest
-from pathlib import Path
 from unittest import mock
 
 import sync
+import tenant
 from etl import run
+from tests.helpers import people, person
 
 
 class SyncTest(unittest.TestCase):
     def setUp(self):
-        tmp = Path(tempfile.mkdtemp())
-        patches = [mock.patch.object(sync, "LOCK", tmp / "fetch.lock"),
-                   mock.patch.object(sync, "RECORD", tmp / "fetch.json")]
-        for patch in patches:
-            patch.start()
-            self.addCleanup(patch.stop)
+        self.person = self.enterContext(person())
 
     def record(self, **fields):
-        sync.RECORD.write_text(json.dumps(fields), encoding="utf-8")
+        sync.record_path().parent.mkdir(parents=True, exist_ok=True)
+        sync.record_path().write_text(json.dumps(fields), encoding="utf-8")
 
     def test_no_record_is_due(self):
         self.assertTrue(sync.due(6))
@@ -38,7 +34,8 @@ class SyncTest(unittest.TestCase):
 
     def test_lock_is_exclusive_and_stale_lock_is_taken_over(self):
         self.assertTrue(run._lock())
-        self.assertEqual(sync.LOCK.read_text(), str(os.getpid()))
+        self.assertEqual(sync.lock_path().read_text(), str(os.getpid()))
+        self.assertEqual(sync.lock_path().parent, self.person.root)
         with mock.patch.object(sync, "running", return_value=True):
             self.assertFalse(run._lock())
         with mock.patch.object(sync, "running", return_value=False):
@@ -49,6 +46,34 @@ class SyncTest(unittest.TestCase):
         run._record(finished_at="2026-10-28T08:02:00", code=0)
         self.assertEqual(sync.last(), {"started_at": "2026-10-28T08:00:00",
                                        "finished_at": "2026-10-28T08:02:00", "code": 0})
+
+
+class PerPerson(unittest.TestCase):
+    """Two people: separate locks and records; the timer pulls Garmin people only."""
+
+    def setUp(self):
+        self.enterContext(people({"x": {"source": "garmin"}, "y": {"source": "apple"}, "z": {"source": "garmin"}}))
+
+    def test_lock_and_record_are_per_person(self):
+        with tenant.use("x"):
+            self.assertTrue(run._lock())
+            run._record(started_at="2026-10-28T08:00:00", code=0)
+        with tenant.use("z"):
+            self.assertTrue(run._lock(), "x's pull must not block z's")
+            self.assertEqual(sync.last(), {})
+        with tenant.use("x"):
+            self.assertEqual(sync.last()["started_at"], "2026-10-28T08:00:00")
+
+    def test_apple_person_is_never_pulled_from_garmin(self):
+        with tenant.use("y"), mock.patch.object(sync.subprocess, "Popen") as popen:
+            self.assertFalse(sync.start())
+        popen.assert_not_called()
+
+    def test_timer_starts_each_due_garmin_person_with_their_id(self):
+        with mock.patch.object(sync.subprocess, "Popen") as popen, \
+                mock.patch.object(sync, "running", return_value=False), mock.patch.object(sync.time, "sleep"):
+            self.assertEqual(sync.check_all(6), ["x", "z"])
+        self.assertEqual([c.kwargs["env"]["GARMIN_USER"] for c in popen.call_args_list], ["x", "z"])
 
 
 if __name__ == "__main__":

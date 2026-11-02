@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 import datetime as dt
 import re
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -13,6 +12,7 @@ from unittest import mock
 import glossary
 import glossary_en
 import i18n
+from tests.helpers import person
 
 ROOT = Path(__file__).resolve().parent.parent
 POLISH = re.compile(r"[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]")
@@ -100,9 +100,7 @@ class Bilingual(unittest.TestCase):
 
 class Choice(unittest.TestCase):
     def setUp(self):
-        patch = mock.patch.object(i18n, "SETTINGS", Path(tempfile.mkdtemp()) / "ui.json")
-        patch.start()
-        self.addCleanup(patch.stop)
+        self.enterContext(person())
         # The package pins Polish for every other test; these test the choice itself.
         i18n.force(None)
         self.addCleanup(i18n.force, "pl")
@@ -119,13 +117,13 @@ class Choice(unittest.TestCase):
         self.assertEqual(i18n.weekdays(long=True)[2], "Wednesday")
 
     def test_unknown_language_falls_back(self):
-        i18n.SETTINGS.write_text('{"lang": "de"}', encoding="utf-8")
+        i18n.settings_path().parent.mkdir(parents=True, exist_ok=True); i18n.settings_path().write_text('{"lang": "de"}', encoding="utf-8")
         self.assertEqual(i18n.lang(), "pl")
         i18n.remember("de")
         self.assertEqual(i18n.lang(), "pl")
 
     def test_broken_file_falls_back(self):
-        i18n.SETTINGS.write_text("not json", encoding="utf-8")
+        i18n.settings_path().parent.mkdir(parents=True, exist_ok=True); i18n.settings_path().write_text("not json", encoding="utf-8")
         self.assertEqual(i18n.lang(), "pl")
         i18n.remember("en")
         self.assertEqual(i18n.lang(), "en")

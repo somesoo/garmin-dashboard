@@ -8,6 +8,8 @@ Lokalny pipeline: Garmin Connect → surowy JSON → parquet → Streamlit na
 ```
 garmin-dashboard/
   config.py          ścieżki, rejestr metryk, throttle, okno re-fetchu
+  tenant.py          osoby: rejestr data/users.json, katalog każdej, kto jest bieżący
+  auth.py            kto patrzy: logowanie (OIDC / nagłówek proxy / lokalnie) przed każdą stroną
   etl/fetch.py       API → data/raw/<metryka>/<YYYY-MM-DD>.json
   etl/load.py        raw → data/tables/*.parquet (jawne mapowanie pól)
   etl/run.py         przyrostowa aktualizacja (wejście dla Dashboard.command/.cmd)
@@ -98,6 +100,50 @@ kodu trzyma stare moduły (Streamlit przeładowuje tylko `app.py`; bez
 mtime kodu), a launchery najpierw wołają `serve.py --stop-if-stale`, które
 zatrzymuje serwer starszy niż kod; zwykłe sprawdzenie portu startuje wtedy nowy. Sesje to prywatne API
 Streamlita — jeśli zniknie, watchdog się wyłącza zamiast zamykać serwer.
+
+## Wiele osób (`tenant.py`, `auth.py`, od 2026-11-02)
+
+Jeden serwer, osobne dane dla każdej osoby (X — Garmin, Y — Apple Watch; docelowo
+SaaS). Bez `data/users.json` wszystko działa jak dawniej: jedna osoba `me`,
+katalog `data/`.
+
+- **Układ**: `data/users.json` (rejestr), `data/server.secret`, a w
+  `data/users/<id>/` wszystko, co należy do osoby: `raw/`, `tables/`, `coach/`,
+  `state.json`, `excluded_nights.json`, `sport.json`, `ui.json`, `fetch.*`,
+  `garmin/` (tokeny). `root: "."` w rejestrze = stary układ w `data/`, aż do
+  `python -m tenant migrate <id>`. CLI: `python -m tenant [init|add|migrate|list]`.
+- **Ścieżki osoby tylko przez funkcje**: `config.raw()`, `tables()`,
+  `state_file()`, `excluded_nights()`, `tokenstore()`, `store.races_path()` /
+  `plans_dir()` / `segments_path()`, `sport.store.settings_path()`,
+  `i18n.settings_path()`, `sync.lock_path()`. **Nie wracaj do stałych modułu**
+  (`config.TABLES`): liczyłyby się raz, dla pierwszej osoby.
+- **Kto jest bieżący** (`tenant.current()`): `with tenant.use(id)` → osoba z sesji
+  Streamlita (ustawia ją `auth.gate()` na początku `app.py`) → poza Streamlitem
+  `GARMIN_USER=<id>` (CLI, `etl/run.py` uruchamiany przez `sync.start`) → jedyna
+  osoba w rejestrze. Kilka osób i nic z tego = `tenant.NoUser`, nigdy domyślna osoba.
+- **Logowanie** (`auth.identify`): jedna osoba — bez logowania; OIDC (`[auth]`
+  w `.streamlit/secrets.toml`, `st.login`, wymaga `Authlib`) po e-mailu
+  z `identities`; nagłówek zaufanego proxy (`GARMIN_AUTH_HEADER=Tailscale-User-Login`
+  za `tailscale serve`, Streamlit tylko na 127.0.0.1); przeglądarka na tym
+  komputerze (brak nagłówków przekierowania) = osoba z `"local": true`.
+  Tożsamość podana, ale nieznana = odmowa, bez przejścia na „lokalną”.
+- **Cache**: `shell.build_id()` = `<id>@<built_at>`; każdy `@st.cache_data`
+  dostaje go w argumencie — nowa funkcja cache'owana też musi.
+- **SQL jest zamknięty w katalogu osoby**: `db.connect` po utworzeniu widoków
+  ustawia `allowed_directories` na `tables/` osoby, `enable_external_access =
+  false` i `lock_configuration` — zakładka SQL nie przeczyta cudzego parquet ani
+  `/etc/passwd`.
+- **Pliki serwowane przeglądarce** (ślady globu) mają w nazwie
+  `User.file_key(...)` (HMAC z `server.secret`) — bez tego nazwa była zgadywalna,
+  a sprzątanie starych buildów kasowało pliki innej osoby.
+- **Insighty to proza o liczbach jednej osoby** — `insights.load_all` zwraca je
+  tylko osobie z `"insights": true`.
+- **Pobieranie** (`sync`): blokada i zapis próby per osoba; timer przechodzi po
+  wszystkich osobach z `source: garmin`; osoba Apple nie ma przycisku „Pobierz”.
+  Tokeny drugiej osoby: `GARMIN_USER=<id> .venv/bin/python etl/login.py`.
+- Testy: `tests/__init__.py` zamyka cały przebieg w tymczasowym rejestrze;
+  `tests.helpers.person()` / `people({...}, current=...)` dają własną osobę.
+- Plan dalszych etapów (źródło Apple, API + PWA, SaaS): `TASKS.md`.
 
 ## Zapytania
 

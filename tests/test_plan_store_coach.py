@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-import tempfile
 import unittest
-from pathlib import Path
 
 import pandas as pd
 
-from tests.helpers import activities, daily, run, training_block
+from tests.helpers import activities, daily, person, run, training_block
 from running import coach, forecast, physio, plan as planning, sessions, store, text, units
 
 
@@ -18,15 +16,10 @@ class TempStore(unittest.TestCase):
     """Points the store at a temporary directory for the duration of a test."""
 
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.saved = (store.ROOT, store.RACES, store.PLANS)
-        store.ROOT = Path(self.tmp.name)
-        store.RACES = store.ROOT / "races.json"
-        store.PLANS = store.ROOT / "plans"
+        self.person = self.enterContext(person())
 
     def tearDown(self):
-        store.ROOT, store.RACES, store.PLANS = self.saved
-        self.tmp.cleanup()
+        pass
 
 
 def fixture():
@@ -403,7 +396,7 @@ class Store(TempStore):
         plan = {"id": "plan-x", "sessions": [{"id": "s1", "date": "2026-03-03", "type": "easy", "distance_km": 6.0}]}
         store.save_plan(plan)
         self.assertEqual(store.plan("plan-x")["sessions"][0]["id"], "s1")
-        self.assertEqual(list(store.PLANS.glob("*.part")), [])
+        self.assertEqual(list(store.plans_dir().glob("*.part")), [])
         bad = {"id": "plan-y", "sessions": [{"id": "s1", "date": "2026-13-01", "type": "jog", "distance_km": 99}]}
         self.assertEqual(len(store.validate_plan(bad)), 3)
         with self.assertRaises(ValueError):
@@ -411,9 +404,9 @@ class Store(TempStore):
         self.assertIsNone(store.plan("plan-y"))
 
     def test_corrupt_files_do_not_crash(self):
-        store.PLANS.mkdir(parents=True)
-        (store.PLANS / "broken.json").write_text("{not json", encoding="utf-8")
-        store.RACES.write_text("[1, 2", encoding="utf-8")
+        store.plans_dir().mkdir(parents=True)
+        (store.plans_dir() / "broken.json").write_text("{not json", encoding="utf-8")
+        store.races_path().write_text("[1, 2", encoding="utf-8")
         self.assertEqual(store.plans(), [])
         self.assertEqual(store.races(), [])
 

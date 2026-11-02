@@ -618,7 +618,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.validate:
         payload = store.plan(args.validate)
         if payload is None:
-            print(tr(pl=f"Nie ma planu {args.validate} w {store.PLANS}", en=f"No plan {args.validate} in {store.PLANS}"))
+            print(tr(pl=f"Nie ma planu {args.validate} w {store.plans_dir()}", en=f"No plan {args.validate} in {store.plans_dir()}"))
             return 1
         errors = store.validate_plan(payload)
         if not errors:

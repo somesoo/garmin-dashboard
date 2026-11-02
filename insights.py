@@ -149,7 +149,16 @@ def translation(path: Path) -> Path:
 
 
 def load_all() -> list[Insight]:
-    """Every insight in the interface language, pinned ones first, then newest by filename."""
+    """Every insight in the interface language, pinned ones first, then newest by filename.
+
+    The prose was written about one person's numbers ("your HRV fell 12% after
+    ..."), so only a person with ``insights`` in the registry sees the notes;
+    for anyone else it would be someone else's health story (tenant.py).
+    """
+    import tenant
+
+    if not tenant.current().insights:
+        return []
     found = []
     for path in originals():
         english = translation(path)

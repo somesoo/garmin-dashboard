@@ -6,10 +6,12 @@ last one is ``GARMIN_AUTO_FETCH_H`` hours old (the launchers set 6). Every
 pull is ``etl/run.py`` in its own process, so it survives the server's idle
 exit and never blocks a rerun.
 
-``etl/run.py`` owns the bookkeeping: ``data/fetch.lock`` (pid, created
-exclusively -- two pulls never write the same raw files) and
-``data/fetch.json`` (when the last pull started and finished, its exit code).
-This module only reads them, starts the process and runs the timer.
+``etl/run.py`` owns the bookkeeping, per person (tenant.py): ``fetch.lock``
+(pid, created exclusively -- two pulls never write the same raw files) and
+``fetch.json`` (when the last pull started and finished, its exit code) in the
+person's directory. This module only reads them, starts the process (with
+``GARMIN_USER`` set, so the child works on the same person) and runs the timer,
+which walks every person whose data comes from Garmin.
 
 Without the variable there is no timer (the systemd/pm2 deployment has its own
 schedule); the button works everywhere.
@@ -27,10 +29,9 @@ import threading
 import time
 from pathlib import Path
 
+import tenant
+
 ROOT = Path(__file__).resolve().parent
-LOCK = ROOT / "data" / "fetch.lock"
-RECORD = ROOT / "data" / "fetch.json"
-LOG = ROOT / "data" / "fetch.log"
 # A pull that failed for a network reason is retried sooner than a good one is
 # repeated; an expired token (code 2) waits the full interval -- only the
 # password login fixes it.
@@ -54,9 +55,21 @@ def alive(pid: int, marker: str) -> bool:
     return marker in command
 
 
+def lock_path() -> Path:
+    return tenant.current().fetch_lock
+
+
+def record_path() -> Path:
+    return tenant.current().fetch_record
+
+
+def log_path() -> Path:
+    return tenant.current().fetch_log
+
+
 def running() -> bool:
     try:
-        pid = int(LOCK.read_text(encoding="utf-8").strip())
+        pid = int(lock_path().read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
         return False
     return alive(pid, "run.py")
@@ -65,7 +78,7 @@ def running() -> bool:
 def last() -> dict:
     """``{"started_at", "finished_at", "code"}`` of the latest pull, or {}."""
     try:
-        return json.loads(RECORD.read_text(encoding="utf-8"))
+        return json.loads(record_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
 
@@ -89,18 +102,21 @@ def due(hours: float, now: dt.datetime | None = None) -> bool:
 
 def start() -> bool:
     """Start ``etl/run.py`` detached; False when a pull is already running."""
-    if running():
+    person = tenant.current()
+    if person.source != "garmin" or running():
         return False
-    LOG.parent.mkdir(parents=True, exist_ok=True)
+    log = log_path()
+    log.parent.mkdir(parents=True, exist_ok=True)
     detach = (
         {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
         if os.name == "nt"
         else {"start_new_session": True}
     )
-    with LOG.open("w", encoding="utf-8") as out:
+    with log.open("w", encoding="utf-8") as out:
         subprocess.Popen(
             [sys.executable, str(ROOT / "etl" / "run.py")],
-            cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, **detach,
+            cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+            env={**os.environ, "GARMIN_USER": person.id}, **detach,
         )
     # The child takes the lock a moment later; wait so the page asking right
     # after the click already sees "running".
@@ -121,12 +137,27 @@ def auto() -> None:
     threading.Thread(target=_watch, args=(float(hours),), daemon=True, name="auto-fetch").start()
 
 
+def check_all(hours: float) -> list[str]:
+    """One round of the timer: start a pull for every Garmin person who is due; their ids."""
+    started = []
+    for person in tenant.users().values():
+        if person.source != "garmin":
+            continue
+        try:
+            with tenant.use(person.id):
+                if not running() and due(hours):
+                    _log.info("auto-fetch %s: ostatnie pobranie starsze niż %.0f h, startuję", person.id, hours)
+                    if start():
+                        started.append(person.id)
+        except Exception:  # noqa: BLE001 - one person's bad check must not stop the others
+            _log.exception("auto-fetch %s: sprawdzenie nie powiodło się", person.id)
+    return started
+
+
 def _watch(hours: float) -> None:
     while True:
         try:
-            if not running() and due(hours):
-                _log.info("auto-fetch: ostatnie pobranie starsze niż %.0f h, startuję", hours)
-                start()
-        except Exception:  # noqa: BLE001 - the timer must outlive one bad check
+            check_all(hours)
+        except Exception:  # noqa: BLE001 - the timer must outlive one bad round (a broken registry)
             _log.exception("auto-fetch: sprawdzenie nie powiodło się")
         time.sleep(600)

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from running import segments, store
+from tests.helpers import person
 
 LAT0, LON0 = 52.2, 21.0
 DEG_LAT = 1 / 111_320
@@ -125,18 +124,13 @@ class Segments(unittest.TestCase):
         self.assertAlmostEqual(fastest["seconds"], 108, delta=1)
 
     def test_store_round_trip(self):
-        with tempfile.TemporaryDirectory() as folder:
-            original = store.SEGMENTS
-            store.SEGMENTS = Path(folder) / "segments.json"
-            try:
-                with self.assertRaises(ValueError):
-                    store.save_segment({"name": " ", **self.segment})
-                saved = store.save_segment({**self.segment, "id": None, "name": "prosta"} | {"id": "seg-1"})
-                self.assertEqual([s["name"] for s in store.segments()], ["prosta"])
-                store.delete_segment(saved["id"])
-                self.assertEqual(store.segments(), [])
-            finally:
-                store.SEGMENTS = original
+        with person():
+            with self.assertRaises(ValueError):
+                store.save_segment({"name": " ", **self.segment})
+            saved = store.save_segment({**self.segment, "id": None, "name": "prosta"} | {"id": "seg-1"})
+            self.assertEqual([s["name"] for s in store.segments()], ["prosta"])
+            store.delete_segment(saved["id"])
+            self.assertEqual(store.segments(), [])
 
 
 if __name__ == "__main__":

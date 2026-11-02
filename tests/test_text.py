@@ -143,15 +143,15 @@ class Files(TempStore):
     def test_file_holds_codes_and_old_files_are_rewritten(self):
         plan = make_plan()
         store.save_plan(plan)
-        raw = json.loads((store.PLANS / f"{plan['id']}.json").read_text(encoding="utf-8"))
+        raw = json.loads((store.plans_dir() / f"{plan['id']}.json").read_text(encoding="utf-8"))
         self.assertNotIn("title", raw["sessions"][0])
         self.assertIn("text", raw["sessions"][0])
 
         old = old_format(plan)
-        (store.PLANS / f"{plan['id']}.json").write_text(json.dumps(old, ensure_ascii=False), encoding="utf-8")
+        (store.plans_dir() / f"{plan['id']}.json").write_text(json.dumps(old, ensure_ascii=False), encoding="utf-8")
         loaded = store.plan(plan["id"])
         self.assertTrue(loaded["sessions"][0]["title"])
-        raw = json.loads((store.PLANS / f"{plan['id']}.json").read_text(encoding="utf-8"))
+        raw = json.loads((store.plans_dir() / f"{plan['id']}.json").read_text(encoding="utf-8"))
         self.assertIn("text", raw["sessions"][0])
         self.assertNotIn("title", raw["sessions"][0])
         i18n.force("en")

@@ -3,21 +3,42 @@
 from __future__ import annotations
 
 import datetime as dt
-import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+# Shared by everyone: the registry, the server record. What one person owns
+# lives in their own directory (tenant.py) -- reach it through the functions
+# below, which answer for whoever the current request belongs to.
 DATA = ROOT / "data"
-RAW = DATA / "raw"
-TABLES = DATA / "tables"
-STATE_FILE = DATA / "state.json"
 INSIGHTS = ROOT / "insights"
-# Nights recorded on someone else's wrist: {"YYYY-MM-DD": "reason"}. Typed in
-# by hand (etl/exclude.py), so like data/coach/ it cannot be rebuilt from raw/.
-EXCLUDED_NIGHTS = DATA / "excluded_nights.json"
-# Override with GARMIN_TOKENSTORE when the home directory is not where the
-# tokens live - a systemd unit running as a service user, for instance.
-TOKENSTORE = os.getenv("GARMIN_TOKENSTORE", "~/.garminconnect")
+
+
+def _person():
+    import tenant
+
+    return tenant.current()
+
+
+def raw() -> Path:
+    return _person().raw
+
+
+def tables() -> Path:
+    return _person().tables
+
+
+def state_file() -> Path:
+    return _person().state_file
+
+
+def excluded_nights() -> Path:
+    """Nights recorded on someone else's wrist ({"YYYY-MM-DD": "reason"}), typed in by hand."""
+    return _person().excluded_nights
+
+
+def tokenstore() -> str:
+    """Garmin tokens of the current person; ``GARMIN_TOKENSTORE`` still overrides the old layout's."""
+    return _person().tokenstore
 
 # Garmin backfills data for a few days after the fact (manual sleep edits,
 # late device syncs), so recent days are always re-fetched instead of trusted.
@@ -67,8 +88,8 @@ MONTHLY_EXTRA_ARGS: dict[str, tuple[str, ...]] = {
 
 
 def day_path(metric: str, date: dt.date) -> Path:
-    return RAW / metric / f"{date.isoformat()}.json"
+    return raw() / metric / f"{date.isoformat()}.json"
 
 
 def month_path(metric: str, year: int, month: int) -> Path:
-    return RAW / metric / f"{year:04d}-{month:02d}.json"
+    return raw() / metric / f"{year:04d}-{month:02d}.json"

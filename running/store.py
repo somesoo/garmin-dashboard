@@ -1,4 +1,4 @@
-"""Races and training plans as JSON files under ``data/coach/``.
+"""Races and training plans as JSON files under the person's ``coach/`` (``data/users/<id>/coach/``, tenant.py).
 
 The warehouse is rebuilt from raw files on every ETL run, so anything the
 runner *enters* (a race, a plan, a session marked as skipped) cannot live in
@@ -25,10 +25,22 @@ import config
 import i18n
 from running import text
 
-ROOT = config.DATA / "coach"
-RACES = ROOT / "races.json"
-PLANS = ROOT / "plans"
-SEGMENTS = ROOT / "segments.json"
+def root() -> Path:
+    """The current person's ``coach/`` (tenant.py): races, plans, segments are one person's."""
+    return config._person().coach
+
+
+def races_path() -> Path:
+    return root() / "races.json"
+
+
+def plans_dir() -> Path:
+    return root() / "plans"
+
+
+def segments_path() -> Path:
+    return root() / "segments.json"
+
 
 DISTANCES = ("5k", "10k", "hm", "m")
 SESSION_TYPES = ("rest", "recovery", "easy", "long", "tempo", "threshold", "intervals", "race", "strength")
@@ -80,7 +92,7 @@ def validate_race(race: dict[str, Any]) -> list[str]:
 
 
 def races() -> list[dict[str, Any]]:
-    data = _read(RACES, [])
+    data = _read(races_path(), [])
     return sorted((r for r in data if isinstance(r, dict)), key=lambda r: str(r.get("date")))
 
 
@@ -93,12 +105,12 @@ def save_race(race: dict[str, Any]) -> dict[str, Any]:
     race.setdefault("priority", "A")
     race.setdefault("created", dt.datetime.now().isoformat(timespec="seconds"))
     others = [r for r in races() if r.get("id") != race["id"]]
-    _write(RACES, others + [race])
+    _write(races_path(), others + [race])
     return race
 
 
 def delete_race(race_id: str) -> None:
-    _write(RACES, [r for r in races() if r.get("id") != race_id])
+    _write(races_path(), [r for r in races() if r.get("id") != race_id])
 
 
 def race(race_id: str | None) -> dict[str, Any] | None:
@@ -241,16 +253,16 @@ def _load_plan(path: Path) -> dict[str, Any] | None:
 
 
 def plans() -> list[dict[str, Any]]:
-    if not PLANS.is_dir():
+    if not plans_dir().is_dir():
         return []
-    out = [plan for plan in map(_load_plan, sorted(PLANS.glob("*.json"))) if plan is not None]
+    out = [plan for plan in map(_load_plan, sorted(plans_dir().glob("*.json"))) if plan is not None]
     return sorted(out, key=lambda p: str(p.get("created")), reverse=True)
 
 
 def plan(plan_id: str | None) -> dict[str, Any] | None:
     if not plan_id:
         return None
-    path = PLANS / f"{plan_id}.json"
+    path = plans_dir() / f"{plan_id}.json"
     return _load_plan(path) if path.exists() else None
 
 
@@ -261,12 +273,12 @@ def save_plan(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(" ".join(errors[:5]))
     payload = dict(payload)
     payload["updated"] = dt.datetime.now().isoformat(timespec="seconds")
-    _write(PLANS / f"{payload['id']}.json", text.strip(payload))
+    _write(plans_dir() / f"{payload['id']}.json", text.strip(payload))
     return text.fill(payload)
 
 
 def delete_plan(plan_id: str) -> None:
-    (PLANS / f"{plan_id}.json").unlink(missing_ok=True)
+    (plans_dir() / f"{plan_id}.json").unlink(missing_ok=True)
 
 
 def plans_for(race_id: str) -> list[dict[str, Any]]:
@@ -308,7 +320,7 @@ def validate_segment(segment: dict[str, Any]) -> list[str]:
 
 
 def segments() -> list[dict[str, Any]]:
-    data = _read(SEGMENTS, [])
+    data = _read(segments_path(), [])
     return sorted((s for s in data if isinstance(s, dict)), key=lambda s: str(s.get("name")).lower())
 
 
@@ -320,13 +332,13 @@ def save_segment(segment: dict[str, Any]) -> dict[str, Any]:
     segment.setdefault("id", new_id("seg"))
     segment.setdefault("created", dt.datetime.now().isoformat(timespec="seconds"))
     others = [s for s in segments() if s.get("id") != segment["id"]]
-    _write(SEGMENTS, others + [segment])
+    _write(segments_path(), others + [segment])
     return segment
 
 
 def delete_segment(segment_id: str) -> None:
-    _write(SEGMENTS, [s for s in segments() if s.get("id") != segment_id])
+    _write(segments_path(), [s for s in segments() if s.get("id") != segment_id])
 
 
 def segments_stamp() -> str:
-    return str(SEGMENTS.stat().st_mtime_ns) if SEGMENTS.exists() else "none"
+    return str(segments_path().stat().st_mtime_ns) if segments_path().exists() else "none"

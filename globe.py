@@ -27,6 +27,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 import i18n
+import tenant
 import theme as tz
 
 ROOT = Path(__file__).resolve().parent
@@ -94,8 +95,12 @@ def tracks_url(_routes: pd.DataFrame, build: str) -> str | None:
     if not tracks:
         return None
     CACHE.mkdir(exist_ok=True)
-    name = "tracks-" + re.sub(r"[^0-9A-Za-z]", "", build) + ".json"
-    for old in CACHE.glob("tracks-*.json"):
+    # The file is served statically to anyone who knows its name, so the name
+    # starts with the person's unguessable key (tenant.User.file_key); only
+    # their own older builds are swept -- never another person's tracks.
+    prefix = f"tracks-{tenant.current().file_key('tracks')}-"
+    name = prefix + re.sub(r"[^0-9A-Za-z]", "", build) + ".json"
+    for old in CACHE.glob(f"{prefix}*.json"):
         if old.name != name:
             old.unlink(missing_ok=True)
     target = CACHE / name

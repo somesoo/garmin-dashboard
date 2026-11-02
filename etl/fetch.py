@@ -33,7 +33,7 @@ def log(msg: str) -> None:
 
 def connect() -> Garmin:
     api = Garmin()
-    api.login(config.TOKENSTORE)
+    api.login(config.tokenstore())
     return api
 
 
@@ -124,7 +124,7 @@ def fetch_monthly(api: Garmin, start: dt.date, end: dt.date) -> int:
 
 def known_activity_ids() -> list[str]:
     """Activity ids from the raw monthly files, newest first."""
-    folder = config.RAW / "activities"
+    folder = config.raw() / "activities"
     if not folder.is_dir():
         return []
     ids: dict[str, str] = {}
@@ -143,7 +143,7 @@ def known_activity_ids() -> list[str]:
 
 def running_activity_ids() -> list[str]:
     """Ids of runs (any ``*running`` type) from the raw monthly files, newest first."""
-    folder = config.RAW / "activities"
+    folder = config.raw() / "activities"
     if not folder.is_dir():
         return []
     ids: dict[str, str] = {}
@@ -168,7 +168,7 @@ def fetch_laps(api: Garmin, limit: int | None = None) -> int:
     they are the only exact record of interval reps -- the detail stream is
     downsampled to ~400 points. Like the details, a lap file never changes.
     """
-    folder = config.RAW / "splits"
+    folder = config.raw() / "splits"
     folder.mkdir(parents=True, exist_ok=True)
     pending = [i for i in running_activity_ids() if not (folder / f"{i}.json").exists()]
     if limit:
@@ -190,7 +190,7 @@ def fetch_details(api: Garmin, limit: int | None = None) -> int:
     One call per activity and the payload never changes afterwards, so an
     activity already on disk is skipped forever.
     """
-    folder = config.RAW / "details"
+    folder = config.raw() / "details"
     folder.mkdir(parents=True, exist_ok=True)
     pending = [
         activity_id
@@ -302,6 +302,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    person = config._person()
+    if person.source != "garmin":
+        log(f"{person.id}: dane z {person.source}, nie z Garmina — nic do pobrania")
+        return 0
+    log(f"osoba: {person.id} ({person.root})")
     end = dt.date.today()
     if args.backfill:
         start = dt.date.fromisoformat(args.backfill)
@@ -313,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
         run(start, end, load_every, details=not args.no_details)
     except GarminConnectAuthenticationError as exc:
         log(f"BLAD logowania: {exc}")
-        log(f"Zaloguj sie raz haslem, zeby odswiezyc {config.TOKENSTORE}")
+        log(f"Zaloguj sie raz haslem, zeby odswiezyc {config.tokenstore()}")
         return 2
     return 0
 

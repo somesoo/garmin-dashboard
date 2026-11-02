@@ -16,7 +16,9 @@ from pathlib import Path
 import config
 from sport import catalog
 
-PATH = config.DATA / "sport.json"
+def settings_path() -> Path:
+    """The current person's ``sport.json`` (tenant.py)."""
+    return config._person().sport_settings
 
 
 def default_available(recent: list[str] | set[str]) -> list[str]:
@@ -27,7 +29,7 @@ def default_available(recent: list[str] | set[str]) -> list[str]:
 
 def available(recent: list[str] | set[str] = (), path: Path | None = None) -> list[str]:
     """Ticked conditions; the record's default when nothing was ever saved."""
-    path = path or PATH
+    path = path or settings_path()
     try:
         saved = json.loads(path.read_text(encoding="utf-8")).get("available")
     except (OSError, ValueError, AttributeError):
@@ -38,7 +40,7 @@ def available(recent: list[str] | set[str] = (), path: Path | None = None) -> li
 
 
 def save_available(codes: list[str], path: Path | None = None) -> None:
-    path = path or PATH
+    path = path or settings_path()
     try:
         current = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(current, dict):

@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 import streamlit as st  # noqa: E402
 
+import auth  # noqa: E402
 import guide  # noqa: E402
 import i18n  # noqa: E402
 import routing  # noqa: E402
@@ -50,6 +51,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 st.markdown(shell.page_style(theme.mode()), unsafe_allow_html=True)
+
+# Whose data this run reads -- before anything touches the warehouse (auth.py, tenant.py).
+auth.gate()
 
 if not shell.has_data():
     shell.no_data_screen()

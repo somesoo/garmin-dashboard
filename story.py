@@ -32,6 +32,7 @@ import i18n
 import routing
 import shell
 import sync
+import tenant
 
 # The loop: stage key -> the pages that belong to it (url paths), in menu order.
 STAGE_PAGES = {
@@ -139,10 +140,12 @@ def topbar(current: str) -> None:
             st.caption(shell.status_lines())
             import guide
             guide.rail()
+            shell.person_line()
         st.space("stretch")
         shell.range_picker()
         shell.language_picker()
-        st.fragment(run_every=3 if sync.running() else 60)(shell.pull_inline)(sync.running())
+        if tenant.current().source == "garmin":
+            st.fragment(run_every=3 if sync.running() else 60)(shell.pull_inline)(sync.running())
 
 
 def frame_page(current: str, *, headline: str, sub: str | None, hero: Callable[[], None],
