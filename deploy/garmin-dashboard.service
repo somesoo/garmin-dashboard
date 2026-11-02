@@ -27,6 +27,8 @@ Environment=GARMIN_AUTO_FETCH_H=6
 # API (pushe z iPhone'a, PWA pod /api/app/) - takze przy jednej osobie.
 Environment=GARMIN_API_PORT=8502
 Environment=PYTHONUNBUFFERED=1
+# "Dzis", noce i pora snu licza sie w czasie lokalnym; serwery chodza zwykle w UTC.
+Environment=TZ=Europe/Warsaw
 # serve.py sam dodaje --server.address 127.0.0.1 przy kilku osobach; tu na stale,
 # bo proxy jest jedyna droga do srodka. Tak samo plik logowania Google
 # (data/secrets.toml) i limit wgrywania eksportu Apple (2 GB).

@@ -105,7 +105,7 @@ Zamknij dashboard lokalnie (żeby nic nie pisało do `data/` w trakcie pakowania
 cd ~/repos/garmin-dashboard
 # COPYFILE_DISABLE: bez śmieci "._plik" z atrybutami macOS po rozpakowaniu na Linuksie.
 # secrets.toml zostaje: ten z Maca ma adres powrotu localhost, serwer ma własny.
-COPYFILE_DISABLE=1 tar czf ~/garmin-data.tar.gz \
+COPYFILE_DISABLE=1 tar czf ~/garmin-data.tar.gz --no-xattrs \
     --exclude 'data/secrets.toml' --exclude 'data/server.json' \
     --exclude '*.lock' --exclude '*/fetch.log' data
 scp ~/garmin-data.tar.gz root@<IP>:/tmp/
@@ -228,6 +228,25 @@ pm2 startup        # wypisze komendę z sudo - wykonaj ją, inaczej pm2 nie wsta
 
 Wtedy wyłącz `garmin-dashboard.service` (`systemctl disable --now garmin-dashboard`).
 Proxy i reszta bez zmian.
+
+## 8c. Wariant mikr.us (próba na eve302, 2026-11-02)
+
+Kontener LXC: porty 80/443 na IPv4 są niedostępne (na eve302 zajmuje je też inna
+aplikacja w Dockerze), HTTPS kończy proxy mikr.us, swapu nie da się włączyć.
+Dashboard słucha więc zwykłym HTTP na przydzielonym porcie, a adres daje platforma:
+
+```bash
+git clone <bundle albo repo> /root/garmin-dashboard
+/root/garmin-dashboard/deploy/install.sh eve302-30302.mikrus.cloud --user=root --http-port=30302
+```
+
+- adres: `https://eve302-30302.mikrus.cloud` (WebSocket przechodzi; redirect URI Google:
+  `https://eve302-30302.mikrus.cloud/oauth2callback`),
+- SSH i scp: `-p 10302 root@eve302.mikrus.xyz`; tokeny Garmina w `/root/.garminconnect`,
+- 1,5 GB RAM bez swapu: pobieranie z przebudową tabel przeszło (≈ 75 s), ale przy
+  kilku osobach z Garminem naraz może zabraknąć pamięci,
+- własna domena (z Vercela) na mikr.us wymaga płatnego Cytrusa albo Cloudflare
+  przed IPv6 — na próbę zostaje adres `mikrus.cloud`.
 
 ## 9. Rozmiar serwera i monitoring zasobów
 
