@@ -1,12 +1,15 @@
 // Wariant alternatywny: pm2 zamiast systemd.
 // Sens ma tylko wtedy, gdy na serwerze juz trzymasz inne procesy pod pm2 i
 // chcesz miec wszystko w jednym "pm2 list". W przeciwnym razie uzyj
-// deploy/garmin-dashboard.service - systemd jest tu prostszy i nie wymaga
-// Node.js tylko po to, zeby pilnowac procesu Pythona.
+// deploy/garmin-dashboard.service (deploy/install.sh robi to sam).
 //
 //   pm2 start deploy/ecosystem.config.js
 //   pm2 save && pm2 startup    # <- bez tego nie wstanie po reboocie
 //   pm2 logs garmin-dashboard
+//
+// Jeden proces: serve.py = Streamlit (8501) + API dla telefonow (8502) + timer
+// pobierania z Garmina dla kazdej osoby (GARMIN_AUTO_FETCH_H) - osobny cron ETL
+// nie jest potrzebny.
 module.exports = {
   apps: [
     {
@@ -14,11 +17,10 @@ module.exports = {
       cwd: "/opt/garmin-dashboard",
       script: "/opt/garmin-dashboard/.venv/bin/python",
       args: [
-        "-m", "streamlit", "run", "app.py",
+        "serve.py",
         "--server.address", "127.0.0.1",
         "--server.port", "8501",
         "--server.headless", "true",
-        "--browser.gatherUsageStats", "false",
       ],
       interpreter: "none",        // script to juz plik wykonywalny, nie plik .js
       autorestart: true,
@@ -28,20 +30,9 @@ module.exports = {
       env: {
         HOME: "/home/garmin",
         GARMIN_TOKENSTORE: "/home/garmin/.garminconnect",
-      },
-    },
-    {
-      // ETL raz dziennie. pm2 ma wlasny cron, wiec nie potrzebujesz timera.
-      name: "garmin-etl",
-      cwd: "/opt/garmin-dashboard",
-      script: "/opt/garmin-dashboard/.venv/bin/python",
-      args: ["etl/run.py", "--days", "14"],
-      interpreter: "none",
-      autorestart: false,         // zadanie jednorazowe, nie serwer
-      cron_restart: "30 7 * * *",
-      env: {
-        HOME: "/home/garmin",
-        GARMIN_TOKENSTORE: "/home/garmin/.garminconnect",
+        GARMIN_AUTO_FETCH_H: "6",
+        GARMIN_API_PORT: "8502",
+        PYTHONUNBUFFERED: "1",
       },
     },
   ],

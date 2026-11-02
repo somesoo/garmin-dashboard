@@ -1,0 +1,42 @@
+# Dashboard na wlasnej domenie przez Caddy (DEPLOY.md, sekcja 6) - prostsza droga
+# niz nginx + certbot: Caddy sam pobiera i odnawia certyfikat Let's Encrypt,
+# a WebSocket Streamlita przepuszcza bez dodatkowych linii.
+#
+#   sudo apt install caddy
+#   sed 's/DOMENA/garmin.twojadomena.pl/g' deploy/Caddyfile | sudo tee /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# Warunek certyfikatu: rekord DNS (A, a przy IPv6 takze AAAA) domeny wskazuje juz
+# na ten serwer, a porty 80 i 443 sa otwarte.
+#
+# Bez basic auth: kto patrzy, rozstrzyga logowanie Google w aplikacji (auth.py),
+# telefony maja wlasne klucze do /api (api.py).
+
+DOMENA {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+
+	# API: pushe z iPhone'a, baza i podsumowanie dla PWA, sama PWA pod /api/app/.
+	handle /api/* {
+		request_body {
+			max_size 64MB
+		}
+		reverse_proxy 127.0.0.1:8502
+	}
+
+	# Dashboard (Streamlit, WebSocket). Pelny eksport Apple Health to setki MB.
+	handle {
+		request_body {
+			max_size 2GB
+		}
+		reverse_proxy 127.0.0.1:8501 {
+			flush_interval -1
+		}
+	}
+}

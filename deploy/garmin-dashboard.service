@@ -1,8 +1,13 @@
-# Streamlit trzyma dashboard w gorze. Bind na 127.0.0.1: na zewnatrz
-# wychodzi tylko przez tunel SSH albo reverse proxy (patrz nginx-garmin.conf).
-# Kopiuj do /etc/systemd/system/ i dostosuj User= oraz sciezki.
+# Dashboard na serwerze: serve.py = Streamlit (127.0.0.1:8501) + API dla telefonow
+# (127.0.0.1:8502) + timer pobierania z Garmina dla kazdej osoby z source: garmin.
+# Na zewnatrz wychodzi tylko przez reverse proxy z HTTPS (nginx-garmin.conf albo Caddyfile).
+# deploy/install.sh kopiuje go do /etc/systemd/system/; przy recznej instalacji
+# dostosuj User= i sciezki.
+#
+# Bez GARMIN_IDLE_EXIT_MIN: lokalnie serwer gasnie po zamknieciu ostatniej karty,
+# tu ma zyc stale (timer pobierania i API dla iPhone'a dzialaja tez bez otwartej karty).
 [Unit]
-Description=Garmin Dashboard (Streamlit)
+Description=Garmin Dashboard (Streamlit + API)
 After=network-online.target
 Wants=network-online.target
 # Nigdy nie poddawaj sie przy restartach: proces ma po prostu zyc.
@@ -14,22 +19,34 @@ User=garmin
 Group=garmin
 WorkingDirectory=/opt/garmin-dashboard
 Environment=HOME=/home/garmin
+# Tokeny osoby ze starym ukladem (root: "." w data/users.json); osoby
+# z wlasnym katalogiem trzymaja je w data/users/<id>/garmin/.
 Environment=GARMIN_TOKENSTORE=/home/garmin/.garminconnect
-ExecStart=/opt/garmin-dashboard/.venv/bin/python -m streamlit run app.py \
+# Pobieranie z Garmina: co 6 h dla kazdej osoby z Garminem (sync.py).
+Environment=GARMIN_AUTO_FETCH_H=6
+# API (pushe z iPhone'a, PWA pod /api/app/) - takze przy jednej osobie.
+Environment=GARMIN_API_PORT=8502
+Environment=PYTHONUNBUFFERED=1
+# serve.py sam dodaje --server.address 127.0.0.1 przy kilku osobach; tu na stale,
+# bo proxy jest jedyna droga do srodka. Tak samo plik logowania Google
+# (data/secrets.toml) i limit wgrywania eksportu Apple (2 GB).
+ExecStart=/opt/garmin-dashboard/.venv/bin/python serve.py \
     --server.address 127.0.0.1 \
     --server.port 8501 \
-    --server.headless true \
-    --browser.gatherUsageStats false
+    --server.headless true
 # always, nie on-failure: podnies proces nawet gdy sam sie zamknal czysto.
 Restart=always
 RestartSec=5
+# Pobieranie (etl/run.py) to osobny, odlaczony proces: restart uslugi go nie zabija.
+KillMode=process
 # Liczniki zasobow: `systemctl status` pokazuje wtedy Memory (biezaca i szczyt)
-# i CPU, a `systemd-cgtop` na zywo - patrz DEPLOY.md, sekcja 8.
+# i CPU, a `systemd-cgtop` na zywo - patrz DEPLOY.md, sekcja 9.
 MemoryAccounting=yes
 CPUAccounting=yes
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target
