@@ -12,14 +12,21 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
       pobieranie per osoba, insighty tylko dla swojej osoby.
 - [x] 2. Kto patrzy: `auth.py` — jedna osoba bez logowania, OIDC (`st.login`),
       nagłówek `tailscale serve`, przeglądarka lokalna; nieznany = odmowa.
-- [ ] 3. Model wielu źródeł: kolumna `source`, kanoniczny schemat `daily`/`activities`;
-      **HRV Apple = SDNN, Garmin = RMSSD — nigdy w jednej serii**; własne obciążenie
-      z tętna (TRIMP) dla obu źródeł, bo Apple nie ma `training_load`; fazy snu
-      (core → light); strony bez danych źródła (Body Battery, readiness) chowają kafle.
-- [ ] 4. Źródło Apple: import `export.zip` (XML + `workout-routes/*.gpx`) do
-      `data/users/<id>/raw/apple/`, potem `/ingest/apple` dla Skrótów iOS
-      (codziennie, 3 ostatnie dni, idempotentnie). `export.zip` osoby Y leży dziś
-      w katalogu repo (gitignorowany) — przenieść do `data/users/y/import/`.
+- [x] 3. Model wielu źródeł: `etl/schema.py` (wspólne kolumny `daily`/`activities`,
+      puste, gdy źródło ich nie zna), kolumny `source` i `load_source`; HRV Apple (SDNN)
+      w `hrv_sdnn`, nigdy w `hrv_last_night`; TRIMP Banistera jako `training_load` dla
+      Apple; core → light. Przebudowa Garmina na danych X: identyczne wartości, tylko
+      nowe kolumny. Wszystkie 18 widoków renderuje się dla obu osób.
+  - [ ] Teksty stron zależne od źródła („norma Garmina” na Regeneracji u osoby Apple),
+        wykres HRV z `hrv_sdnn` dla osoby z Apple Watchem, chowanie kafli Garmin-only
+        (Body Battery, readiness, stres) zamiast pustych.
+- [x] 4a. Import `export.zip`: `GARMIN_USER=y python -m etl.apple import <zip>` →
+      `raw/apple/exports/`, budowa w `etl/apple.py`. Eksport Y: 444 dni, 39 treningów.
+      **W eksporcie Y nie ma Apple Watcha**: tętno, sen z fazami i biegi 2025-08…2026-04
+      zapisał Garmin Connect, reszta to krokomierz iPhone'a. Jeśli Y ma Garmina,
+      bogatsze dane da `source: garmin` z jego kontem.
+- [ ] 4b. `/ingest/apple` dla Skrótów iOS (codziennie, 3 ostatnie dni, idempotentnie)
+      — razem z serwerem API z etapu 5 (ten sam proces, token per osoba).
 - [ ] 5. API (`/manifest`, `/db` SQLite, `/pages/*.json?lang=`) + PWA dla iPhone'a
       i Androida (sql.js, Service Worker, Web Push), tokeny per osoba.
 - [ ] 6. SaaS: zgoda i polityka (dane zdrowotne = art. 9 RODO), eksport/usunięcie

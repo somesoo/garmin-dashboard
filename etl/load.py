@@ -18,9 +18,11 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 import config  # noqa: E402
+from etl import schema  # noqa: E402
 
 
 def read(path: Path) -> Any:
@@ -277,7 +279,8 @@ def build_daily() -> pd.DataFrame:
     if not races.empty:
         df = df.merge(races, on="day", how="left")
 
-    return add_derived(mask_nights(df, excluded_nights()))
+    df["source"] = "garmin"
+    return add_derived(mask_nights(schema.daily(df), excluded_nights()))
 
 
 def add_derived(df: pd.DataFrame) -> pd.DataFrame:
@@ -387,10 +390,14 @@ def build_activities() -> pd.DataFrame:
         return pd.DataFrame(columns=["activity_id"])
 
     df = pd.DataFrame(rows)
+    # Which warehouse wrote the row and whose load model training_load is:
+    # Garmin's own here, Banister's TRIMP for Apple Health (etl/apple.py).
+    df["source"] = "garmin"
+    df["load_source"] = np.where(df["training_load"].notna(), "garmin", None)
     df["start_local"] = pd.to_datetime(df["start_local"], errors="coerce")
     df["day"] = df["start_local"].dt.normalize()
     df["iso_week"] = df["start_local"].dt.strftime("%G-W%V")
-    return df.sort_values("start_local", ascending=False).reset_index(drop=True)
+    return schema.activities(df.sort_values("start_local", ascending=False).reset_index(drop=True))
 
 
 def _parse_ts(value):
@@ -800,6 +807,11 @@ def write_table(df: pd.DataFrame, name: str) -> Path:
 
 
 def main() -> int:
+    if config._person().source == "apple":
+        # Same tables, other raw files: Apple Health exports (etl/apple.py).
+        from etl import apple
+
+        return apple.main()
     daily = build_daily()
     activities = build_activities()
     write_table(daily, "daily")

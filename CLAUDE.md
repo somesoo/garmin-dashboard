@@ -14,6 +14,8 @@ garmin-dashboard/
   etl/load.py        raw → data/tables/*.parquet (jawne mapowanie pól)
   etl/run.py         przyrostowa aktualizacja (wejście dla Dashboard.command/.cmd)
   etl/login.py       odświeżenie tokenów hasłem (raz na rok / po zmianie hasła)
+  etl/apple.py       Apple Health export.zip -> te same tabele (osoba z source: apple)
+  etl/schema.py      wspólne kolumny daily/activities dla każdego źródła
   serve.py           start serwera z launcherów: streamlit run app.py + lifecycle
   lifecycle.py       lokalnie serwer gaśnie N min po zamknięciu ostatniej karty
   sync.py            pobieranie w tle: link w górnej linii + automat co N h
@@ -141,6 +143,18 @@ katalog `data/`.
 - **Pobieranie** (`sync`): blokada i zapis próby per osoba; timer przechodzi po
   wszystkich osobach z `source: garmin`; osoba Apple nie ma przycisku „Pobierz”.
   Tokeny drugiej osoby: `GARMIN_USER=<id> .venv/bin/python etl/login.py`.
+- **Źródło Apple Health** (`etl/apple.py`, osoba z `source: apple`):
+  `GARMIN_USER=y .venv/bin/python -m etl.apple import <export.zip>` kopiuje eksport
+  do `raw/apple/exports/` i przebudowuje; `etl/load.py` sam oddaje budowę temu
+  modułowi, więc `fetch.rebuild`, `etl.exclude` i analityka działają bez zmian.
+  Health to pula wielu źródeł (iPhone, zegarek, Garmin Connect, Strava): sumy dzienne
+  biorą **największą sumę jednego źródła**, nie sumę wszystkich; sen — sesja z
+  największą liczbą minut snu na poranek (core → light, samo „w łóżku” = `sleep_h`
+  bez faz, `sleep_in_bed_only`); trening zapisany przez dwie aplikacje (±2 min) liczy
+  się raz; plik trasy wspólny dla kilku treningów (błąd nazw Stravy) jest odrzucany.
+  HRV z Health to **SDNN** → `hrv_sdnn`, nigdy `hrv_last_night` (RMSSD Garmina).
+  `training_load` = TRIMP Banistera (`load_source = "trimp"`, HRmax = max(trzecie
+  najwyższe maksimum, 208 − 0,7·wiek)). Wspólne kolumny obu źródeł: `etl/schema.py`.
 - Testy: `tests/__init__.py` zamyka cały przebieg w tymczasowym rejestrze;
   `tests.helpers.person()` / `people({...}, current=...)` dają własną osobę.
 - Plan dalszych etapów (źródło Apple, API + PWA, SaaS): `TASKS.md`.
