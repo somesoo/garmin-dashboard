@@ -167,7 +167,9 @@ def build_app():
     from starlette.concurrency import run_in_threadpool
     from starlette.requests import Request
     from starlette.responses import FileResponse, JSONResponse, Response
-    from starlette.routing import Route
+    from starlette.middleware import Middleware
+    from starlette.routing import Mount, Route
+    from starlette.staticfiles import StaticFiles
 
     import sync
     from etl import apple_push
@@ -231,13 +233,67 @@ def build_app():
         return FileResponse(path, media_type="application/vnd.sqlite3", headers={
             "ETag": quoted, "Cache-Control": "private, no-cache"}, filename=f"{person.id}.sqlite")
 
+    def summary_json(request: Request) -> Response:
+        """What the phone app shows (summary.py), per language; ETag/304."""
+        import summary
+
+        person = verify(_bearer(request), "read")
+        if person is None:
+            return refused()
+        body, etag = summary.cached(person, request.query_params.get("lang", "pl"))
+        quoted = f'"{etag}"'
+        if request.headers.get("if-none-match") == quoted:
+            return Response(status_code=304, headers={"ETag": quoted})
+        return Response(body, media_type="application/json",
+                        headers={"ETag": quoted, "Cache-Control": "private, no-cache"})
+
     # Under /api and at the root: `tailscale serve --set-path /api` may hand the
     # request on with or without the prefix, depending on the version.
     routes = []
     for prefix in ("/api", ""):
         routes += [Route(f"{prefix}/health", health), Route(f"{prefix}/ingest/apple", ingest, methods=["POST"]),
-                   Route(f"{prefix}/manifest", manifest), Route(f"{prefix}/db", database)]
-    return Starlette(routes=routes)
+                   Route(f"{prefix}/manifest", manifest), Route(f"{prefix}/db", database),
+                   Route(f"{prefix}/summary", summary_json),
+                   Mount(f"{prefix}/app", app=StaticFiles(directory=PWA, html=True))]
+    return Starlette(routes=routes, middleware=[Middleware(_AppHeaders)])
+
+
+PWA = Path(__file__).resolve().parent / "pwa"
+# The phone app runs only its own files and talks only to this origin.
+APP_HEADERS = {
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+                               "connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; "
+                               "base-uri 'none'; form-action 'none'",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-cache",
+}
+
+
+class _AppHeaders:
+    """Security headers on the app's static files; nosniff/no-referrer on everything."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        is_app = "/app" in scope.get("path", "")
+
+        async def with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                names = {k.lower() for k, _ in headers}
+                extra = APP_HEADERS if is_app else {k: v for k, v in APP_HEADERS.items()
+                                                    if k in ("X-Content-Type-Options", "Referrer-Policy")}
+                for key, value in extra.items():
+                    if key.lower().encode() not in names:
+                        headers.append((key.lower().encode(), value.encode()))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, with_headers)
 
 
 def serve(port: int) -> None:

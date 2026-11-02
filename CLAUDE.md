@@ -16,7 +16,10 @@ garmin-dashboard/
   etl/login.py       odświeżenie tokenów hasłem (raz na rok / po zmianie hasła)
   etl/apple.py       Apple Health export.zip -> te same tabele (osoba z source: apple)
   etl/apple_push.py  codzienne paczki z iPhone'a (Skrót / Health Auto Export) + łączenie z eksportem
-  api.py             HTTP obok dashboardu: POST /api/ingest/apple, GET /api/manifest|db; tokeny per osoba
+  api.py             HTTP obok dashboardu: POST /api/ingest/apple, GET /api/manifest|db|summary,
+                     PWA pod /api/app/; tokeny per osoba
+  summary.py         JSON dla telefonu: nagłówki z facts.py, liczby dnia wobec normy, serie (cache per build)
+  pwa/               aplikacja na telefon (index.html, app.js, sw.js, manifest, ikony z tools/make_icons.py)
   etl/schema.py      wspólne kolumny daily/activities dla każdego źródła
   serve.py           start serwera z launcherów: streamlit run app.py + lifecycle
   lifecycle.py       lokalnie serwer gaśnie N min po zamknięciu ostatniej karty

@@ -30,7 +30,8 @@ def call(app, method: str, path: str, token: str | None = None, body: bytes = b"
         raw_headers.append((b"authorization", f"Bearer {token}".encode()))
     for key, value in (headers or {}).items():
         raw_headers.append((key.lower().encode(), value.encode()))
-    scope = {"type": "http", "method": method, "path": path, "raw_path": path.encode(), "query_string": b"",
+    path, _, query = path.partition("?")
+    scope = {"type": "http", "method": method, "path": path, "raw_path": path.encode(), "query_string": query.encode(),
              "headers": raw_headers, "scheme": "https", "server": ("127.0.0.1", 8502), "client": ("127.0.0.1", 1),
              "http_version": "1.1", "root_path": ""}
     chunks = [{"type": "http.request", "body": body, "more_body": False}]
@@ -169,6 +170,33 @@ class Warehouse(unittest.TestCase):
             self.assertEqual(rows[-1][3], 58)
             self.assertEqual(meta["person"], "y")
             self.assertEqual(call(app, "GET", "/api/db", token, headers={"If-None-Match": headers["etag"]})[0], 304)
+
+
+class PhoneApp(unittest.TestCase):
+    def test_summary_per_language_with_etag_and_the_app_behind_a_csp(self):
+        with people({"y": {"source": "apple"}}), contextlib.redirect_stdout(io.StringIO()):
+            with tenant.use("y"):
+                for day in ("2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"):
+                    apple_push.store(json.dumps(push(day)).encode())
+                from etl import load
+                load.main()
+            app = api.build_app()
+            token = api.create_token(tenant.get("y"), "phone", "read")
+            self.assertEqual(call(app, "GET", "/api/summary")[0], 401)
+            status, headers, body = call(app, "GET", "/api/summary", token)
+            self.assertEqual(status, 200)
+            data = json.loads(body)
+            self.assertEqual((data["person"], data["lang"]), ("y", "pl"))
+            self.assertEqual(data["today"]["steps"]["value"], 5400)
+            self.assertEqual(data["activities"][0]["pace"], "5:37")  # 45 min / 8 km, stored as 5.62 like Garmin's
+            self.assertEqual(call(app, "GET", "/api/summary", token, headers={"If-None-Match": headers["etag"]})[0], 304)
+            english = json.loads(call(app, "GET", "/api/summary?lang=en", token)[2])
+            self.assertEqual(english["lang"], "en")
+            self.assertNotEqual(english["stories"]["sleep"]["headline"], data["stories"]["sleep"]["headline"])
+            status, headers, body = call(app, "GET", "/api/app/index.html")
+            self.assertEqual(status, 200)
+            self.assertIn("frame-ancestors 'none'", headers["content-security-policy"])
+            self.assertIn(b"app.js", body)
 
 
 class PushFormats(unittest.TestCase):

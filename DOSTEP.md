@@ -87,6 +87,22 @@ Klucz *do odczytu* (ta sama strona) otwiera `GET /api/manifest` i `GET /api/db`
 (cała baza osoby jako SQLite z ETag) — pod aplikację na telefon. Klucze z terminala:
 `.venv/bin/python -m api token add|list|revoke <osoba> ...`.
 
+## 5. Aplikacja na telefon (PWA — iPhone i Android, bez App Store)
+
+Ta sama ścieżka `/api` serwuje aplikację: `https://<komputer>.<tailnet>.ts.net/api/app/`.
+
+1. **Urządzenia → Utwórz klucz do odczytu** — strona pokazuje klucz i link
+   `…/api/app/#token=…` (klucz we fragmencie adresu nie trafia do serwera ani logów).
+2. **Android**: otwórz link w Chrome → *Zainstaluj aplikację*.
+   **iPhone**: Safari → *Udostępnij → Do ekranu początkowego*, otwórz aplikację z ekranu
+   i wklej klucz (aplikacja z ekranu początkowego ma osobną pamięć od Safari).
+3. Aplikacja pokazuje: nagłówki-wnioski z dashboardu (regeneracja, sen, bieganie),
+   dzisiejsze liczby wobec normy, 90 dni HRV/snu, km tygodniowo, ostatnie treningi.
+   Ostatnia kopia zostaje w telefonie — bez sieci działa na niej („offline — ostatnia kopia”).
+
+Liczy wszystko serwer (`summary.py`, ~10 KB JSON per język, ETag); aplikacja (`pwa/`)
+tylko rysuje. Odwołany klucz = ekran łączenia. CSP: tylko własne pliki, bez ramek.
+
 ## Alternatywa bez Google: tożsamość z Tailscale
 
 Jeśli wszyscy są w Twojej sieci Tailscale, logowanie może dać sam Tailscale:

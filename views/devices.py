@@ -71,6 +71,13 @@ def _show_new(token: str, scope: str) -> None:
         if scope == "ingest":
             st.code(f"POST {_base_url()}/api/ingest/apple\nAuthorization: Bearer {token}\n"
                     "Content-Type: application/json", language=None)
+        else:
+            # The key rides in the fragment: browsers never send it to a server or a log.
+            st.markdown(tr(pl="Otwórz na telefonie (Android: Chrome → *Zainstaluj aplikację*; iPhone: Safari → "
+                              "*Udostępnij → Do ekranu początkowego*, potem wklej klucz w aplikacji):",
+                           en="Open on the phone (Android: Chrome → *Install app*; iPhone: Safari → *Share → Add to "
+                              "Home Screen*, then paste the key inside the app):"))
+            st.code(f"{_base_url()}/api/app/#token={token}", language=None)
 
 
 def _make(person: tenant.User, name: str, scope: str) -> None:

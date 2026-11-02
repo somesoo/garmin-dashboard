@@ -40,9 +40,14 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
       serwer na 127.0.0.1 przy kilku osobach, strona **Urządzenia** (wgranie eksportu,
       klucze do wysyłki i odczytu, odwołanie). Sign in with Apple wymaga płatnego konta.
   - [ ] Utworzyć klienta OAuth w Google Cloud i przejść logowanie w przeglądarce.
-- [ ] 5. API dla aplikacji: `/api/manifest`, `/api/db` (SQLite z ETag) — gotowe;
-      `/api/pages/*.json?lang=` (nagłówki-wnioski) + PWA dla iPhone'a i Androida
-      (sql.js, Service Worker, Web Push).
+- [x] 5. API dla aplikacji (`/api/manifest`, `/api/db` SQLite, `/api/summary?lang=`) i PWA
+      (`pwa/`, `/api/app/`): nagłówki z `facts.py` liczone na serwerze (`summary.py`),
+      offline z ostatniej kopii, parowanie kluczem (link z fragmentem), PL/EN, CSP.
+      Zamiast sql.js w telefonie — JSON ~10 KB (mniej kodu, bez drugiej implementacji liczb).
+      Sprawdzone: renderowanie `app.js` w Node na prawdziwym API (PL/EN, odwołany klucz).
+  - [ ] Obejrzeć na prawdziwym S23 i iPhonie (bez przeglądarki tutaj nie było zrzutów).
+  - [ ] Web Push po nowym buildzie (VAPID + `pywebpush` — nowa zależność, decyzja).
+  - [ ] Natywna aplikacja na Androida (widżet „Dziś”) na `/api/summary` — jeśli PWA nie wystarczy.
 - [ ] 6. SaaS: zgoda i polityka (dane zdrowotne = art. 9 RODO), eksport/usunięcie
       konta, szyfrowanie, kopie per osoba, hosting (nie eve302).
       **Ryzyko**: `garminconnect` to nieoficjalny login — dla obcych użytkowników
