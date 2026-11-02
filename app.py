@@ -26,6 +26,7 @@ import routing  # noqa: E402
 import shell  # noqa: E402
 import story  # noqa: E402
 import theme  # noqa: E402
+import webapp  # noqa: E402
 from views import (  # noqa: E402
     account,
     atlas,
@@ -52,6 +53,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 st.markdown(shell.page_style(theme.mode()), unsafe_allow_html=True)
+# Installable from the home screen as a full-screen app, the sign-in screen included.
+webapp.head()
 
 # Whose data this run reads -- before anything touches the warehouse (auth.py, tenant.py).
 auth.gate()
