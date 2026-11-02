@@ -124,7 +124,10 @@ class ServeFlags(unittest.TestCase):
                 self.assertIn(str(secrets_file), flags)
                 self.assertNotIn("127.0.0.1", serve.security_flags(["--server.address", "0.0.0.0"]))
         with people({"x": {}}), mock.patch.object(auth, "SECRETS", Path("/nonexistent/secrets.toml")):
-            self.assertEqual(serve.security_flags([]), ["--browser.gatherUsageStats", "false"])
+            flags = serve.security_flags([])
+            self.assertNotIn("--server.address", flags)
+            self.assertNotIn("--secrets.files", flags)
+            self.assertIn("--browser.gatherUsageStats", flags)
 
 
 if __name__ == "__main__":

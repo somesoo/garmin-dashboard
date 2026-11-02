@@ -30,10 +30,19 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
       **W eksporcie Y nie ma Apple Watcha**: tętno, sen z fazami i biegi 2025-08…2026-04
       zapisał Garmin Connect, reszta to krokomierz iPhone'a. Jeśli Y ma Garmina,
       bogatsze dane da `source: garmin` z jego kontem.
-- [ ] 4b. `/ingest/apple` dla Skrótów iOS (codziennie, 3 ostatnie dni, idempotentnie)
-      — razem z serwerem API z etapu 5 (ten sam proces, token per osoba).
-- [ ] 5. API (`/manifest`, `/db` SQLite, `/pages/*.json?lang=`) + PWA dla iPhone'a
-      i Androida (sql.js, Service Worker, Web Push), tokeny per osoba.
+- [x] 4b. `POST /api/ingest/apple` (`api.py`, `etl/apple_push.py`): format Skrótu
+      `garmin-dashboard/1` i Health Auto Export, paczki w `raw/apple/push/` (idempotentnie),
+      przebudowa w tle z kolejką (`rebuild.pending`), tokeny per osoba (hash, zakres).
+      Sprawdzone na żywo: paczka → 202 → nowy dzień w tabelach po ~11 s.
+  - [ ] Zbudować i przetestować Skrót na prawdziwym iPhonie (format w DOSTEP.md);
+        sprawdzić Health Auto Export na prawdziwej paczce.
+- [x] Logowanie Google (`st.login`, `python -m auth setup`, tylko zweryfikowany e-mail),
+      serwer na 127.0.0.1 przy kilku osobach, strona **Urządzenia** (wgranie eksportu,
+      klucze do wysyłki i odczytu, odwołanie). Sign in with Apple wymaga płatnego konta.
+  - [ ] Utworzyć klienta OAuth w Google Cloud i przejść logowanie w przeglądarce.
+- [ ] 5. API dla aplikacji: `/api/manifest`, `/api/db` (SQLite z ETag) — gotowe;
+      `/api/pages/*.json?lang=` (nagłówki-wnioski) + PWA dla iPhone'a i Androida
+      (sql.js, Service Worker, Web Push).
 - [ ] 6. SaaS: zgoda i polityka (dane zdrowotne = art. 9 RODO), eksport/usunięcie
       konta, szyfrowanie, kopie per osoba, hosting (nie eve302).
       **Ryzyko**: `garminconnect` to nieoficjalny login — dla obcych użytkowników

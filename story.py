@@ -42,7 +42,7 @@ STAGE_PAGES = {
     "goal": ["plan", "dzis"],
 }
 EVERYDAY = ["dzien", "dzis", "atlas"]
-LAB = ["statystyka", "insights", "sql", "slownik"]
+LAB = ["statystyka", "insights", "sql", "slownik", "urzadzenia"]
 
 
 def stage_of(url_path: str) -> str | None:

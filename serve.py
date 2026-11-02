@@ -69,7 +69,27 @@ def security_flags(given: list[str]) -> list[str]:
         flags += ["--server.address", "127.0.0.1"]
     if unset("browser.gatherUsageStats"):
         flags += ["--browser.gatherUsageStats", "false"]
+    if unset("server.maxUploadSize"):
+        # A full Apple Health export with years of watch data is hundreds of MB (views/devices.py).
+        flags += ["--server.maxUploadSize", "2048"]
     return flags
+
+
+def start_api() -> int | None:
+    """With more than one person (or GARMIN_API_PORT set) the API runs next to the dashboard
+    in this process: pushes from iPhones and the warehouse for the apps (api.py)."""
+    import threading
+
+    import tenant
+
+    port = os.environ.get("GARMIN_API_PORT")
+    if not port and len(tenant.users()) < 2:
+        return None
+    import api
+
+    number = int(port or 8502)
+    threading.Thread(target=api.serve, args=(number,), daemon=True, name="api").start()
+    return number
 
 
 def stop_if_stale() -> int:
@@ -101,6 +121,7 @@ if __name__ == "__main__":
     RECORD.write_text(json.dumps({"pid": os.getpid(), "stamp": code_stamp()}), encoding="utf-8")
     lifecycle.idle_exit()
     sync.auto()
+    start_api()
     theme = [] if any(arg.startswith("--theme.") for arg in sys.argv[1:]) else THEME
     sys.argv = ["streamlit", "run", str(ROOT / "app.py"), *theme, *security_flags(sys.argv[1:]), *sys.argv[1:]]
     sys.exit(cli.main())

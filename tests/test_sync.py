@@ -64,10 +64,23 @@ class PerPerson(unittest.TestCase):
         with tenant.use("x"):
             self.assertEqual(sync.last()["started_at"], "2026-10-28T08:00:00")
 
-    def test_apple_person_is_never_pulled_from_garmin(self):
-        with tenant.use("y"), mock.patch.object(sync.subprocess, "Popen") as popen:
-            self.assertFalse(sync.start())
-        popen.assert_not_called()
+    def test_apple_person_is_rebuilt_never_pulled(self):
+        """The timer never pulls an Apple person; a run started for one (after a push) only
+        rebuilds -- etl/fetch.main checks the source -- and works on their directory."""
+        with mock.patch.object(sync.subprocess, "Popen") as popen, \
+                mock.patch.object(sync, "running", return_value=False), mock.patch.object(sync.time, "sleep"):
+            self.assertNotIn("y", sync.check_all(6))
+            with tenant.use("y"):
+                self.assertTrue(sync.start())
+        self.assertEqual(popen.call_args_list[-1].kwargs["env"]["GARMIN_USER"], "y")
+
+    def test_queued_rebuild_is_picked_up_by_the_timer(self):
+        with tenant.use("y"):
+            sync.pending_path().parent.mkdir(parents=True, exist_ok=True)
+            sync.pending_path().touch()
+        with mock.patch.object(sync.subprocess, "Popen"), mock.patch.object(sync, "running", return_value=False), \
+                mock.patch.object(sync.time, "sleep"):
+            self.assertIn("y", sync.check_all(6))
 
     def test_timer_starts_each_due_garmin_person_with_their_id(self):
         with mock.patch.object(sync.subprocess, "Popen") as popen, \

@@ -29,6 +29,7 @@ import theme  # noqa: E402
 from views import (  # noqa: E402
     atlas,
     day,
+    devices,
     hubs,
     notebook,
     physio,
@@ -97,6 +98,7 @@ PAGES = {
         _page(notebook.insights, "insights", "lightbulb"),
         _page(notebook.sql, "sql", "terminal"),
         _page(reference.render, "slownik", "menu_book"),
+        _page(devices.render, "urzadzenia", "devices"),
     ],
 }
 

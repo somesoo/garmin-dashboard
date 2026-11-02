@@ -53,6 +53,40 @@ którejś osoby. Inne konto Google dostaje odmowę, nie domyślną osobę.
 **Sign in with Apple** nie jest dostępne: na stronie WWW wymaga płatnego Apple
 Developer Program (Services ID). Osoba z iPhone'em loguje się kontem Google.
 
+## 4. Apple Watch: codzienna wysyłka z iPhone'a (API)
+
+Przy więcej niż jednej osobie `serve.py` uruchamia obok dashboardu API
+(`api.py`, 127.0.0.1:8502). Na HTTPS wystawia je ten sam Tailscale:
+
+```bash
+tailscale serve --bg --set-path /api http://127.0.0.1:8502
+```
+
+Osoba z Apple Watchem robi resztę sama na stronie **Laboratorium → Urządzenia**:
+
+1. *Historia z Apple Health*: wgrywa `export.zip` (Zdrowie → zdjęcie profilu →
+   Eksportuj wszystkie dane) — raz, na start.
+2. *Utwórz klucz do wysyłki* — klucz widać raz; w pliku zostaje tylko jego hash.
+3. Na iPhonie jedna z dwóch dróg:
+   - **Health Auto Export** (płatna, działa w tle, najprościej): *Automations → New → REST API*,
+     URL `https://<komputer>.<tailnet>.ts.net/api/ingest/apple`, format JSON (v2),
+     nagłówek `Authorization: Bearer <klucz>`, zakres „ostatnie 3 dni”, co godzinę/dzień.
+   - **Skrót** (bezpłatny): automatyzacja *Pora dnia 9:00 → Uruchom od razu*. Akcje:
+     *Znajdź próbki zdrowia* dla tętna, HRV, tętna spoczynkowego, kroków, snu (od 3 dni),
+     z każdej próbki *Słownik* `{type, start, end, value, unit, source}` (daty w ISO 8601),
+     całość w `{"format": "garmin-dashboard/1", "records": [...], "sleep": [...]}`,
+     *Pobierz zawartość URL*: POST, JSON, nagłówek `Authorization: Bearer <klucz>`.
+     Pełny format: docstring `etl/apple_push.py`.
+
+Paczka trafia do `data/users/<id>/raw/apple/push/` (ta sama treść drugi raz — nic),
+tabele przeliczają się w tle (`sync.request_rebuild`; paczka w trakcie trwającej
+przebudowy czeka na znacznik `rebuild.pending`). Dane z eksportu i z paczek łączą się
+bez dublowania.
+
+Klucz *do odczytu* (ta sama strona) otwiera `GET /api/manifest` i `GET /api/db`
+(cała baza osoby jako SQLite z ETag) — pod aplikację na telefon. Klucze z terminala:
+`.venv/bin/python -m api token add|list|revoke <osoba> ...`.
+
 ## Alternatywa bez Google: tożsamość z Tailscale
 
 Jeśli wszyscy są w Twojej sieci Tailscale, logowanie może dać sam Tailscale:

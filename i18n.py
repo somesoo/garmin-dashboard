@@ -43,7 +43,7 @@ BILINGUAL = ["app.py", "auth.py", "shell.py", "bento.py", "routing.py", "theme.p
              "story.py", "facts.py", "herochart.py",
              *(f"views/{name}.py" for name in (
                  "activities", "atlas", "day", "form", "hubs", "notebook", "physio", "recovery", "reference", "routes",
-                 "run_common", "run_forecast", "run_load", "run_overview", "run_plan", "run_races", "run_segments",
+                 "devices", "run_common", "run_forecast", "run_load", "run_overview", "run_plan", "run_races", "run_segments",
                  "run_session", "sleep", "sport", "sport_disciplines", "stats", "today", "trends")),
              *(f"sport/{name}.py" for name in ("catalog", "readiness", "recommend", "store", "text", "variety")),
              *(f"running/{name}.py" for name in (
@@ -219,6 +219,7 @@ _PAGES = {
     "insights": ("Insights", "Insights"),
     "sql": ("SQL", "SQL"),
     "slownik": ("Słownik", "Glossary"),
+    "urzadzenia": ("Urządzenia", "Devices"),
 }
 # Views that share one menu entry (views/hubs.py): the switch label and the
 # view's own header.

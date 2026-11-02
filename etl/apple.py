@@ -783,17 +783,18 @@ def night_series(sessions: list[dict[str, Any]], heart: pd.DataFrame, records: p
 
 
 def main() -> int:
-    """Rebuild the current person's base tables from the newest imported export."""
-    from etl import load
+    """Rebuild the current person's base tables: the newest full export plus every daily push."""
+    from etl import apple_push, load
 
     person = config._person()
     path = latest_export()
-    if path is None:
-        print(f"{person.id}: brak eksportu w {exports_dir()} — najpierw `python -m etl.apple import <export.zip>`",
-              flush=True)
+    pushed = apple_push.pushes()
+    if path is None and not pushed:
+        print(f"{person.id}: brak eksportu w {exports_dir()} i brak wysyłek z iPhone'a — najpierw "
+              "`python -m etl.apple import <export.zip>` albo Skrót (DOSTEP.md)", flush=True)
         return 1
     skip = set(load.excluded_nights())
-    tables = build(parse(path), skip=skip)
+    tables = build(apple_push.combine(([parse(path)] if path else []) + pushed), skip=skip)
     for name, frame in tables.items():
         load.write_table(frame, name)
     # Garmin-only tables stay present and empty, so every view finds its table.
@@ -805,7 +806,8 @@ def main() -> int:
     state = {
         "built_at": dt.datetime.now().isoformat(timespec="seconds"),
         "source": "apple",
-        "export": path.name,
+        "export": path.name if path else None,
+        "pushes": len(pushed),
         "days": int(len(daily)),
         "first_day": str(daily["day"].min().date()) if len(daily) else None,
         "last_day": str(daily["day"].max().date()) if len(daily) else None,

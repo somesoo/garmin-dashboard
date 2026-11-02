@@ -15,6 +15,8 @@ garmin-dashboard/
   etl/run.py         przyrostowa aktualizacja (wejście dla Dashboard.command/.cmd)
   etl/login.py       odświeżenie tokenów hasłem (raz na rok / po zmianie hasła)
   etl/apple.py       Apple Health export.zip -> te same tabele (osoba z source: apple)
+  etl/apple_push.py  codzienne paczki z iPhone'a (Skrót / Health Auto Export) + łączenie z eksportem
+  api.py             HTTP obok dashboardu: POST /api/ingest/apple, GET /api/manifest|db; tokeny per osoba
   etl/schema.py      wspólne kolumny daily/activities dla każdego źródła
   serve.py           start serwera z launcherów: streamlit run app.py + lifecycle
   lifecycle.py       lokalnie serwer gaśnie N min po zamknięciu ostatniej karty

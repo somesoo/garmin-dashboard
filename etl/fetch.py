@@ -304,7 +304,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     person = config._person()
     if person.source != "garmin":
-        log(f"{person.id}: dane z {person.source}, nie z Garmina — nic do pobrania")
+        # Nothing to pull: the data arrives (export.zip, pushes from the iPhone).
+        # A run started by the API after a push only rebuilds the tables.
+        log(f"{person.id}: dane z {person.source} — przebudowa tabel z tego, co przyszło")
+        rebuild()
         return 0
     log(f"osoba: {person.id} ({person.root})")
     end = dt.date.today()

@@ -54,7 +54,14 @@ def main(argv: list[str] | None = None) -> int:
     _record(started_at=now, finished_at=None, code=None)
     code = 1
     try:
+        pending = sync.pending_path()
+        pending.unlink(missing_ok=True)  # this run builds whatever has arrived so far
         code = fetch.main(args)
+        # A push that arrived while this run was busy left a marker (api.py):
+        # build again so its data does not wait for the next push.
+        while code == 0 and pending.exists():
+            pending.unlink(missing_ok=True)
+            fetch.rebuild()
         return code
     finally:
         _record(finished_at=f"{dt.datetime.now():%Y-%m-%dT%H:%M:%S}", code=code)

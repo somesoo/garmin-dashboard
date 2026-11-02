@@ -67,6 +67,21 @@ def log_path() -> Path:
     return tenant.current().fetch_log
 
 
+def pending_path() -> Path:
+    """Data arrived (a push) while a run was busy: the next run, or the one still going, builds again."""
+    return tenant.current().root / "rebuild.pending"
+
+
+def request_rebuild() -> str:
+    """After a push: start a rebuild, or leave a marker for the run that is busy. ``started`` / ``queued``."""
+    if start():
+        return "started"
+    path = pending_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch()
+    return "queued"
+
+
 def running() -> bool:
     try:
         pid = int(lock_path().read_text(encoding="utf-8").strip())
@@ -103,7 +118,8 @@ def due(hours: float, now: dt.datetime | None = None) -> bool:
 def start() -> bool:
     """Start ``etl/run.py`` detached; False when a pull is already running."""
     person = tenant.current()
-    if person.source != "garmin" or running():
+    # For an Apple person the run only rebuilds (the API starts it after a push).
+    if running():
         return False
     log = log_path()
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -141,10 +157,15 @@ def check_all(hours: float) -> list[str]:
     """One round of the timer: start a pull for every Garmin person who is due; their ids."""
     started = []
     for person in tenant.users().values():
-        if person.source != "garmin":
-            continue
         try:
             with tenant.use(person.id):
+                # A queued rebuild (a push during a busy run) is picked up for anyone.
+                if pending_path().exists() and not running():
+                    if start():
+                        started.append(person.id)
+                    continue
+                if person.source != "garmin":
+                    continue
                 if not running() and due(hours):
                     _log.info("auto-fetch %s: ostatnie pobranie starsze niż %.0f h, startuję", person.id, hours)
                     if start():
