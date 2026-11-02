@@ -81,19 +81,13 @@ def _details() -> None:
         _thirds()
 
     view = shell.clip(shell.daily())
-    left, right = bento.row(2, 2)
-    with left:
-        trends.sleep_length(view)
-    with right:
-        _score(view)
+    # Garmin's sleep score has no Apple twin: without it the length takes the row.
+    bento.pair(lambda: trends.sleep_length(view), (lambda: _score(view)) if shell.has("sleep_score") else None)
 
     _night()
 
-    left, right = bento.row(2, 2)
-    with left:
-        _profile()
-    with right:
-        _daymap()
+    # The day map is Garmin's 3-minute stress and Body Battery: no such series from an Apple Watch.
+    bento.pair(_profile, _daymap if not shell.table("intraday").empty else None)
 
 
 def _score(view: pd.DataFrame) -> None:
@@ -329,20 +323,23 @@ def _profile() -> None:
         tr(pl="Profil nocy", en="Night profile"), rows=2, key="night_profile", terms=["night_profile", "hrv_slope"],
         caption=tr(pl="Nadir tętna wcześnie = szybkie wyciszenie; późno = regeneracja trwała do budzika.",
                    en="An early heart rate nadir = settling fast; late = recovery lasted until the alarm."),
-        how=tr(pl="Każdy punkt to noc: kiedy wypadło minimum tętna (oś pozioma) i jak Garmin ocenił sen (pionowa).",
-               en="Each point is a night: when the heart rate minimum came (horizontal axis) and how Garmin scored "
-                  "the sleep (vertical)."),
+        how=tr(pl="Każdy punkt to noc: kiedy wypadło minimum tętna (oś pozioma) i ocena snu Garmina — albo, bez "
+                  "niej, długość snu (pionowa).",
+               en="Each point is a night: when the heart rate minimum came (horizontal axis) and Garmin's sleep "
+                  "score — or, without one, the sleep length (vertical)."),
     ) as t:
         if profile.empty:
             shell.missing("night_profile", tr(pl="Potrzebne noce z zapisem tętna i HRV.",
                                               en="Needs nights with heart rate and HRV recorded."))
             return
         view = shell.clip(profile)
-        t.chart(tz.scatter(view, "nadir_at_pct", "sleep_score", hover=("day", "hr_min", "sleep_h", "readiness"),
-                           x_title=tr(pl="nadir tętna (% nocy)", en="heart rate nadir (% of night)"),
-                           y_title="sleep score"),
-                table=view[["day", "hr_min", "hr_drop", "nadir_at_pct", "hrv_trend", "sleep_score"]]
-                .sort_values("day", ascending=False).head(30))
+        scored = "sleep_score" in view.columns and view["sleep_score"].notna().any()
+        y, y_title = ("sleep_score", "sleep score") if scored else ("sleep_h", tr(pl="sen (h)", en="sleep (h)"))
+        hover = tuple(c for c in ("day", "hr_min", "sleep_h", "readiness") if c in view.columns)
+        t.chart(tz.scatter(view, "nadir_at_pct", y, hover=hover,
+                           x_title=tr(pl="nadir tętna (% nocy)", en="heart rate nadir (% of night)"), y_title=y_title),
+                table=view[[c for c in ("day", "hr_min", "hr_drop", "nadir_at_pct", "hrv_trend", y)
+                            if c in view.columns]].sort_values("day", ascending=False).head(30))
 
 
 @st.fragment

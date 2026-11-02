@@ -4,6 +4,7 @@ steps, body weight and the weekly table at the bottom (they move over months).""
 from __future__ import annotations
 
 import pandas as pd
+import streamlit as st
 
 import bento
 import glossary
@@ -120,16 +121,17 @@ def _details(frame: pd.DataFrame) -> None:
     latest = frame[frame["day"] == row["day"]].iloc[-1] if row is not None else frame.iloc[-1]
     feedback = row.get("readiness_feedback") if row is not None else None
     tr = i18n.tr
+    # Garmin-only numbers (readiness, sleep score) give way to what the person's watch records.
+    garmin = shell.has("readiness")
     bento.kpis(row, week, [
-        ("readiness", "Readiness", ""),
+        ("readiness", "Readiness", "") if garmin else ("steps", tr(pl="Kroki", en="Steps"), ""),
         ("hrv_last_night", tr(pl="HRV noc", en="Night HRV"), "ms"),
         ("rhr", "RHR", "bpm", "inverse"),
-        ("sleep_score", tr(pl="Sen", en="Sleep"), ""),
+        ("sleep_score", tr(pl="Sen", en="Sleep"), "") if shell.has("sleep_score")
+        else ("sleep_h", tr(pl="Sen", en="Sleep"), "h"),
     ])
 
-    # HRV is the hero above; the details start with what it does not show.
-    left, right = bento.row(2, 2)
-    with left:
+    def rhr_tile() -> None:
         with bento.tile(tr(pl="Tętno spoczynkowe", en="Resting heart rate"), key="rhr", terms=["rhr"],
                         caption=_status_line(latest.get("rhr"), "bpm",
                                              latest.get("rhr_norm_low"), latest.get("rhr_norm_high")),
@@ -138,7 +140,8 @@ def _details(frame: pd.DataFrame) -> None:
             t.chart(tz.trend(view, "day", {"RHR": ("rhr", "rhr_roll7")},
                              band=("rhr_norm_low", "rhr_norm_high"), unit="bpm"),
                     table=view[["day", "rhr", "rhr_norm_low", "rhr_norm_high"]].tail(40))
-    with right:
+
+    def readiness_tile() -> None:
         readiness_caption = _status_line(latest.get("readiness"), "")
         if isinstance(feedback, str) and feedback:
             readiness_caption = " · ".join(filter(None, [readiness_caption,
@@ -148,8 +151,14 @@ def _details(frame: pd.DataFrame) -> None:
             t.chart(tz.trend(view, "day", {"readiness": ("readiness", "readiness_roll7")}),
                     table=view[["day", "hrv_last_night", "rhr", "readiness", "sleep_h"]].tail(40))
 
-    left, right = bento.row(2, 2)
+    # HRV is the hero above; the details start with what it does not show.
+    bento.pair(rhr_tile if shell.has("rhr") else None, readiness_tile if garmin else None)
+
     quadrants = shell.clip(shell.table("quadrants"))
+    if shell.has("bb_low", "bb_high", "stress_avg", "sleep_stress"):
+        left, right = bento.row(2, 2)
+    else:  # no Body Battery or stress (an Apple Watch): the quadrants take the row
+        left = right = st.container()
     with left, bento.tile(
         tr(pl="Kwadranty regeneracji", en="Recovery quadrants"), rows=2, key="quadrants",
         terms=["quadrants", "deviation"],
@@ -175,6 +184,18 @@ def _details(frame: pd.DataFrame) -> None:
                              y_title=tr(pl="RHR względem bazy (σ)", en="RHR vs baseline (σ)")),
                     table=shares)
     with right:
+        _battery_and_stress(view, latest)
+
+    # Slow-moving numbers: they change over months, so they close the page.
+    bento.pair((lambda: trends.steps(view)) if shell.has("steps") else None,
+               (lambda: trends.weight(view)) if shell.has("weight_kg") else None)
+    trends.weekly(view)
+
+
+def _battery_and_stress(view: pd.DataFrame, latest: pd.Series) -> None:
+    """Garmin's Body Battery and stress, each only when the person's source records it."""
+    tr = i18n.tr
+    if shell.has("bb_low", "bb_high"):
         with bento.tile("Body Battery", key="bb", terms=["body_battery"],
                         caption=_range_line(latest.get("bb_low"), latest.get("bb_high")),
                         how=tr(pl="Słupek to jeden dzień: od najniższego do najwyższego poziomu. Wysoki szczyt to "
@@ -183,6 +204,7 @@ def _details(frame: pd.DataFrame) -> None:
                                   "night, a low trough a demanding day.")) as t:
             t.chart(tz.range_bars(view, "day", "bb_low", "bb_high"),
                     table=view[["day", "bb_low", "bb_high", "bb_charged", "bb_drained"]].tail(40))
+    if shell.has("stress_avg", "sleep_stress"):
         with bento.tile(tr(pl="Stres — dzień i sen", en="Stress — day and sleep"), key="stress", terms=["stress"],
                         caption=tr(pl="Nocny powinien być niski, inaczej sen nie regeneruje.",
                                    en="The night one should be low, otherwise sleep does not restore."),
@@ -190,14 +212,6 @@ def _details(frame: pd.DataFrame) -> None:
             t.chart(tz.trend(view, "day", {tr(pl="dzień", en="day"): ("stress_avg", "stress_avg_roll7"),
                                            tr(pl="sen", en="sleep"): ("sleep_stress", "sleep_stress_roll7")}),
                     table=view[["day", "stress_avg", "sleep_stress"]].tail(40))
-
-    # Slow-moving numbers: they change over months, so they close the page.
-    left, right = bento.row(2, 2)
-    with left:
-        trends.steps(view)
-    with right:
-        trends.weight(view)
-    trends.weekly(view)
 
 
 def _status_line(value: float | None, unit: str, low=None, high=None) -> str | None:

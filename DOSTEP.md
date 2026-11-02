@@ -50,6 +50,18 @@ Potem w [Google Cloud Console](https://console.cloud.google.com/apis/credentials
 Logowanie przyjmuje tylko **zweryfikowany** e-mail, który jest w `identities`
 którejś osoby. Inne konto Google dostaje odmowę, nie domyślną osobę.
 
+**Z Google każda osoba jest przypięta do swojego konta** — także na komputerze z
+serwerem: `"local": true` i `GARMIN_AUTH_HEADER` przestają działać, wchodzi się
+wyłącznie przez „Zaloguj”. Konto X → dane X, konto Y → dane Y, na każdym urządzeniu.
+
+Na samym komputerze (bez Tailscale) wystarczy adres lokalny — Google przyjmuje
+`http://localhost` jako redirect:
+
+```bash
+.venv/bin/python -m auth setup http://localhost:8501
+# w Google Cloud: Authorised redirect URI = http://localhost:8501/oauth2callback
+```
+
 **Sign in with Apple** nie jest dostępne: na stronie WWW wymaga płatnego Apple
 Developer Program (Services ID). Osoba z iPhone'em loguje się kontem Google.
 

@@ -66,6 +66,24 @@ def row(*spans: int) -> list[Any]:
     return st.columns(list(spans), gap="small")
 
 
+def pair(left: Any, right: Any) -> None:
+    """Two tiles side by side -- or the one that exists across the whole row.
+
+    ``left``/``right`` draw a tile, or are None when the person's source has no
+    such data (Body Battery for an Apple Watch): an empty tile is noise, and an
+    empty half-row is a hole, so the other tile takes the row.
+    """
+    present = [draw for draw in (left, right) if draw is not None]
+    if len(present) == 2:
+        a, b = row(2, 2)
+        with a:
+            left()
+        with b:
+            right()
+    elif present:
+        present[0]()
+
+
 class Tile:
     def __init__(self, rows: int, header: Any, key: str) -> None:
         self.rows = rows

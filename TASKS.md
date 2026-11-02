@@ -21,8 +21,12 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
         TRIMP / effort score w Treningu, typy Watcha (temperatura, SpO2, oddech, moc,
         dynamika, strefy, HR recovery), `night_series` z zegarka.
   - [x] Syntetyczny eksport Apple Watcha (`tools/synthetic_watch.py`, osoba `demo`).
-  - [ ] Chowanie kafli Garmin-only (Body Battery, stres, ocena snu) zamiast pustych —
-        wymaga przestawienia rzędów bento (suma kolumn = 4).
+  - [x] Kafle tylko-Garminowe (readiness, Body Battery, stres, ocena snu, mapa doby)
+        znikają, gdy źródło osoby ich nie zapisuje (`shell.has`, `bento.pair` — drugi kafel
+        bierze cały rząd); KPI Regeneracji: kroki i długość snu zamiast readiness/oceny.
+- [x] Konta: z logowaniem Google każda osoba jest przypięta do swojego konta Google
+      (`identities`); `local` i nagłówek proxy działają tylko bez Google.
+- [-] Web Push i natywna aplikacja na Androida — odłożone (decyzja 2026-11-02).
   - [ ] Po przyjściu zegarka: eksport z prawdziwego Watcha, porównanie z `demo`
         (nazwy typów, jednostki, `WorkoutEvent` z okrążeniami → `run_laps`).
 - [x] 4a. Import `export.zip`: `GARMIN_USER=y python -m etl.apple import <zip>` →
@@ -46,8 +50,6 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
       Zamiast sql.js w telefonie — JSON ~10 KB (mniej kodu, bez drugiej implementacji liczb).
       Sprawdzone: renderowanie `app.js` w Node na prawdziwym API (PL/EN, odwołany klucz).
   - [ ] Obejrzeć na prawdziwym S23 i iPhonie (bez przeglądarki tutaj nie było zrzutów).
-  - [ ] Web Push po nowym buildzie (VAPID + `pywebpush` — nowa zależność, decyzja).
-  - [ ] Natywna aplikacja na Androida (widżet „Dziś”) na `/api/summary` — jeśli PWA nie wystarczy.
 - [x] 6a. Prawa osoby na stronie Urządzenia: archiwum wszystkich swoich danych (bez
       sekretów: hashy kluczy, tokenów Garmina, cache) i usunięcie wszystkiego po wpisaniu
       nazwy; `python -m tenant remove <id> --yes` usuwa też wpis z rejestru.

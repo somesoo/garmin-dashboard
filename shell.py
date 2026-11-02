@@ -369,6 +369,16 @@ def state() -> dict[str, Any]:
     return db.state()
 
 
+def has(*columns: str) -> bool:
+    """Does the person's source record this at all (any day of the whole history)?
+
+    Not the selected range: a tile whose data is just outside the range stays and
+    says so; a tile the watch never fills (Body Battery on an Apple Watch) goes.
+    """
+    frame = table("daily")
+    return any(c in frame.columns and frame[c].notna().any() for c in columns)
+
+
 def daily() -> pd.DataFrame:
     frame = table("daily")
     if frame.empty:

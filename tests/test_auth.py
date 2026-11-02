@@ -82,6 +82,23 @@ class Identify(unittest.TestCase):
         self.enter(*_context({}, ip=None))
         self.assertEqual(self.who(), (None, None))
 
+    def test_with_google_configured_this_machine_is_nobody_until_signed_in(self):
+        self.enterContext(people(TWO))
+        self.enter(mock.patch.object(auth, "_oidc_configured", return_value=True),
+                   mock.patch.object(auth.st, "user", mock.Mock(is_logged_in=False)),
+                   mock.patch.dict(os.environ, {auth.HEADER_ENV: "Tailscale-User-Login"}),
+                   *_context({"Tailscale-User-Login": "x@example.com"}, ip=None))
+        self.assertEqual(self.who(), (None, None))
+
+    def test_two_google_accounts_two_people(self):
+        self.enterContext(people(TWO))
+        self.enter(mock.patch.object(auth, "_oidc_configured", return_value=True), *_context({}, ip=None))
+        for email, expected in (("x@example.com", "x"), ("Y@Example.com", "y")):
+            user = mock.Mock(is_logged_in=True)
+            user.get.side_effect = {"email": email, "email_verified": True}.get
+            with mock.patch.object(auth.st, "user", user):
+                self.assertEqual(self.who()[0], expected)
+
     def test_unverified_email_is_refused(self):
         self.enterContext(people(TWO))
         user = mock.Mock(is_logged_in=True)

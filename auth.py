@@ -5,7 +5,8 @@ session (``tenant.SESSION_KEY``), and from then on every path, cache key and
 query of the run answers for that person (tenant.py). Nobody recognised = a
 sign-in screen and ``st.stop()`` -- never a default person.
 
-Ways in, first match wins:
+With Google sign-in configured, only (2) applies: every person is bound to
+their Google account. Without it, first match wins:
 
 1. **Single person** (no ``data/users.json``, or one person in it): as before,
    no sign-in at all.
@@ -85,7 +86,12 @@ def identify() -> tuple[tenant.User | None, str | None]:
     if len(everyone) == 1:
         return next(iter(everyone.values())), None
 
-    if _oidc_configured() and st.user.is_logged_in:
+    if _oidc_configured():
+        # With Google sign-in set up the account is the only way in: no "this
+        # machine" shortcut and no proxy header -- each person is bound to their
+        # Google account (``identities``), on any device, the server's own too.
+        if not st.user.is_logged_in:
+            return None, None
         email = str(st.user.get("email") or "")
         # An address the provider has not verified proves nothing: anyone can
         # type a friend's e-mail into a fresh account at some providers.
