@@ -192,9 +192,10 @@ def hrv_strip(start, why: str = "") -> dict:
     import herochart as hc
     import pandas as pd
     tr = i18n.tr
-    nights = shell.daily()
-    nights = nights[nights["day"] >= pd.Timestamp(start)].sort_values("day")
+    # The mean runs over the whole history first, so the strip starts at the range's edge, not 4 nights in.
+    nights = shell.daily().sort_values("day")
     nights["hrv7"] = nights["hrv_last_night"].rolling(7, min_periods=4).mean()
+    nights = nights[nights["day"] >= pd.Timestamp(start)]
     return {"kind": "lines", "strip": True, "y": hc.span(nights["hrv7"].dropna()), "decimals": 0, "unit": "ms",
             "lines": [{"points": hc.points(nights, "day", "hrv7", 1), "color": hc.colors()["series"], "width": 2,
                        "name": tr(pl="HRV, średnia 7 nocy", en="HRV, 7-night mean")}],

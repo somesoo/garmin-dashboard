@@ -31,6 +31,14 @@ function grid(f, ticks, fmt, theme) {
 
 function monthAxis(f, months) {
   let g = "";
+  if ((f.x1 - f.x0) / DAY < 75) {
+    const d = new Date(f.x0); d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));  // the first Monday inside the range
+    for (; d.getTime() < f.x1; d.setDate(d.getDate() + 7)) {
+      g += `<text x="${f.X(d.getTime())}" y="${f.H - 5}" text-anchor="middle">${d.getDate()} ${months[d.getMonth()]}</text>`;
+    }
+    return g;
+  }
   const d = new Date(f.x0); d.setDate(1); d.setMonth(d.getMonth() + 1);
   const span = (f.x1 - f.x0) / DAY, step = span > 420 ? 3 : span > 240 ? 2 : 1;
   for (; d.getTime() < f.x1; d.setMonth(d.getMonth() + step)) {
@@ -109,8 +117,11 @@ const PAINT = {
   bars(p, f, theme, lang) {
     let s = "";
     const width = (p.width_days || 7) * DAY, bw = (f.X(f.x0 + width) - f.X(f.x0)) * 0.72;
+    const left = f.pad.l, right = f.W - f.pad.r;
+    const clamp = (x) => Math.min(right, Math.max(left, x));
     for (const [a, z, label] of p.gaps || []) {
-      const xa = f.X(a), xz = f.X(z);
+      const xa = clamp(f.X(a)), xz = clamp(f.X(z));
+      if (xz - xa < 1) continue;
       s += `<rect x="${xa}" width="${Math.max(0, xz - xa)}" y="${f.pad.t}" height="${f.H - f.pad.t - f.pad.b}" fill="${theme.gap}"/>`;
       if (label) s += `<text x="${(xa + xz) / 2}" y="${f.pad.t + (f.H - f.pad.t - f.pad.b) * 0.45}" text-anchor="middle" style="fill:${theme.gapText};font-size:11.5px;letter-spacing:.1em">${esc(label)}</text>`;
     }
@@ -119,7 +130,8 @@ const PAINT = {
       values.forEach((v, i) => {
         if (!v) return;
         const y0 = f.Y(base), y1 = f.Y(base + v);
-        s += `<rect x="${f.X(t) + 1}" width="${bw}" y="${y1}" height="${Math.max(0, y0 - y1)}" rx="2" fill="${(p.colors || [])[i] || theme.series}"/>`;
+        const xa = clamp(f.X(t) + 1), xb = clamp(f.X(t) + 1 + bw);
+        if (xb - xa >= 1) s += `<rect x="${xa}" width="${xb - xa}" y="${y1}" height="${Math.max(0, y0 - y1)}" rx="2" fill="${(p.colors || [])[i] || theme.series}"/>`;
         base += v;
       });
     }

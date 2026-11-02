@@ -150,10 +150,9 @@ def recovery(daily: pd.DataFrame, runs: pd.DataFrame, since: pd.Timestamp | None
         lo = _num(row.get("hrv_baseline_low"))
         where = (tr(pl=" — poniżej normy Garmina.", en=" — below Garmin's normal.") if lo is not None and value < lo
                  else tr(pl=" — wciąż w normie Garmina.", en=" — still within Garmin's normal."))
-        frame_value = float(frame.loc[frame["day"] == day, "hrv_last_night"].iloc[0])
         sats.append(sat("l", tr(pl="Najniżej", en="Lowest"), f"{_dec(value, 1)} ms · {_date(day)}",
                         tr(pl="Najniższa średnia 7 nocy w tym okresie", en="The lowest 7-night mean in this period") + where,
-                        anchor=(day, frame_value)))
+                        anchor=(day, value)))
 
     hard = hard_days(runs)
     if hard:

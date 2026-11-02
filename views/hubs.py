@@ -68,9 +68,9 @@ def load() -> None:
     def hero() -> None:
         c = hc.colors()
         view = pmc[(pmc["day"] >= start) & (pmc["day"] <= end)]
-        nights = shell.daily()
-        nights = nights[nights["day"] >= start].sort_values("day")
+        nights = shell.daily().sort_values("day")
         nights["hrv7"] = nights["hrv_last_night"].rolling(7, min_periods=4).mean()
+        nights = nights[nights["day"] >= start]
         last = view.iloc[-1]
         panels = [
             {"kind": "lines", "y": [0, max(30.0, float(view["ctl"].max()) * 1.35)], "decimals": 0,
