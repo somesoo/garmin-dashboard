@@ -18,6 +18,7 @@ import bento
 import i18n
 import routing
 import shell
+import story
 import theme as tz
 from sport import catalog
 from views import sport as sp
@@ -46,7 +47,12 @@ def render() -> None:
                        en=f"{count} {acts} · {days} {noun} measured · latest day with data: {row['day']:%d.%m.%Y}")
     else:
         note = i18n.tr(pl="Brak danych dziennych.", en="No daily data.")
-    bento.header(i18n.page("atlas"), note)
+    places = activities["location"].dropna().nunique() if "location" in activities.columns else 0
+    first = pd.to_datetime(activities["start_local"]).min() if not activities.empty else None
+    headline = (i18n.tr(pl=f"<em>{count}</em> {acts} w {places} miejscach od {first:%Y}.",
+                        en=f"<em>{count}</em> {acts} in {places} places since {first:%Y}.")
+                if first is not None else i18n.page("atlas"))
+    story.head("atlas", headline, note)
 
     _hero(activities)
     left, right = bento.row(2, 2)

@@ -7,24 +7,69 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import bento
+import facts
+import herochart as hc
 import glossary
 import i18n
 import routing
 import shell
+import story
 import theme as tz
 from running import forecast, physio, units
 from views import physio as physio_view, run_common as rc, trends
 
 
 def render() -> None:
+    """The realistic time for the next race's distance over time, the 80% range around it; the week's km and
+    VDOT under it."""
+    tr = i18n.tr
+    history = rc.history()
+    races = rc.upcoming_races()
+    start, end = story.long_span(history["day"].min(), history["day"].max()) if not history.empty else (None, None)
+    told = facts.forecast(history, races, start)
+    story.frame_page(
+        "prognoza", headline=told["headline"],
+        sub=tr(pl="Realna prognoza tydzień po tygodniu, liczona tylko z danych sprzed każdego dnia, z przedziałem 80%. "
+                  "Wyżej znaczy szybciej. Pod spodem bodziec (kilometry) i VDOT.",
+               en="The realistic forecast week by week, computed only from the data before each day, with its 80% range. "
+                  "Higher means faster. Below, the stimulus (kilometres) and VDOT."),
+        hero=lambda: _hero(told, start, end),
+        more=tr(pl="wszystkie dystanse, pewność, co poprawić, sprawdzenie wstecz, metody, kotwica",
+                en="every distance, confidence, what to improve, the backtest, methods, the anchor"),
+        more_render=_details,
+    )
+
+
+def _hero(told: dict, start, end) -> None:
+    tr = i18n.tr
+    view = told.get("view")
+    if view is None or view.empty:
+        st.caption(tr(pl="Za mało danych na prognozę.", en="Too little data for a forecast."))
+        return
+    last = view.iloc[-1]
+    values = view["low_s"].tolist() + view["high_s"].tolist()
+    panels = [
+        {"kind": "trend", "format": "time", "invert": True, "points": hc.points(view, "day", "realistic_s", 0),
+         "smooth": hc.points(view, "day", "realistic_s", 0),
+         "band": [[hc.ms(r.day), float(r.low_s), float(r.high_s)] for r in view.dropna(subset=["low_s", "high_s"]).itertuples()],
+         "band_label": "80%", "y": hc.span(values, pad=0.04), "name": rc.race_label(told["distance"]),
+         "end": units.fmt_time(last["realistic_s"])},
+        story.km_strip(rc.runs(), view["day"].min(), view["day"].max() + pd.Timedelta(days=7)),
+        {"kind": "lines", "strip": True, "y": hc.span(view["vdot"].dropna(), pad=0.1), "decimals": 1,
+         "lines": [{"points": hc.points(view, "day", "vdot", 2), "color": hc.colors()["light"], "width": 1.8, "name": "VDOT"}],
+         "label": {"group": tr(pl="Adaptacja", en="Adaptation"), "head": "VDOT", "note": tr(pl="wydolność (Daniels)", en="fitness (Daniels)")},
+         "why": ""},
+    ]
+    hc.show({"x": [hc.ms(view["day"].min()), hc.ms(view["day"].max() + pd.Timedelta(days=7))], "panels": panels,
+             "satellites": story.satellites(told["satellites"])},
+            key="hero_prognoza", token=story.token("prognoza", told["distance"]))
+
+def _details() -> None:
     frame = rc.guard()
     result = rc.current_forecast() if frame is not None else {}
     tr = i18n.tr
     vdot = tr(pl=f" Wydolność dziś: VDOT {result['vdot']:.1f}.", en=f" Fitness today: VDOT {result['vdot']:.1f}.") \
         if result.get("status") == "ok" else ""
-    bento.header(i18n.page("prognoza"),
-                 tr(pl="Na jaki czas możesz dziś liczyć na każdym dystansie i jak bardzo tej liczbie ufać.",
-                    en="What time you can count on today at each distance and how far to trust that number.") + vdot)
     if frame is None:
         return
     if result.get("status") != "ok":

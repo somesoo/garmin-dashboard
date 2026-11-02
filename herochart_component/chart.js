@@ -10,10 +10,12 @@ const PAD = { l: 38, r: 52, t: 10, b: 22 };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-function frame(W, H, x0, x1, y0, y1, axis) {
+function frame(W, H, x0, x1, y0, y1, axis, invert) {
   const pad = { ...PAD, b: axis ? PAD.b : 4 };
   const X = (t) => pad.l + (t - x0) / (x1 - x0) * (W - pad.l - pad.r);
-  const Y = (v) => pad.t + (1 - (v - y0) / (y1 - y0)) * (H - pad.t - pad.b);
+  // invert: smaller is better and goes up (race times, pace) -- "faster = higher", as theme.pace_axis.
+  const share = (v) => (v - y0) / (y1 - y0);
+  const Y = (v) => pad.t + (invert ? share(v) : 1 - share(v)) * (H - pad.t - pad.b);
   return { W, H, X, Y, pad, x0, x1, y0, y1 };
 }
 
@@ -53,6 +55,25 @@ const fmtNum = (v, decimals, lang) => {
   return lang === "pl" ? s.replace(".", ",") : s;
 };
 
+// A value as the reader expects it: race times as h:mm:ss, clock hours as 23:53, pace as m:ss.
+function val(v, p, lang, extra = 0) {
+  if (v == null || Number.isNaN(v)) return "—";
+  const two = (n) => String(n).padStart(2, "0");
+  if (p.format === "time") {
+    const s = Math.round(v), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+    return h ? `${h}:${two(m)}:${two(r)}` : `${m}:${two(r)}`;
+  }
+  if (p.format === "clock") {
+    const m = Math.round(v * 60) % 1440;
+    return `${Math.floor(m / 60)}:${two(m % 60)}`;
+  }
+  if (p.format === "pace") {
+    const s = Math.round(v * 60);
+    return `${Math.floor(s / 60)}:${two(s % 60)}${p.unit ? " " + p.unit : ""}`;
+  }
+  return fmtNum(v, (p.decimals ?? 0) + extra, lang) + (p.unit ? " " + p.unit : "");
+}
+
 function nearest(points, t, tol) {
   let best = null, bd = Infinity;
   for (const p of points) { const d = Math.abs(p[0] - t); if (d < bd) { bd = d; best = p; } }
@@ -79,8 +100,8 @@ const PAINT = {
       svg: s,
       hover: (t) => {
         const rows = [], a = nearest(p.points || [], t, 1.5 * DAY), b = p.smooth && nearest(p.smooth, t, 1.5 * DAY);
-        if (a && a[1] != null) rows.push([p.name, fmtNum(a[1], p.decimals, lang) + (p.unit ? " " + p.unit : "")]);
-        if (b && b[1] != null && p.smooth_name) rows.push([p.smooth_name, fmtNum(b[1], (p.decimals ?? 0) + 1, lang) + (p.unit ? " " + p.unit : "")]);
+        if (a && a[1] != null) rows.push([p.name, val(a[1], p, lang)]);
+        if (b && b[1] != null && p.smooth_name) rows.push([p.smooth_name, val(b[1], p, lang, p.format ? 0 : 1)]);
         return rows;
       },
     };
@@ -112,7 +133,7 @@ const PAINT = {
         const bar = (p.bars || []).find(([b]) => t >= b && t < b + width);
         if (!bar) return [];
         return [[p.period || "", new Date(bar[0]).toLocaleDateString(lang === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "short" })]]
-          .concat(bar[1].map((v, i) => [(p.names || [])[i] || "", fmtNum(v, p.decimals ?? 1, lang) + (p.unit ? " " + p.unit : "")]))
+          .concat(bar[1].map((v, i) => [(p.names || [])[i] || "", val(v, { ...p, decimals: p.decimals ?? 1 }, lang)]))
           .filter(([k]) => k);
       },
     };
@@ -129,7 +150,7 @@ const PAINT = {
     for (const [t, v] of p.markers || []) s += `<circle cx="${f.X(t)}" cy="${f.Y(v)}" r="4" fill="${theme.series}" stroke="${theme.page}" stroke-width="2"/>`;
     return {
       svg: s,
-      hover: (t) => (p.lines || []).map((l) => { const q = nearest(l.points, t, 1.5 * DAY); return q && q[1] != null && l.name ? [l.name, fmtNum(q[1], p.decimals, lang) + (p.unit ? " " + p.unit : "")] : null; }).filter(Boolean),
+      hover: (t) => (p.lines || []).map((l) => { const q = nearest(l.points, t, 1.5 * DAY); return q && q[1] != null && l.name ? [l.name, val(q[1], p, lang)] : null; }).filter(Boolean),
     };
   },
 };
@@ -170,9 +191,9 @@ export function render(stage, args, opts) {
   const hosts = [];
   const draw = (host, p, H) => {
     const W = host.clientWidth || 600;
-    const f = frame(W, H, x0, x1, p.y[0], p.y[1], !p.strip);
+    const f = frame(W, H, x0, x1, p.y[0], p.y[1], !p.strip, p.invert);
     const painted = PAINT[p.kind](p, f, theme, text.lang);
-    const fmt = (v) => fmtNum(v, p.tick_decimals ?? 0, text.lang) + (p.tick_unit || "");
+    const fmt = (v) => p.format ? val(v, { ...p, unit: "" }, text.lang) : fmtNum(v, p.tick_decimals ?? 0, text.lang) + (p.tick_unit || "");
     host.innerHTML = `<svg width="${W}" height="${H}" style="display:block;overflow:visible">${grid(f, p.strip ? 1 : 4, fmt, theme)}` +
       `${p.strip ? "" : monthAxis(f, text.months)}<g class="${opts.animate ? "wipe" : ""}">${painted.svg}</g>` +
       `<line class="cur" y1="${f.pad.t}" y2="${H - f.pad.b}" stroke="${theme.ink}" stroke-opacity=".35" style="display:none"/></svg>`;

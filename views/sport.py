@@ -41,6 +41,17 @@ def recent_disciplines(sessions: pd.DataFrame, now: pd.Timestamp) -> set[str]:
     return set(variety.window(sessions, now, 365)["discipline"])
 
 
+def headline() -> str:
+    """Today's readiness for any training, as the page headline."""
+    tr = i18n.tr
+    today, now = dt.date.today(), pd.Timestamp.now().floor("min")
+    state = readiness.assess(shell.daily(), shell.table("activities"), today, now, frame=frame())
+    level = catalog.level_label(state["level"]) if state.get("level") else "—"
+    score = state.get("score")
+    tail = f" ({score:.0f}/100)" if isinstance(score, (int, float)) else ""
+    return tr(pl=f"Gotowość na dziś: <em>{level}</em>{tail}.", en=f"Readiness today: <em>{level}</em>{tail}.")
+
+
 def render() -> None:
     tr = i18n.tr
     today, now = dt.date.today(), pd.Timestamp.now().floor("min")

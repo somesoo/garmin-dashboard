@@ -15,7 +15,8 @@ from typing import Any
 import pandas as pd
 
 import i18n
-from hero import _date, _dec, _hm, _num
+import hero
+from hero import _clock, _date, _dec, _hm, _num, _span
 from running import units
 
 HARD = ("tempo", "threshold", "intervals", "race")
@@ -419,4 +420,167 @@ def load(pmc: pd.DataFrame, spikes: pd.DataFrame, daily: pd.DataFrame, start: pd
         roll = nights["hrv_last_night"].rolling(7, min_periods=4).mean().dropna()
         out["whys"]["hrv"] = tr(pl=f"średnia 7 nocy w tym okresie między {roll.min():.0f} a {roll.max():.0f} ms.",
                                 en=f"the 7-night mean in this period ranged {roll.min():.0f}–{roll.max():.0f} ms.")
+    return out
+
+
+
+# ------------------------------------------------------------------ Rytm i sen
+
+def sleep(daily: pd.DataFrame, circadian: pd.DataFrame, since: pd.Timestamp | None, today: dt.date) -> dict[str, Any]:
+    """Headline and satellites for the sleep-length hero (the night facts are hero.py's, said the same way)."""
+    tr = i18n.tr
+    out: dict[str, Any] = {"headline": i18n.page("sen"), "satellites": [], "whys": {}}
+    nights = _nights(daily, "sleep_h")
+    if len(nights) < 4:
+        return out
+    last, week = nights.iloc[-1], nights.iloc[-8:-1]
+    hours, usual = float(last["sleep_h"]), float(week["sleep_h"].mean())
+    told = {f["key"]: f for f in hero.night_facts(daily, circadian, last["day"].date())}
+    bed = told.get("bed")
+    later = ""
+    if circadian is not None and not circadian.empty:
+        rhythm = circadian.copy()
+        rhythm["day"] = pd.to_datetime(rhythm["day"])
+        this = rhythm[rhythm["day"] == last["day"]]
+        before = rhythm[(rhythm["day"] < last["day"]) & (rhythm["day"] >= last["day"] - pd.Timedelta(days=7))]
+        if not this.empty and len(before) >= 3 and pd.notna(this["bed_hour_cont"].iloc[0]):
+            diff = (float(this["bed_hour_cont"].iloc[0]) - float(before["bed_hour_cont"].mean())) * 60
+            if diff >= 30:
+                later = tr(pl=f" — zaśnięcie {_span(diff)} później niż zwykle", en=f" — asleep {_span(diff)} later than usual")
+            elif diff <= -30:
+                later = tr(pl=f" — zaśnięcie {_span(diff)} wcześniej niż zwykle", en=f" — asleep {_span(diff)} earlier than usual")
+            out["whys"]["bed"] = tr(pl=f"w tym tygodniu zwykle {_clock(float(before['bed_hour_cont'].mean()))}, ostatnio {_clock(float(this['bed_hour_cont'].iloc[0]))}.",
+                                    en=f"usually {_clock(float(before['bed_hour_cont'].mean()))} this week, last night {_clock(float(this['bed_hour_cont'].iloc[0]))}.")
+    if hours <= float(week["sleep_h"].min()):
+        out["headline"] = tr(pl=f"Najkrótsza noc tygodnia: <em>{_hm(hours)}</em>{later}.", en=f"The shortest night of the week: <em>{_hm(hours)}</em>{later}.")
+    elif hours >= float(week["sleep_h"].max()):
+        out["headline"] = tr(pl=f"Najdłuższa noc tygodnia: <em>{_hm(hours)}</em>{later}.", en=f"The longest night of the week: <em>{_hm(hours)}</em>{later}.")
+    else:
+        word = tr(pl="więcej", en="more") if hours >= usual else tr(pl="mniej", en="less")
+        out["headline"] = tr(pl=f"Sen <em>{_hm(hours)}</em> — {_span(abs(hours - usual) * 60)} {word} niż średnio w tygodniu{later}.",
+                             en=f"<em>{_hm(hours)}</em> of sleep — {_span(abs(hours - usual) * 60)} {word} than the week's average{later}.")
+    sats = out["satellites"]
+    if "sleep" in told:
+        f = told["sleep"]
+        sats.append(sat("r", f["group"], f["head"], f["text"], anchor=(last["day"], hours)))
+    if bed:
+        sats.append(sat("r", bed["group"], bed["head"], bed["text"]))
+    view = nights if since is None else nights[nights["day"] >= since]
+    if len(view) >= 7:
+        low = view.loc[view["sleep_h"].idxmin()]
+        sats.append(sat("l", tr(pl="Najkrótsza w tym okresie", en="The shortest in this period"),
+                        f"{_hm(float(low['sleep_h']))} · {_date(low['day'])}",
+                        tr(pl=f"Średnio w okresie {_hm(float(view['sleep_h'].mean()))}.", en=f"{_hm(float(view['sleep_h'].mean()))} on average in the period."),
+                        anchor=(low["day"], float(low["sleep_h"]))))
+    if "deep" in told:
+        f = told["deep"]
+        sats.append(sat("l", f["group"], f["head"], f["text"]))
+    _, _, change = hrv_change(daily)
+    if change is not None:
+        out["whys"]["hrv"] = tr(pl=f"HRV ostatniej nocy {change:+.0f}% wobec 7 poprzednich.", en=f"last night's HRV {change:+.0f}% against the 7 before.")
+    return out
+
+
+# ------------------------------------------------------------------ Prognoza
+
+def forecast(history: pd.DataFrame, races: list[dict[str, Any]], since: pd.Timestamp | None) -> dict[str, Any]:
+    """Headline and satellites for the race-time hero: the realistic time for the next race's distance over time."""
+    tr = i18n.tr
+    from running import text as rtext
+    key = str(races[0]["distance"]) if races else "10k"
+    out: dict[str, Any] = {"headline": i18n.page("prognoza"), "satellites": [], "whys": {}, "distance": key}
+    if history is None or history.empty:
+        return out
+    frame = history.copy()
+    frame["day"] = pd.to_datetime(frame["day"])
+    frame = frame[frame["distance"] == key].dropna(subset=["realistic_s"]).sort_values("day")
+    if frame.empty:
+        return out
+    view = frame if since is None else frame[frame["day"] >= since]
+    view = view if len(view) >= 2 else frame.tail(8)
+    out["view"] = view
+    last = view.iloc[-1]
+    label = rtext.race_label(key)
+    time = units.fmt_time(last["realistic_s"])
+    earlier = frame[frame["day"] <= last["day"] - pd.Timedelta(days=56)].tail(1)
+    if not earlier.empty:
+        delta = float(last["realistic_s"] - earlier["realistic_s"].iloc[0])
+        if abs(delta) < 15:
+            out["headline"] = tr(pl=f"Na {label} realnie <em>{time}</em> — tyle co 8 tygodni temu.",
+                                 en=f"{label}: realistically <em>{time}</em> — the same as 8 weeks ago.")
+        else:
+            word = tr(pl="szybciej", en="faster") if delta < 0 else tr(pl="wolniej", en="slower")
+            out["headline"] = tr(pl=f"Na {label} realnie <em>{time}</em> — {units.fmt_time(abs(delta))} {word} niż 8 tygodni temu.",
+                                 en=f"{label}: realistically <em>{time}</em> — {units.fmt_time(abs(delta))} {word} than 8 weeks ago.")
+    else:
+        out["headline"] = tr(pl=f"Na {label} realnie <em>{time}</em>.", en=f"{label}: realistically <em>{time}</em>.")
+    sats = out["satellites"]
+    sats.append(sat("r", tr(pl="Dziś", en="Today"), f"{label}: {time}",
+                    tr(pl=f"80% przedziału: {units.fmt_time(last['low_s'])}–{units.fmt_time(last['high_s'])}.",
+                       en=f"80% range: {units.fmt_time(last['low_s'])}–{units.fmt_time(last['high_s'])}."),
+                    anchor=(last["day"], float(last["realistic_s"]))))
+    best = view.loc[view["realistic_s"].idxmin()]
+    if best["day"] != last["day"]:
+        sats.append(sat("l", tr(pl="Najlepiej w tym okresie", en="Best in this period"),
+                        f"{units.fmt_time(best['realistic_s'])} · {_date(best['day'])}.{best['day'].year}",
+                        tr(pl="Najszybsza realna prognoza w wybranym zakresie.", en="The fastest realistic forecast in the selected range."),
+                        anchor=(best["day"], float(best["realistic_s"]))))
+    if races and _num(races[0].get("goal_s")):
+        goal = float(races[0]["goal_s"])
+        gap = float(last["realistic_s"]) - goal
+        name = str(races[0].get("name") or "")
+        text = (tr(pl=f"Prognoza jest o {units.fmt_time(gap)} wolniejsza niż cel.", en=f"The forecast is {units.fmt_time(gap)} slower than the goal.")
+                if gap > 0 else tr(pl=f"Prognoza jest o {units.fmt_time(-gap)} szybsza niż cel.", en=f"The forecast is {units.fmt_time(-gap)} faster than the goal."))
+        sats.append(sat("r", tr(pl=f"Cel: {name}", en=f"Goal: {name}"), units.fmt_time(goal), text,
+                        go={"page": "plan", "switch": "plan_view", "view": "races", "label": tr(pl="Zawody i cele", en="Races and goals")}))
+    if _num(last.get("vdot")):
+        vdot_then = _num(earlier["vdot"].iloc[0]) if not earlier.empty else None
+        text = tr(pl=f"8 tygodni temu {_dec(vdot_then, 1)}.", en=f"{_dec(vdot_then, 1)} 8 weeks ago.") if vdot_then else ""
+        sats.append(sat("l", "VDOT", _dec(float(last["vdot"]), 1),
+                        tr(pl="Waluta prognozy (Daniels): jedna liczba na wszystkie dystanse. ", en="The forecast's currency (Daniels): one number for every distance. ") + text))
+    return out
+
+
+# ------------------------------------------------------------------ Fizjologia
+
+def physio(efficiency: pd.DataFrame, since: pd.Timestamp | None) -> dict[str, Any]:
+    """Headline and satellites for the running-economy hero: metres per heartbeat, run by run."""
+    tr = i18n.tr
+    out: dict[str, Any] = {"headline": i18n.page("fizjologia"), "satellites": [], "whys": {}}
+    if efficiency is None or efficiency.empty:
+        return out
+    frame = efficiency.copy()
+    frame["day"] = pd.to_datetime(frame["day"])
+    frame = frame.dropna(subset=["ef"]).sort_values("day")
+    view = frame if since is None else frame[frame["day"] >= since]
+    if len(view) < 3:
+        return out
+    out["view"] = view
+    last = view.dropna(subset=["ef_roll10"]).iloc[-1] if view["ef_roll10"].notna().any() else view.iloc[-1]
+    now = float(last["ef_roll10"] if pd.notna(last.get("ef_roll10")) else last["ef"])
+    before = frame[frame["day"] <= last["day"] - pd.Timedelta(days=90)].dropna(subset=["ef_roll10"]).tail(1)
+    if not before.empty:
+        then = float(before["ef_roll10"].iloc[0])
+        change = (now / then - 1) * 100
+        word = (tr(pl="rośnie", en="is rising") if change >= 2 else tr(pl="spada", en="is falling") if change <= -2
+                else tr(pl="stoi", en="is flat"))
+        out["headline"] = tr(pl=f"Ekonomia biegu {word}: <em>{_dec(now, 2)} m na uderzenie</em> ({change:+.0f}% wobec 3 miesięcy temu).",
+                             en=f"Running economy {word}: <em>{_dec(now, 2)} m per beat</em> ({change:+.0f}% against 3 months ago).")
+    sats = out["satellites"]
+    run = view.iloc[-1]
+    sats.append(sat("r", tr(pl="Ostatni bieg", en="The last run"), f"{_dec(float(run['ef']), 2)} m · {_date(run['day'])}",
+                    tr(pl=f"{_dec(float(run['distance_km']), 1)} km, tętno {run['avg_hr']:.0f}. Średnia 10 biegów: {_dec(now, 2)}.",
+                       en=f"{_dec(float(run['distance_km']), 1)} km, heart rate {run['avg_hr']:.0f}. Mean of 10 runs: {_dec(now, 2)}."),
+                    anchor=(run["day"], float(run["ef"]))))
+    # A 2 km jog with a lagging heart rate is not an economy record: runs of 3 km and more.
+    longer = view[view["distance_km"] >= 3]
+    pool = longer if not longer.empty else view
+    best = pool.loc[pool["ef"].idxmax()]
+    sats.append(sat("l", tr(pl="Najwyżej w tym okresie", en="Highest in this period"), f"{_dec(float(best['ef']), 2)} m · {_date(best['day'])}",
+                    tr(pl=f"{_dec(float(best['distance_km']), 1)} km przy tętnie {best['avg_hr']:.0f}.",
+                       en=f"{_dec(float(best['distance_km']), 1)} km at heart rate {best['avg_hr']:.0f}."),
+                    anchor=(best["day"], float(best["ef"]))))
+    sats.append(sat("l", tr(pl="Jak czytać", en="How to read it"), tr(pl="Nie każdy wzrost to postęp", en="Not every rise is progress"),
+                    tr(pl="EF rośnie też wtedy, gdy biegasz szybciej na wyższym tętnie — porównuj biegi o podobnym tętnie.",
+                       en="EF also rises when you run faster at a higher heart rate — compare runs at a similar heart rate.")))
     return out

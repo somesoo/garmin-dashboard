@@ -14,7 +14,7 @@ garmin-dashboard/
   etl/login.py       odświeżenie tokenów hasłem (raz na rok / po zmianie hasła)
   serve.py           start serwera z launcherów: streamlit run app.py + lifecycle
   lifecycle.py       lokalnie serwer gaśnie N min po zamknięciu ostatniej karty
-  sync.py            pobieranie w tle: przycisk w szynie + automat co N h
+  sync.py            pobieranie w tle: link w górnej linii + automat co N h
   analytics.py       modele fizjologiczne i statystyka -> tabele pochodne
   db.py              DuckDB in-memory z widokami na parquet
   theme.py           system wykresów: paleta, buildery, mapy, glob
@@ -32,6 +32,10 @@ garmin-dashboard/
                      vendor/ (d3-geo, d3-array), test.html (podgląd renderera)
   hero.py            fakty dnia wokół biegu (czyste pandas) -> strona Dzień
   hero_component/    statyczny komponent strony Dzień: ślad + układ faktów
+  story.py           szkielet strony: nagłówek-wniosek, pętla (nawigacja), szczegóły; górna linia
+  facts.py           liczby pętli i fakty wykresów głównych stron (czyste pandas)
+  herochart.py       wykres główny strony (komponent): satelity, pasy połączeń, wspólny kursor
+  herochart_component/ statyczny renderer wykresu głównego (chart.js)
   views/             po jednym module na stronę (atlas, routes, form, ...);
                      run_*.py to grupa „Bieganie”, hubs.py — dwa widoki pod
                      jednym wpisem menu; activities/trends to już tylko kafle
@@ -75,13 +79,13 @@ na nie** — `garminconnect` daje więcej:
 `Dashboard.command` / `Dashboard.cmd`: `serve.py` w tle → przeglądarka. **Launcher
 nie pobiera danych** (chyba że dostanie argumenty, np. `--backfill` — wtedy
 `etl/run.py` w oknie przed startem). Pobieranie to `sync.py`: przycisk „Pobierz
-z Garmina” w szynie (`shell.footer`) i wątek startowany przez `serve.py`, który co
+z Garmina” w górnej linii (`shell.pull_inline`) i wątek startowany przez `serve.py`, który co
 10 min sprawdza, czy ostatnia próba jest starsza niż `GARMIN_AUTO_FETCH_H` h
 (launchery: 6; nieudana sieciowo — po 30 min; wygasły token — po pełnym odstępie).
 Oba odpalają `etl/run.py` jako osobny, odłączony proces (log `data/fetch.log`),
 więc przeżywa idle-exit serwera. `etl/run.py` bierze `data/fetch.lock` (O_EXCL, pid)
 i zapisuje próbę w `data/fetch.json` (`started_at`, `finished_at`, `code`); fragment
-w szynie odpytuje blokadę co 3 s w trakcie i co 60 s poza nim, a po końcu robi
+w górnej linii odpytuje blokadę co 3 s w trakcie i co 60 s poza nim, a po końcu robi
 pełny rerun — nowy build sam unieważnia cache.
 Serwer **nie chodzi w nieskończoność**: `lifecycle.py` liczy aktywne sesje
 Streamlita i po `GARMIN_IDLE_EXIT_MIN` minutach (domyślnie 5) bez żadnej
@@ -189,7 +193,7 @@ osie wykresów przez `scatter(pace_y=True)` / panel `"pace": True` /
 ## Języki (`i18n.py`)
 
 Interfejs jest po polsku (domyślnie) i po angielsku; przełącznik PL/EN na dole
-szyny, wybór pamiętany w `data/ui.json`. **Każda nowa funkcja od razu w obu
+górnej linii, wybór pamiętany w `data/ui.json`. **Każda nowa funkcja od razu w obu
 językach** — tekst, który ktoś czyta, idzie przez `i18n.tr(pl=..., en=...)`
 (oba argumenty obowiązkowe), rzeczownik przy liczbie przez
 `i18n.plural(n, pl=(1, 2–4, 5+), en=(1, wiele))`, daty przez `i18n.day_month` /
@@ -551,15 +555,70 @@ Plan i zawody, prognoza, segmenty, Obciążenie), *Ciało* (Regeneracja, Sen),
   strony: pytanie nad tytułem (`eyebrow`), pasek **Dalej** na dole
   (`next_steps`: stałe `NEXT`, na *Dziś* liczone ze stanu — brak startu, start
   ≤ 6 tyg., słaba noc) i przewodnik „Jak czytać ten dashboard” na *Dziś* do
-  schowania (`tour_done` w `data/ui.json`; przycisk w szynie przywraca).
+  schowania (`tour_done` w `data/ui.json`; przycisk w menu Laboratorium przywraca).
 - **Strona domyślna ma w Streamlicie `url_path == ""`** — dlatego `_page`
   przechodzi przez `routing.named`, a router pyta `routing.name(page)`. Bez tego
   `routing.goto("dzis")` nie znajdował strony.
 
+### Strona = nagłówek-wniosek, pętla, jeden wykres główny (`story.py`, 2026-11-02)
+
+Przebudowa po badaniach (Li/Dey/Forlizzi 2010 — samoobserwacja jako cykl łączący
+sfery życia; Segel & Heer 2010 — najpierw prowadzić, potem pozwolić zwiedzać;
+Borkin i in. 2015 — tytuł-przekaz i adnotacje przy danych pomagają zapamiętać;
+NN/g — przyciski bez wypełnienia słabo sygnalizują klikalność). Użytkownik wybrał
+makiety: bez prostokątów, pętla po prawej od tytułu, przyciski „C”, całość
+wyśrodkowana, strona mieści się w jednym ekranie.
+
+- **Brak szyny bocznej**: `st.navigation(position="hidden")`. Górna linia
+  (`story.topbar`): Dzień, Dziś, Historia, menu Laboratorium (Fizjologia
+  i narzędzia, status hurtowni, przewodnik), zakres czasu, PL/EN, „Pobierz
+  z Garmina” z godziną ostatniego pobrania.
+- **Pętla jest nawigacją** (`story.loop`, po prawej od nagłówka): Bodziec
+  (Obciążenie: przegląd biegania, obciążenie, sport) → Odpowiedź (regeneracja,
+  sen) → Adaptacja (prognoza, fizjologia, segmenty) → Cel (plan i zawody, dziś)
+  → kolejny cykl. Każdy etap ma liczbę dnia (`facts.loop_values`) i swoje
+  strony; bieżąca świeci. Strony spoza pętli (Dzień, Historia, Lab) pokazują ją
+  bez podświetlenia.
+- **Nagłówek to wniosek z danych** (`<em>` = liczba w akcencie), pod nim jedno
+  zdanie, jak czytać wykres. Liczy go `facts.py` (zasady jak w `hero.py`: tylko
+  to, co się wydarzyło, względem własnej normy; nic nie radzi).
+- **Wykres główny** (`herochart.py` + `herochart_component/chart.js`) — drugi,
+  obok globu, wyjątek od „każda figura przez `theme.py`”: Plotly nie umie
+  postawić tekstu na marginesie i poprowadzić z niego linii do punktu danych
+  bez znajomości szerokości w pikselach (sprawdzone: `axref="x domain"` nie
+  działa dla końca strzałki). Spec z Pythona: panele `trend` / `bars` /
+  `lines` (+ `format`: `time`, `clock`, `pace`; `invert`: szybciej = wyżej),
+  satelity `{side, group, head, text, anchor:{t, v}, go}`. Pasy połączeń
+  (`strip: True`) to sąsiednie etapy pętli na tej samej osi czasu, z
+  jednozdaniowym „Połączenie:”; jeden kursor przez wszystkie panele. Wykres
+  bierze wysokość, którą zostawia okno (`reserve` px na „Szczegóły” i „Dalej”),
+  w granicach 240–560 px.
+- **Szczegóły**: dotychczasowe kafle strony są pod linkiem „Szczegóły”
+  (`story.details`) w warstwie `st.dialog` na całe okno, bez ramek. Kafel, który
+  powtarzałby wykres główny, z nich wylatuje.
+- Strony z wykresem głównym: Regeneracja (HRV + norma Garmina, poranki po
+  mocnym treningu; km/tydz., sen), Przegląd biegania (rok w tygodniach z
+  przerwami ≥ 3 tyg. i powrotem; CTL), Obciążenie (CTL/ATL wszystkich sportów;
+  TSB, HRV; oba stare widoki w szczegółach), Rytm i sen (długość z normą
+  10.–90. percentyl 60 nocy; pora zasypiania, HRV), Prognoza (czas na dystans
+  najbliższego startu z 80%, oś odwrócona; km, VDOT), Fizjologia (EF bieg po
+  biegu; km, HRV). Strony z nagłówkiem nad dotychczasową treścią: Dziś
+  (decyzja dnia), Plan i zawody, Sport (gotowość), Segmenty, Historia.
+  Laboratorium — tylko wspólne chrome.
+- Pod nagłówkiem strony `bento.header` widoku rysuje mały tytuł sekcji
+  (`bento.HEADED`, ustawiane przez `story.head`, zerowane w `story.topbar`).
+- **Przyciski „C”, bez prostokątów**: akcja główna — gruba niebieska kreska pod
+  słowem (`type="primary"`), reszta — kropkowana; wybór (zakres, język,
+  przełącznik widoków) to słowa z niebieską kreską pod wybranym
+  (`aria-checked="true"`). `primaryColor` = niebieski wykresów (config.toml
+  i `serve.py`), nie czerwień Streamlita.
+- **Kafle bez ramek**: tło przezroczyste, cienka linia nad kaflem, bez cienia i
+  bez podnoszenia przy najechaniu. Klucze `wgt_`/`kpi_`/`pnl_` zostają.
+
 Zasady układu, które trzymają spójność:
 
-- **Siatka bento (`bento.py`) na każdej stronie — pływające widgety.** Kanwa
-  (czarne tło, jednolite grafitowe karty z cieniem) to mozaika na siatce 4 kolumn. Kafel
+- **Siatka bento (`bento.py`) pod wykresem głównym i w szczegółach — pływające widgety.** Kanwa
+  (czarne tło, kafle bez ramek — patrz wyżej) to mozaika na siatce 4 kolumn. Kafel
   zajmuje 1–4 kolumny (`bento.row(2, 2)`, `row(2, 1, 1)` — suma zawsze 4)
   i 1–3 rzędy (`bento.tile(..., rows=2)`). **Kafle nie mają stałej wysokości**
   (stała wysokość = ucięta treść albo przewijanie w środku); rzędy wyrównuje
@@ -610,9 +669,9 @@ Zasady układu, które trzymają spójność:
   biegiem tylko dodatek, w dzień bez biegu dwie propozycje.
 - Glob na *Historii* zostaje poza kaflem (hero na pełną szerokość w `globe_stage`,
   na płaskim tle — bez poświaty), reszta strony to zwykła mozaika i Dziennik.
-- **Chrome w szynie bocznej**: nawigacja, jeden globalny zakres czasu
-  (`shell.range_picker`) i status hurtowni (`shell.footer`). Kanwa nie
-  rezerwuje miejsca na kontrolki.
+- **Chrome w górnej linii** (`story.topbar`): strony codzienne, Laboratorium,
+  jeden globalny zakres czasu (`shell.range_picker`), język i pobieranie
+  (`shell.pull_inline`); status hurtowni w menu Laboratorium.
 - **Dane tylko przez `shell.table/query/daily/clip`** — cache jest kluczowany
   znacznikiem builda, więc przebudowa tabel sama unieważnia widok.
 

@@ -17,6 +17,28 @@ PLAN, LOAD, SPORT = "plan_view", "load_view", "sport_view"
 
 
 def plan() -> None:
+    import datetime as dt
+
+    import story
+    from views import run_common as rc
+    tr = i18n.tr
+    today = dt.date.today()
+    races = rc.upcoming_races(today)
+    active = rc.active_plan(today)
+    if races:
+        days = (dt.date.fromisoformat(str(races[0]["date"])) - today).days
+        name = races[0].get("name") or ""
+        if active:
+            left = sum(1 for s in active.get("sessions", []) if s.get("date", "") >= today.isoformat()
+                       and s.get("type") not in ("rest",))
+            headline = tr(pl=f"Plan prowadzi do <em>{name}</em> — {days} dni, {left} sesji przed Tobą.",
+                          en=f"The plan leads to <em>{name}</em> — {days} days, {left} sessions ahead.")
+        else:
+            headline = tr(pl=f"Bez planu — {len(races)} startów przed Tobą, najbliższy za <em>{days} dni</em>.",
+                          en=f"No plan — {len(races)} races ahead, the next in <em>{days} days</em>.")
+    else:
+        headline = tr(pl="Bez startów i bez planu.", en="No races and no plan.")
+    story.head("plan", headline)
     choice = bento.switch(PLAN, {"plan": i18n.view("plan"), "races": i18n.view("zawody")})
     (run_races if choice == "races" else run_plan).render()
 
@@ -96,5 +118,7 @@ def _load_views() -> None:
 
 
 def sports() -> None:
+    import story
+    story.head("sport", sport.headline())
     choice = bento.switch(SPORT, {"today": i18n.view("sport"), "disciplines": i18n.view("dyscypliny")})
     (sport_disciplines if choice == "disciplines" else sport).render()

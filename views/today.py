@@ -17,6 +17,7 @@ import guide
 import i18n
 import routing
 import shell
+import story
 import theme as tz
 from running import coach, plan as planning, store, units
 from sport import catalog, readiness, recommend, store as sport_store
@@ -37,11 +38,16 @@ ACTION_ICONS = {
 def render() -> None:
     tr = i18n.tr
     today = dt.date.today()
-    bento.header(i18n.page("dzis"), f"{i18n.weekdays(long=True)[today.weekday()].capitalize()}, {today:%d.%m.%Y}")
-    guide.tour()
-
     days = shell.daily().sort_values("day")
     row = shell.latest_day()
+    frame = rc.runs()
+    result = rc.current_forecast() if not frame.empty else {"status": "insufficient"}
+    active = rc.active_plan(today)
+    suggestion = coach.next_session(active, frame, days, result, today) if not frame.empty else None
+    story.head("dzis", _headline(suggestion, today),
+               f"{i18n.weekdays(long=True)[today.weekday()].capitalize()}, {today:%d.%m.%Y}")
+    guide.tour()
+
     bento.kpis(row, shell.week_before(days), [
         ("readiness", "Readiness", ""),
         ("hrv_last_night", "HRV", "ms"),
@@ -54,11 +60,6 @@ def render() -> None:
                          "i uruchom aktualizację, zanim zaufasz decyzji niżej.",
                       en=f"Last night in the data: {row['day']:%d.%m} ({stale} days ago) — sync the watch and run "
                          "an update before you trust the decision below."))
-
-    frame = rc.runs()
-    result = rc.current_forecast() if not frame.empty else {"status": "insufficient"}
-    active = rc.active_plan(today)
-    suggestion = coach.next_session(active, frame, days, result, today) if not frame.empty else None
 
     left, right = bento.row(2, 2)
     with left:
@@ -85,6 +86,21 @@ def render() -> None:
         _sport(t, today)
     with right, bento.tile(tr(pl="Ostatnie biegi", en="Recent runs"), key="today_recent", terms=["run_kind"]):
         _recent(frame)
+
+
+def _headline(suggestion: dict | None, today: dt.date) -> str:
+    """The decision of the day as the page headline (the tile below has the details and the buttons)."""
+    tr = i18n.tr
+    if suggestion is None or not suggestion.get("session"):
+        return tr(pl="Dziś bez sesji w planie.", en="No session in the plan today.")
+    session = suggestion["session"]
+    title = html.escape(str(session.get("title") or ""))
+    if suggestion.get("today", True):
+        action = rc.action_label(suggestion["action"])
+        return tr(pl=f"Dziś: <em>{title}</em> — decyzja: {action}.", en=f"Today: <em>{title}</em> — decision: {action}.")
+    date = dt.date.fromisoformat(session["date"])
+    when = f"{i18n.weekdays(long=True)[date.weekday()]} {date:%d.%m}"
+    return tr(pl=f"Dziś wolne. Następnie <em>{title}</em> — {when}.", en=f"Rest day today. Next <em>{title}</em> — {when}.")
 
 
 def _week_note(active: dict | None) -> str:

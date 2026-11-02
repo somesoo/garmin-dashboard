@@ -8,16 +8,56 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import bento
+import facts
+import herochart as hc
 import glossary
 import i18n
 import shell
+import story
 import theme as tz
 
 
 def render() -> None:
-    bento.header(i18n.page("fizjologia"), i18n.tr(
-        pl="Wszystko tutaj liczy się z samych treningów — bez testu na bieżni i bez laboratorium.",
-        en="Everything here is computed from the training alone — no treadmill test, no laboratory."))
+    """Running economy run by run (metres per heartbeat); the week's km and HRV under it."""
+    tr = i18n.tr
+    efficiency = shell.table("efficiency")
+    start = None
+    if not efficiency.empty:
+        start, _ = story.long_span(pd.to_datetime(efficiency["day"]).min(), pd.to_datetime(efficiency["day"]).max())
+    told = facts.physio(efficiency, start)
+    story.frame_page(
+        "fizjologia", headline=told["headline"],
+        sub=tr(pl="Ekonomia biegu: ile metrów daje jedno uderzenie serca, bieg po biegu, z prędkością skorygowaną o "
+                  "nachylenie; linia to średnia z 10 biegów. Wszystko z samych treningów.",
+               en="Running economy: how many metres one heartbeat buys, run by run, speed corrected for gradient; the "
+                  "line is the mean of 10 runs. All from the training alone."),
+        hero=lambda: _hero(told, start),
+        more=tr(pl="prędkość krytyczna, hiperbola, wykładnik Riegla, ekonomia według tętna, strefy",
+                en="critical speed, the hyperbola, Riegel's exponent, economy by heart rate, zones"),
+        more_render=_details,
+    )
+
+
+def _hero(told: dict, start) -> None:
+    from views import run_common as rc  # run_forecast imports this module; keep the import local
+    tr = i18n.tr
+    view = told.get("view")
+    if view is None or view.empty:
+        shell.missing("efficiency", tr(pl="Za mało biegów z tętnem.", en="Too few runs with heart rate."))
+        return
+    last = view.iloc[-1]
+    end = view["day"].max() + pd.Timedelta(days=3)
+    panels = [
+        {"kind": "trend", "points": hc.points(view, "day", "ef", 3), "smooth": hc.points(view, "day", "ef_roll10", 3),
+         "y": hc.span(view["ef"].dropna(), pad=0.06), "unit": "m", "decimals": 2, "tick_decimals": 2,
+         "name": "EF", "smooth_name": tr(pl="średnia 10 biegów", en="mean of 10 runs"), "end": f"{last['ef_roll10']:.2f}" if pd.notna(last["ef_roll10"]) else ""},
+        story.km_strip(rc.runs(), view["day"].min(), end),
+        story.hrv_strip(view["day"].min()),
+    ]
+    hc.show({"x": [hc.ms(view["day"].min()), hc.ms(end)], "panels": panels, "satellites": story.satellites(told["satellites"])},
+            key="hero_fizjologia", token=story.token("fizjologia"))
+
+def _details() -> None:
     table = shell.table("critical_speed")
     fitted = table.dropna(subset=["cs_ms"]) if not table.empty else table
     _cs_kpis(fitted)

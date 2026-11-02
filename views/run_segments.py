@@ -8,20 +8,21 @@ import streamlit as st
 import bento
 import i18n
 import routing
+import story
 import theme as tz
 from running import store, units, workouts
 from views import run_common as rc
 
 
 def render() -> None:
-    bento.header(i18n.page("segmenty"), i18n.tr(
-        pl="Rekordy na dystansach i na odcinkach interwałów, a pod nimi segmenty — Twoje i znalezione na trasach, "
-           "które biegasz najczęściej.",
-        en="Records at distances and on interval reps, and segments below them — yours and those found on the "
-           "routes you run most."))
     frame = rc.guard()
     if frame is None:
         return
+    found = len(rc.all_segments())
+    story.head("segmenty", i18n.tr(pl=f"<em>{found}</em> segmentów na Twoich trasach — własne i znalezione automatycznie.",
+                                   en=f"<em>{found}</em> segments on your routes — your own and found automatically."),
+               i18n.tr(pl="Rekordy na dystansach i na odcinkach interwałów, a pod nimi segmenty.",
+                       en="Records at distances and on interval reps, and segments below them."))
     reps = rc.rep_efforts()
     rep_list = workouts.rep_segments(reps)
     _distance_records()

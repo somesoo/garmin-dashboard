@@ -188,9 +188,17 @@ def switch(key: str, options: dict[str, str]) -> str:
     return choice or first
 
 
+# Set by story.head for the run: the page already has its headline, so a view's
+# header below it is a section title, not a second page title.
+HEADED = False
+
+
 def header(title: str, note: str | None = None) -> None:
     """Page title and the one sentence that says what the page is for."""
-    st.title(title)
+    if HEADED:
+        st.markdown(f"<div class='view-title'>{title}</div>", unsafe_allow_html=True)
+    else:
+        st.title(title)
     if note:
         st.caption(note)
 

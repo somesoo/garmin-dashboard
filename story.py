@@ -95,6 +95,8 @@ def loop(current: str) -> None:
 
 def head(current: str, headline: str, sub: str | None = None) -> None:
     """The finding on the left, the loop on the right."""
+    import bento
+    bento.HEADED = True
     left, right = st.columns([2.6, 1], gap="large", vertical_alignment="top")
     with left:
         st.markdown(f"<h1 class='story-h'>{headline}</h1>" + (f"<p class='story-sub'>{sub}</p>" if sub else ""),
@@ -117,6 +119,8 @@ def details(label: str, render: Callable[[], None], *, key: str) -> None:
 
 def topbar(current: str) -> None:
     """What the sidebar carried: everyday pages and the lab on the left; range, language, Garmin on the right."""
+    import bento
+    bento.HEADED = False  # a new run: no page headline yet
     tr = i18n.tr
     with st.container(horizontal=True, key="topbar", vertical_alignment="center", gap="medium"):
         for url in EVERYDAY:
@@ -162,3 +166,45 @@ def long_span(first, last, *, days: int = 365):
     if window is None:
         return pd.Timestamp(first), pd.Timestamp(last)
     return max(pd.Timestamp(first), pd.Timestamp(last) - pd.Timedelta(days=max(window, days))), pd.Timestamp(last)
+
+
+def km_strip(runs, start, end, why: str = "") -> dict:
+    """The stimulus strip: kilometres per week, quality sessions in orange (for heroes on the other stages)."""
+    import facts
+    import herochart as hc
+    import pandas as pd
+    tr = i18n.tr
+    c = hc.colors()
+    weeks = facts.weekly_km(runs)
+    weeks = weeks[(weeks["week"] >= pd.Timestamp(start) - pd.Timedelta(days=6)) & (weeks["week"] < pd.Timestamp(end))]
+    top = float(weeks["km"].max()) if not weeks.empty else 10.0
+    return {"kind": "bars", "strip": True,
+            "bars": [[hc.ms(r.week), [round(r.easy_km, 1), round(r.hard_km, 1)]] for r in weeks.itertuples()],
+            "colors": [c["series"], c["warm"]], "names": [tr(pl="spokojne km", en="easy km"), tr(pl="mocne km", en="hard km")],
+            "period": tr(pl="tydzień od", en="week of"), "y": [0, max(10.0, top * 1.1)],
+            "label": {"group": tr(pl="Bodziec · Obciążenie", en="Stimulus · Load"), "head": tr(pl="km tygodniowo", en="km per week"),
+                      "note": tr(pl="pomarańczowe — treningi jakościowe", en="orange — quality sessions")},
+            "why": why}
+
+
+def hrv_strip(start, why: str = "") -> dict:
+    """The response strip: the 7-night mean of overnight HRV."""
+    import herochart as hc
+    import pandas as pd
+    tr = i18n.tr
+    nights = shell.daily()
+    nights = nights[nights["day"] >= pd.Timestamp(start)].sort_values("day")
+    nights["hrv7"] = nights["hrv_last_night"].rolling(7, min_periods=4).mean()
+    return {"kind": "lines", "strip": True, "y": hc.span(nights["hrv7"].dropna()), "decimals": 0, "unit": "ms",
+            "lines": [{"points": hc.points(nights, "day", "hrv7", 1), "color": hc.colors()["series"], "width": 2,
+                       "name": tr(pl="HRV, średnia 7 nocy", en="HRV, 7-night mean")}],
+            "label": {"group": tr(pl="Odpowiedź · Regeneracja", en="Response · Recovery"),
+                      "head": tr(pl="HRV, średnia 7 nocy", en="HRV, 7-night mean"), "note": ""},
+            "why": why}
+
+
+def satellites(items: list) -> list:
+    """facts.sat entries with their (day, value) anchors as the component wants them."""
+    import herochart as hc
+    return [{**s, "anchor": {"t": hc.ms(s["anchor"][0]), "v": float(s["anchor"][1])} if s.get("anchor") else None}
+            for s in items]

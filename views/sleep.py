@@ -3,26 +3,74 @@ profile, day map."""
 
 from __future__ import annotations
 
+import datetime as dt
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 import bento
+import facts
+import herochart as hc
 import glossary
 import i18n
 import shell
+import story
 import theme as tz
 from views import trends
 
 
 def render() -> None:
-    bento.header(
-        i18n.page("sen"),
-        i18n.tr(pl="Długość snu to jedna liczba; regularność, struktura nocy i moment wyciszenia organizmu mówią "
-                   "więcej.",
-                en="Sleep length is one number; regularity, the structure of the night and the moment the body "
-                   "settles say more."),
+    """Sleep length against the personal normal; bedtime and HRV under it on the same time axis."""
+    tr = i18n.tr
+    daily = shell.daily().sort_values("day")
+    circadian = shell.table("circadian")
+    told = facts.sleep(daily, circadian, shell.cutoff(), dt.date.today())
+    story.frame_page(
+        "sen", headline=told["headline"],
+        sub=tr(pl="Długość każdej nocy, średnia z 7 nocy i Twoja norma (10.–90. percentyl z 60 nocy). Pod spodem pora "
+                  "zasypiania i HRV — czy noc zregenerowała.",
+               en="The length of every night, the 7-night mean and your normal (the 10th–90th percentile of 60 nights). "
+                  "Below, bedtime and HRV — did the night restore."),
+        hero=lambda: _hero(daily, circadian, told),
+        more=tr(pl="regularność, okno snu, ocena, hipnogram, profil nocy, mapa doby",
+                en="regularity, sleep window, score, hypnogram, night profile, day map"),
+        more_render=_details,
     )
+
+
+def _hero(daily: pd.DataFrame, circadian: pd.DataFrame, told: dict) -> None:
+    tr = i18n.tr
+    rolling = daily["sleep_h"].rolling(60, min_periods=20)
+    daily = daily.assign(sleep_low=rolling.quantile(0.10), sleep_high=rolling.quantile(0.90))
+    view = shell.clip(daily).dropna(subset=["sleep_h"])
+    if len(view) < 5:
+        shell.missing("sleep_h", tr(pl="Za mało nocy w wybranym zakresie.", en="Too few nights in this range."))
+        return
+    start, end = view["day"].min(), view["day"].max() + pd.Timedelta(days=1)
+    band = [[hc.ms(r.day), float(r.sleep_low), float(r.sleep_high)] for r in view.dropna(subset=["sleep_low", "sleep_high"]).itertuples()]
+    rhythm = circadian.copy()
+    if not rhythm.empty:
+        rhythm["day"] = pd.to_datetime(rhythm["day"])
+        rhythm = rhythm[(rhythm["day"] >= start) & (rhythm["day"] < end)]
+    last = view.iloc[-1]
+    panels = [
+        {"kind": "trend", "points": hc.points(view, "day", "sleep_h", 2), "smooth": hc.points(view, "day", "sleep_h_roll7", 2),
+         "band": band, "band_label": tr(pl="norma", en="normal"), "y": hc.span(view["sleep_h"].tolist() + [b[2] for b in band]),
+         "unit": "h", "decimals": 1, "tick_unit": " h", "name": tr(pl="sen", en="sleep"),
+         "smooth_name": tr(pl="średnia 7 nocy", en="7-night mean"), "end": f"{int(last['sleep_h'])}:{round(last['sleep_h'] % 1 * 60):02d}"},
+    ]
+    if not rhythm.empty and rhythm["bed_hour_cont"].notna().sum() >= 5:
+        panels.append({"kind": "lines", "strip": True, "format": "clock", "y": hc.span(rhythm["bed_hour_cont"].dropna().quantile([0.05, 0.95]), pad=0.25),
+                       "lines": [{"points": hc.points(rhythm, "day", "bed_hour_cont", 2), "color": hc.colors()["light"], "width": 1.6,
+                                  "name": tr(pl="zaśnięcie", en="asleep at")}],
+                       "label": {"group": tr(pl="Rytm", en="Rhythm"), "head": tr(pl="pora zasypiania", en="bedtime"), "note": ""},
+                       "why": told["whys"].get("bed", "")})
+    panels.append(story.hrv_strip(start, told["whys"].get("hrv", "")))
+    hc.show({"x": [hc.ms(start), hc.ms(end)], "panels": panels, "satellites": story.satellites(told["satellites"])},
+            key="hero_sen", token=story.token("sen"))
+
+def _details() -> None:
     _headline()
 
     left, right = bento.row(2, 2)

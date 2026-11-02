@@ -51,16 +51,16 @@ _STYLE = """
   .block-container {padding-top: 1.6rem; padding-bottom: 4rem; max-width: 1560px;}
 
   /* ---- widgets (bento.py): wgt_ = chart tile, kpi_ = number, pnl_ = form */
+  /* No boxes (2026-11-02): a tile is its content under a hairline, the gap does the rest. */
   [class*="st-key-wgt_"], [class*="st-key-kpi_"], [class*="st-key-pnl_"] {
-      background: @WIDGET@; border: 1px solid @LINE@ !important; border-radius: 10px;
-      box-shadow: @HIGHLIGHT@, @SHADOW@; padding: 1rem 1.25rem 0.9rem 1.25rem;
+      background: transparent; border: 0 !important; border-top: 1px solid #1f2126 !important; border-radius: 0;
+      box-shadow: none; padding: 0.9rem 0.1rem 0.8rem 0.1rem;
       transition: transform .25s cubic-bezier(.2,.75,.25,1), box-shadow .25s ease;
       animation: wgt-rise .55s cubic-bezier(.2,.75,.25,1) both;
       animation-delay: calc(var(--row-delay, 0ms) + var(--col-delay, 0ms));}
-  [class*="st-key-wgt_"]:hover, [class*="st-key-kpi_"]:hover {transform: translateY(-3px);
-      box-shadow: @HIGHLIGHT@, @RAISED@;}
+  [class*="st-key-wgt_"]:hover, [class*="st-key-kpi_"]:hover {transform: none; box-shadow: none;}
   /* Numbers need less air than charts. */
-  [class*="st-key-kpi_"] {padding: 0.85rem 1.15rem 0.8rem 1.15rem;}
+  [class*="st-key-kpi_"] {padding: 0.75rem 0.1rem 0.7rem 0.1rem;}
 
   /* Rows line up without fixed heights: columns of a widget row stretch to the
      tallest, and widgets grow to fill their column -- nothing is clipped and
@@ -166,8 +166,13 @@ _STYLE = """
   .st-key-topbar [data-testid="stPageLink"] a:hover p {color: #fff;}
   .tb-here {font-size: 0.86rem; color: #fff; font-weight: 640;}
   /* Page links are words: no menu icons in the top line or the loop. */
+  .st-key-topbar [data-testid="stPageLink"] a > span:has([data-testid="stIconMaterial"]),
+  .st-key-loop [data-testid="stPageLink"] a > span:has([data-testid="stIconMaterial"]),
   .st-key-topbar [data-testid="stPageLink"] [data-testid="stIconMaterial"],
-  .st-key-loop [data-testid="stPageLink"] [data-testid="stIconMaterial"] {display: none;}
+  .st-key-loop [data-testid="stPageLink"] [data-testid="stIconMaterial"] {display: none !important;}
+  .view-title {font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; color: #5f6570; font-weight: 650;
+      margin: 1.2rem 0 0.2rem 0;}
+  [data-testid="stMarkdownContainer"]:has(> .view-title) {margin-bottom: 0 !important;}
   [data-testid="stAppDeployButton"] {display: none;}
   .tb-note {font-size: 0.8rem; color: #5f6570;}
 
@@ -217,7 +222,7 @@ _STYLE = """
       border-radius: 0 !important; padding: 0 0.1rem 3px 0.1rem !important; min-height: 0 !important; color: #5f6570 !important;
       border-bottom: 2px solid transparent !important;}
   [data-testid="stButtonGroup"] button:hover {color: #c3c2b7 !important;}
-  [data-testid="stButtonGroup"] [data-testid$="Active"] {color: #fff !important; border-bottom-color: #3987e5 !important;}
+  [data-testid="stButtonGroup"] button[aria-checked="true"] {color: #fff !important; border-bottom-color: #3987e5 !important;}
   [data-testid="stButtonGroup"] > div {gap: 0.9rem !important;}
   [data-testid="stButtonGroup"] p {font-size: 0.84rem;}
 

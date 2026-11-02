@@ -11,8 +11,8 @@ Na razie aplikacja działa tylko z Garminem — patrz
 **macOS:** dwuklik na **`Dashboard.command`** (otwiera się w Terminalu) albo
 `./Dashboard.command` z terminala. **Windows:** dwuklik na **`Dashboard.cmd`**.
 Oba tylko podnoszą serwer (jeśli nie działa) i otwierają przeglądarkę —
-**nie pobierają danych**. Dane zaciąga przycisk **„Pobierz z Garmina”** w szynie
-bocznej, a serwer robi to sam, gdy ostatnie pobranie jest starsze niż 6 h
+**nie pobierają danych**. Dane zaciąga link **„Pobierz z Garmina”** w górnej
+linii, a serwer robi to sam, gdy ostatnie pobranie jest starsze niż 6 h
 (`GARMIN_AUTO_FETCH_H=12 ./Dashboard.command` zmienia odstęp). Pobieranie idzie
 w tle (`data/fetch.log`), strona przeładowuje się po jego końcu. Argumenty
 launchera uruchamiają pobieranie w oknie przed startem, np.
@@ -108,12 +108,18 @@ fakty dnia — najważniejszy fragment biegu, postoje, noc na tle tygodnia, HRV,
 najbliższy start, ciekawostki (na mniejszym ekranie mniej faktów). Zaraz pod nim
 **Dziś**: trening z planu, stan regeneracji i propozycja z innych sportów. Przy
 pierwszym wejściu na Dziś pokazuje się krótki przewodnik („Jak czytać ten
-dashboard”, do przywrócenia z szyny bocznej). Menu ma cztery
-grupy: **Na co dzień** (Dzień, Dziś, Sport, Historia), **Bieganie** (przegląd, plan
-i zawody, prognoza, segmenty, obciążenie), **Ciało** (regeneracja, sen)
-i **Laboratorium** (fizjologia, statystyka, insights, SQL, słownik). Nad
-tytułem każdej strony jest pytanie, na które odpowiada, a na dole pasek
-**Dalej** z kolejnymi krokami.
+dashboard”, do przywrócenia z menu Laboratorium).
+
+Nie ma paska bocznego. Każda strona zaczyna się od zdania-wniosku z danych, a
+obok niego stoi **pętla**: Bodziec (obciążenie) → Odpowiedź (regeneracja, sen)
+→ Adaptacja (forma, prognoza) → Cel (plan, start) — każdy etap z liczbą dnia i
+swoimi stronami; to ona prowadzi między stronami. Pod spodem jeden wykres
+główny z faktami po bokach i paskami z sąsiednich etapów na tej samej osi
+czasu; resztę wykresów otwiera link **Szczegóły**. Górna linia ma strony
+codzienne (Dzień, Dziś, Historia), menu **Laboratorium** (fizjologia,
+statystyka, insights, SQL, słownik), zakres czasu, język i pobieranie z
+Garmina. Nad nagłówkiem jest pytanie, na które strona odpowiada, a na dole
+linki **Dalej**.
 
 Surowy JSON jest źródłem prawdy — mapowanie można przepisać i odtworzyć tabele
 bez odpytywania API. Dzień raz pobrany nie jest pobierany ponownie, poza oknem
