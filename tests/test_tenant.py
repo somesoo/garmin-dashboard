@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import io
 import json
 import os
 import unittest
@@ -124,6 +125,49 @@ class Isolation(unittest.TestCase):
             self.assertEqual(insights.load_all(), [])
         with tenant.use("x"):
             self.assertEqual(len(insights.load_all()), len(insights.originals()))
+
+
+class Rights(unittest.TestCase):
+    def test_archive_holds_the_data_and_no_secrets(self):
+        import io as _io
+        import zipfile
+
+        with people({"x": {}, "y": {"source": "apple"}}):
+            y = tenant.get("y")
+            for name, body in (("raw/apple/push/a.json", "{}"), ("tables/daily.parquet", "p"), ("tokens.json", "[]"),
+                               ("garmin/garmin_tokens.json", "secret"), ("cache/summary.json", "{}")):
+                (y.root / name).parent.mkdir(parents=True, exist_ok=True)
+                (y.root / name).write_text(body)
+            names = zipfile.ZipFile(_io.BytesIO(tenant.archive(y))).namelist()
+            self.assertEqual(sorted(names), ["raw/apple/push/a.json", "tables/daily.parquet"])
+
+    def test_legacy_archive_takes_only_the_persons_part_of_data(self):
+        import io as _io
+        import zipfile
+
+        with people({}) as base, mock.patch.object(config, "DATA", base):
+            tenant.REGISTRY.unlink()
+            (base / "tables").mkdir()
+            (base / "tables" / "daily.parquet").write_text("p")
+            (base / "users" / "y").mkdir(parents=True)
+            (base / "users" / "y" / "secret.json").write_text("{}")
+            (base / "server.secret").write_text("k")
+            me = tenant.User(id="me", name="me", source="garmin", root=base, legacy=True)
+            names = zipfile.ZipFile(_io.BytesIO(tenant.archive(me))).namelist()
+            self.assertEqual(names, ["tables/daily.parquet"])
+
+    def test_erase_removes_one_person_only_and_remove_drops_the_entry(self):
+        with people({"x": {}, "y": {"source": "apple"}}), contextlib.redirect_stdout(io.StringIO()):
+            _tables("x", 1)
+            _tables("y", 2)
+            self.assertEqual(tenant.erase(tenant.get("y")), ["tables"])
+            self.assertTrue((tenant.USERS / "y").is_dir())
+            self.assertFalse((tenant.USERS / "y" / "tables").exists())
+            self.assertTrue((tenant.USERS / "x" / "tables" / "daily.parquet").exists())
+            self.assertEqual(tenant.remove(argparse.Namespace(id="y", yes=False)), 1)
+            self.assertEqual(tenant.remove(argparse.Namespace(id="y", yes=True)), 0)
+            self.assertNotIn("y", tenant.users())
+            self.assertFalse((tenant.USERS / "y").exists())
 
 
 class Cli(unittest.TestCase):

@@ -59,6 +59,7 @@ def render() -> None:
     with right:
         _app(person)
         _tokens(person)
+        _yours(person)
 
 
 def _show_new(token: str, scope: str) -> None:
@@ -180,3 +181,33 @@ def _tokens(person: tenant.User) -> None:
             if button.button(tr(pl="Odwołaj", en="Revoke"), key=f"dev_revoke_{item['prefix']}", type="tertiary"):
                 api.revoke_token(person, item["prefix"])
                 st.rerun()
+
+
+def _yours(person: tenant.User) -> None:
+    """A copy of everything, and deleting everything -- the person's own rights over their health data."""
+    tr = i18n.tr
+    with bento.panel(tr(pl="Twoje dane", en="Your data"), key="dev_yours",
+                     caption=tr(pl="Kopia wszystkiego, co tu o Tobie jest, albo usunięcie tego.",
+                                en="A copy of everything held about you here, or deleting it.")):
+        if st.button(tr(pl="Przygotuj archiwum", en="Prepare an archive"), key="dev_archive"):
+            st.session_state["dev_archive_data"] = tenant.archive(person)
+        data = st.session_state.get("dev_archive_data")
+        if data:
+            st.download_button(tr(pl=f"Pobierz ({len(data) / 1e6:.1f} MB)", en=f"Download ({len(data) / 1e6:.1f} MB)"),
+                               data=data, file_name=f"{person.id}-{dt.date.today()}.zip", mime="application/zip",
+                               key="dev_download", on_click="ignore")
+        if person.legacy:
+            return
+        with st.expander(tr(pl="Usuń wszystkie moje dane", en="Delete all my data")):
+            st.caption(tr(pl="Usuwa surowe dane, tabele, plany, ustawienia i klucze. Nie da się tego cofnąć. "
+                             f"Wpisz „{person.name}”, żeby potwierdzić.",
+                          en="Deletes raw data, tables, plans, settings and keys. This cannot be undone. "
+                             f"Type “{person.name}” to confirm."))
+            typed = st.text_input(tr(pl="Potwierdzenie", en="Confirmation"), key="dev_erase_name",
+                                  label_visibility="collapsed")
+            if st.button(tr(pl="Usuń na zawsze", en="Delete for good"), key="dev_erase",
+                         disabled=typed.strip() != person.name):
+                removed = tenant.erase(person)
+                st.session_state.pop("dev_archive_data", None)
+                st.cache_data.clear()
+                st.success(tr(pl=f"Usunięto: {', '.join(removed) or 'nic'}.", en=f"Deleted: {', '.join(removed) or 'nothing'}."))

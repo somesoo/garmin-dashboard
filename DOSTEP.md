@@ -126,3 +126,11 @@ da się podrobić.
 | podrobiony nagłówek tożsamości | serwer na 127.0.0.1, nagłówek tylko gdy `GARMIN_AUTH_HEADER` ustawiony |
 | niezweryfikowany e-mail | odrzucany (`email_verified`) |
 | dane w gicie | `data/`, `secrets.toml`, `export*.zip` w `.gitignore` |
+| klucz telefonu wycieknie | klucz otwiera jedną osobę i jeden zakres; odwołanie na stronie Urządzenia |
+| aplikacja na telefonie | CSP: tylko własne pliki i własny adres, bez ramek; klucz we fragmencie linku |
+
+## Prawa każdej osoby
+
+Na stronie **Urządzenia → Twoje dane** każdy sam: pobiera archiwum wszystkiego, co
+o nim jest (bez sekretów), albo usuwa wszystko (po wpisaniu swojej nazwy). Administrator:
+`.venv/bin/python -m tenant remove <id> --yes` usuwa też wpis z rejestru.

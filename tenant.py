@@ -43,6 +43,7 @@ that cannot tell whose data to read must not read anyone's.
     python -m tenant init x --name X         start a registry from today's data/ (root ".")
     python -m tenant add y --name Y --source apple --identity y@example.com
     python -m tenant migrate x               move a root "." person into data/users/x/
+    python -m tenant remove y --yes          delete a person and everything they own
 """
 
 from __future__ import annotations
@@ -376,6 +377,56 @@ def migrate(args: argparse.Namespace) -> int:
     return 0
 
 
+def archive(person: User) -> bytes:
+    """Everything the person owns, as one zip (the right to a copy of one's data)."""
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as out:
+        for path in sorted(person.root.rglob("*")) if person.root.is_dir() else []:
+            relative = path.relative_to(person.root)
+            # Never hand out secrets: token hashes, Garmin login tokens, caches.
+            if not path.is_file() or relative.parts[0] in ("garmin", "cache") or relative.name == "tokens.json":
+                continue
+            if person.legacy and relative.parts[0] not in OWNED:
+                continue  # the old layout's data/ also holds other people and the server's files
+            out.write(path, str(relative))
+    return buffer.getvalue()
+
+
+def erase(person: User) -> list[str]:
+    """Delete everything the person owns; the registry entry stays (they can sign in to an empty page).
+    Returns what was removed."""
+    if person.legacy:
+        raise RuntimeError("stary układ (root \".\"): najpierw `python -m tenant migrate`, potem usuwanie")
+    if not person.root.is_dir():
+        return []
+    removed = sorted(p.name for p in person.root.iterdir())
+    shutil.rmtree(person.root)
+    person.root.mkdir(parents=True, exist_ok=True)
+    return removed
+
+
+def remove(args: argparse.Namespace) -> int:
+    payload = _read_registry()
+    if payload is None or args.id not in payload["users"]:
+        print(f"{args.id} nie ma w rejestrze")
+        return 1
+    person = _user(args.id, payload["users"][args.id])
+    if not args.yes:
+        print(f"Usunie {person.root} i wpis {args.id} z rejestru. Powtórz z --yes.")
+        return 1
+    if person.legacy:
+        print("stary układ (root \".\"): najpierw `python -m tenant migrate`")
+        return 1
+    shutil.rmtree(person.root, ignore_errors=True)
+    del payload["users"][args.id]
+    _write_registry(payload)
+    print(f"Usunięto {args.id}")
+    return 0
+
+
 def show(_: argparse.Namespace) -> int:
     for user in users().values():
         flags = [flag for flag, on in (("local", user.local), ("insights", user.insights), ("legacy", user.legacy)) if on]
@@ -394,9 +445,12 @@ def main(argv: list[str] | None = None) -> int:
         cmd.add_argument("--identity", action="append", help="e-mail/login z warstwy logowania (można kilka)")
         cmd.add_argument("--local", action="store_true", help="przeglądarka na tym komputerze = ta osoba")
     sub.add_parser("migrate").add_argument("id")
+    drop = sub.add_parser("remove")
+    drop.add_argument("id")
+    drop.add_argument("--yes", action="store_true")
     sub.add_parser("list")
     args = parser.parse_args(argv)
-    handler = {"init": init, "add": add, "migrate": migrate}.get(args.command, show)
+    handler = {"init": init, "add": add, "migrate": migrate, "remove": remove}.get(args.command, show)
     return handler(args)
 
 

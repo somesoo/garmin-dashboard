@@ -48,6 +48,9 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
   - [ ] Obejrzeć na prawdziwym S23 i iPhonie (bez przeglądarki tutaj nie było zrzutów).
   - [ ] Web Push po nowym buildzie (VAPID + `pywebpush` — nowa zależność, decyzja).
   - [ ] Natywna aplikacja na Androida (widżet „Dziś”) na `/api/summary` — jeśli PWA nie wystarczy.
+- [x] 6a. Prawa osoby na stronie Urządzenia: archiwum wszystkich swoich danych (bez
+      sekretów: hashy kluczy, tokenów Garmina, cache) i usunięcie wszystkiego po wpisaniu
+      nazwy; `python -m tenant remove <id> --yes` usuwa też wpis z rejestru.
 - [ ] 6. SaaS: zgoda i polityka (dane zdrowotne = art. 9 RODO), eksport/usunięcie
       konta, szyfrowanie, kopie per osoba, hosting (nie eve302).
       **Ryzyko**: `garminconnect` to nieoficjalny login — dla obcych użytkowników
