@@ -28,6 +28,7 @@ garmin-dashboard/
   sync.py            pobieranie w tle: link w górnej linii + automat co N h
   analytics.py       modele fizjologiczne i statystyka -> tabele pochodne
   hrzones.py         strefy tętna od progów (LTHR, VT1), wpisy z Konta -> zones.json
+  monitor.py         liczby strony Admin: osoby, procesy, RAM/CPU/dysk, pobrania (bez Streamlita)
   db.py              DuckDB in-memory z widokami na parquet
   theme.py           system wykresów: paleta, buildery, mapy, glob
   shell.py           wspólny stan stron: dane, zakres czasu, style
@@ -352,6 +353,24 @@ czytają te same liczby.
 
 `data/tables/models.json` trzyma dopasowanie modelu Banistera (τ sprawności,
 τ zmęczenia, k1, k2, R², `taper_days_to_peak`).
+
+## Strona Admin (`views/admin.py`, `monitor.py`)
+
+Dla osoby z `"admin": true` w rejestrze (`python -m tenant admin <id>`, `--off`
+odbiera; układ jednoosobowy bez rejestru = admin). Dla innych strona **nie jest
+rejestrowana** w `app.py` (adres nie istnieje), a `render` sprawdza flagę drugi
+raz. Link w menu Laboratorium.
+
+- Pokazuje osoby (rozmiar danych, build, ostatnie pobranie, Garmin połączony,
+  klucze API), procesy aplikacji (cwd = repo: serwer, API, `etl/run.py`) z RAM
+  i CPU, RAM/swap/dysk maszyny, otwarte karty, commit i „kod nowszy niż serwer”
+  (`serve.code_stamp` vs `data/server.json`), ostrzeżenia (`monitor.warnings`,
+  kody → zdania w widoku), logi pobrań i serwera. **Żadnych danych zdrowotnych.**
+- Wszystko z `/proc` — `psutil` nie jest zależnością; czego nie da się odczytać,
+  jest None. W LXC (mikr.us) load average to host — CPU mierzone z `/proc/stat`
+  przez 0,3 s. Część „na żywo” to fragment odświeżany co 15 s.
+- Przyciski „Pobierz teraz” / „Przelicz tabele” dla dowolnej osoby, **jedno
+  naraz** (serwer ma 1 GB RAM; dwa przeliczenia obok serwera zeszły do 7 MB wolnego).
 
 ## Strefy tętna (`hrzones.py`, strona Konto)
 

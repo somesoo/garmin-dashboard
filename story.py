@@ -133,7 +133,8 @@ def topbar(current: str) -> None:
             else:
                 st.page_link(page, label=i18n.page(url))
         with st.popover(i18n.group("lab"), type="tertiary"):
-            for url in ["fizjologia", *LAB]:
+            # "admin" is registered for the server's admin only (app.py); for anyone else it is skipped.
+            for url in ["fizjologia", *LAB, "admin"]:
                 page = routing.page(url)
                 if page is not None:
                     st.page_link(page, label=i18n.page(url))

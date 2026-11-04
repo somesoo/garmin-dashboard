@@ -23,6 +23,8 @@ Registry::
 - ``local``: a browser on this machine with no other identity is this person.
 - ``insights``: the notes in ``insights/`` are prose about one person's numbers,
   so only the person they were written about sees them.
+- ``admin``: sees the admin page (views/admin.py: people, server, pulls). Set
+  with ``python -m tenant admin <id>``; the single-user layout's one person is admin.
 - ``root``: directory relative to ``data/``; ``"."`` is the old single-user layout,
   left in place until ``python -m tenant migrate <id>``.
 - ``tokenstore``: Garmin token directory; default ``data/users/<id>/garmin``
@@ -93,6 +95,7 @@ class User:
     local: bool = False
     insights: bool = False
     legacy: bool = False
+    admin: bool = False
     tokenstore_override: str | None = field(default=None, repr=False)
 
     @property
@@ -200,6 +203,7 @@ def _user(user_id: str, entry: dict) -> User:
         local=bool(entry.get("local", False)),
         insights=bool(entry.get("insights", legacy)),
         legacy=legacy,
+        admin=bool(entry.get("admin", False)),
         tokenstore_override=entry.get("tokenstore"),
     )
 
@@ -213,7 +217,7 @@ def users() -> dict[str, User]:
     payload = _read_registry()
     if payload is None:
         return {LEGACY_ID: User(id=LEGACY_ID, name=LEGACY_ID, source="garmin", root=config.DATA,
-                                local=True, insights=True, legacy=True)}
+                                local=True, insights=True, legacy=True, admin=True)}
     return {user_id: _user(user_id, entry) for user_id, entry in payload["users"].items()}
 
 
@@ -444,6 +448,23 @@ def erase(person: User) -> list[str]:
     return removed
 
 
+def admin(args: argparse.Namespace) -> int:
+    """Give (or with ``--off`` take away) the admin page. Only from the server's shell, never from the app."""
+    payload = _read_registry()
+    if payload is None or args.id not in payload["users"]:
+        print(f"{args.id} nie ma w rejestrze")
+        return 1
+    entry = dict(payload["users"][args.id])
+    if args.off:
+        entry.pop("admin", None)
+    else:
+        entry["admin"] = True
+    payload["users"][args.id] = entry
+    _write_registry(payload)
+    print(f"{args.id}: admin {'wyłączony' if args.off else 'włączony'}")
+    return 0
+
+
 def remove(args: argparse.Namespace) -> int:
     payload = _read_registry()
     if payload is None or args.id not in payload["users"]:
@@ -465,7 +486,8 @@ def remove(args: argparse.Namespace) -> int:
 
 def show(_: argparse.Namespace) -> int:
     for user in users().values():
-        flags = [flag for flag, on in (("local", user.local), ("insights", user.insights), ("legacy", user.legacy)) if on]
+        flags = [flag for flag, on in (("local", user.local), ("insights", user.insights), ("legacy", user.legacy),
+                                       ("admin", user.admin)) if on]
         print(f"{user.id:12} {user.source:7} {user.root}  {', '.join(user.identities)}  {' '.join(flags)}")
     return 0
 
@@ -485,8 +507,11 @@ def main(argv: list[str] | None = None) -> int:
     drop.add_argument("id")
     drop.add_argument("--yes", action="store_true")
     sub.add_parser("list")
+    boss = sub.add_parser("admin", help="dostęp do strony Admin (osoby, serwer, synchronizacje)")
+    boss.add_argument("id")
+    boss.add_argument("--off", action="store_true", help="odbierz dostęp")
     args = parser.parse_args(argv)
-    handler = {"init": init, "add": add, "migrate": migrate, "remove": remove}.get(args.command, show)
+    handler = {"init": init, "add": add, "migrate": migrate, "remove": remove, "admin": admin}.get(args.command, show)
     return handler(args)
 
 

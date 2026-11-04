@@ -27,8 +27,10 @@ import shell  # noqa: E402
 import story  # noqa: E402
 import theme  # noqa: E402
 import webapp  # noqa: E402
+import tenant  # noqa: E402
 from views import (  # noqa: E402
     account,
+    admin,
     atlas,
     day,
     hubs,
@@ -106,6 +108,10 @@ PAGES = {
         _page(reference.render, "slownik", "menu_book"),
     ],
 }
+# The server's admin only (tenant.User.admin): people, processes, pulls (views/admin.py).
+# Not registered for anyone else, so the address does not exist for them.
+if tenant.current().admin:
+    PAGES[i18n.group("lab")].append(_page(admin.render, "admin", "monitoring"))
 
 # Views navigate by url_path through this registry (see routing.py).
 if ONBOARDING:
