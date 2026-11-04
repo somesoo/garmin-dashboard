@@ -375,6 +375,13 @@ w `activities` i jako `garmin_hr_z*_s` w `run_sessions`, a widoki, fakty,
 - `zone_time` liczy LTHR z dnia aktywności (120 dni wstecz); wpisane kotwice
   obowiązują dla całej historii. Trening bez strumienia tętna nie ma stref
   (NaN), poza Apple, którego podział liczy `etl/apple.py` z tych samych kotwic.
+- `analytics.zone_tables` liczy `zone_time`, `intensity_distribution` i strefy
+  w `run_sessions` — woła je i `analytics.main`, i `running.pipeline.rebuild`
+  (po powiązaniu startu), inaczej `run_sessions` wraca do podziału Garmina.
+- **Znacznik builda (`built_at`) przesuwa się dopiero po analityce**
+  (`load.mark_built` na końcu `fetch.rebuild` i `pipeline.rebuild`): `load.main`
+  stempluje stan po tabelach bazowych, a strona otwarta w trakcie analityki
+  zapamiętywała w cache stare tabele pochodne pod nowym kluczem.
 - Zapis na Koncie przelicza tabele bez pobierania (`etl/fetch.py
   --rebuild-only` przez `sync.request_rebuild`); plan bierze nowe strefy po
   „Przebuduj od jutra”.

@@ -269,6 +269,8 @@ def rebuild() -> None:
         analytics.main()
     except Exception as exc:  # noqa: BLE001 - logged, fetch continues
         log(f"  analityka pominieta: {type(exc).__name__}: {exc}")
+    # Only now is the whole build on disk: the cache key may move.
+    load.mark_built()
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

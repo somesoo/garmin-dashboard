@@ -156,9 +156,10 @@ TERMS: dict[str, tuple[str, str, str, str]] = {
     ),
     "intensity": (
         "Intensity distribution",
-        "What share of the week's time was spent in easy (1–2), middle (3) and hard (4–5) zones.",
+        "What share of the week's time was spent below the aerobic threshold (zones 1–2), between the "
+        "thresholds (3–4) and from the threshold heart rate up (5).",
         "For amateurs most progress comes from lots of easy running and very little truly hard work.",
-        "About 75–80% easy is a healthy model. Lots of zone 3 is the “grey zone” — too hard to recover, "
+        "About 75–80% easy is a healthy model. Lots of zones 3–4 is the “grey zone” — too hard to recover, "
         "too easy to be a stimulus.",
     ),
     "hr_zones": (

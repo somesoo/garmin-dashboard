@@ -892,6 +892,22 @@ def _zone_time(activities: pd.DataFrame, tables: dict[str, pd.DataFrame]) -> pd.
     return hrzones.zone_time(activities, db.table("routes"), tables.get("run_efforts"), hr_max)
 
 
+def zone_tables(activities: pd.DataFrame, tables: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    """``zone_time`` and what reads it, in the person's zones: the weekly split and ``run_sessions``.
+
+    Shared by ``main`` and ``running.pipeline.rebuild`` -- a running-only
+    rebuild that skipped it would put Garmin's split back into ``run_sessions``.
+    """
+    import hrzones
+
+    zones = _zone_time(activities, tables)
+    out = {"zone_time": zones,
+           "intensity_distribution": intensity_distribution(hrzones.with_zone_time(activities, zones))}
+    if tables.get("run_sessions") is not None and not tables["run_sessions"].empty:
+        out["run_sessions"] = hrzones.with_zone_time(tables["run_sessions"], zones)
+    return out
+
+
 def main() -> int:
     daily = db.table("daily")
     activities = db.table("activities")
@@ -945,13 +961,7 @@ def main() -> int:
 
     # Time in zones from each activity's heart-rate stream, in the person's own
     # threshold zones (hrzones.py) -- the watch's split used % of HRmax.
-    import hrzones
-
-    zones = _zone_time(activities, tables)
-    tables["zone_time"] = zones
-    tables["intensity_distribution"] = intensity_distribution(hrzones.with_zone_time(activities, zones))
-    if tables.get("run_sessions") is not None and not tables["run_sessions"].empty:
-        tables["run_sessions"] = hrzones.with_zone_time(tables["run_sessions"], zones)
+    tables.update(zone_tables(activities, tables))
 
     written = {}
     for name, table in tables.items():

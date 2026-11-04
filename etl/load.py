@@ -785,6 +785,24 @@ def _elevation_gain(track: pd.DataFrame) -> float | None:
     return round(float(gain), 1)
 
 
+def mark_built() -> None:
+    """Move ``built_at`` to now, once *every* table of the build is on disk.
+
+    ``main`` stamps the state when the base tables are written, but analytics
+    (and ``running.pipeline.rebuild``) write theirs after it. The dashboard's
+    cache is keyed by the stamp, so a page opened in between cached the
+    previous derived tables under the new key and kept them until the next
+    build. The callers that finish a build call this last.
+    """
+    path = config.state_file()
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    state["built_at"] = dt.datetime.now().isoformat(timespec="seconds")
+    path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
 def write_table(df: pd.DataFrame, name: str) -> Path:
     """Publish a table only once the new file is complete.
 

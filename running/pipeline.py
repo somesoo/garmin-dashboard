@@ -84,14 +84,19 @@ def build(
 
 def rebuild() -> dict[str, int]:
     """Recompute only the running tables from the warehouse (after a race is linked)."""
+    import analytics
     import db
-    from etl.load import write_table
+    from etl.load import mark_built, write_table
 
     from running import store
 
-    tables = build(db.table("activities"), db.table("daily"), db.table("routes"),
+    activities = db.table("activities")
+    tables = build(activities, db.table("daily"), db.table("routes"),
                    db.table("activity_segments"), manual=store.manual_kinds())
+    # The efforts may have changed (a race counts as near-maximal), and with them the LTHR of the zones.
+    tables.update(analytics.zone_tables(activities, tables))
     for name, table in tables.items():
         if table is not None and not table.empty:
             write_table(table, name)
+    mark_built()
     return {name: int(len(table)) for name, table in tables.items()}

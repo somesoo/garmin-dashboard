@@ -169,9 +169,10 @@ TERMS: dict[str, Term] = {
         ),
         "intensity": (
             "Rozkład intensywności",
-            "Jaka część czasu tygodnia minęła w strefach łatwych (1–2), średnich (3) i mocnych (4–5).",
+            "Jaka część czasu tygodnia minęła poniżej progu tlenowego (strefy 1–2), między progami (3–4) "
+            "i od tętna progowego w górę (5).",
             "Większość postępu u amatorów daje dużo spokojnego biegania i niewiele naprawdę mocnego.",
-            "Około 75–80% łatwo to zdrowy model. Dużo strefy 3 to „szare tempo” — za mocno na regenerację, "
+            "Około 75–80% łatwo to zdrowy model. Dużo stref 3–4 to „szare tempo” — za mocno na regenerację, "
             "za słabo na bodziec.",
         ),
         "hr_zones": (
