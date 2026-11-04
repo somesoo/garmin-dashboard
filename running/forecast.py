@@ -497,7 +497,9 @@ def forecast(
         "garmin": garmin,
         "hr_max": hr_max,
         # The threshold heart rate the plan's zones hang on (physio.threshold_hr).
-        "lthr": physio.threshold_hr(efforts, anchor),
+        "lthr": _lthr(efforts, anchor),
+        # VT1 typed in from a test (Account); None -> hrzones estimates it from LTHR.
+        "vt1": _manual_zones().get("vt1"),
         # Critical speed from clean efforts only (physio.critical_speed): the cap on T pace.
         "cs": physio.critical_speed(_with_kind(efforts, runs), anchor),
         "lower_bound": lower_bound,
@@ -796,3 +798,18 @@ def backtest(history_frame: pd.DataFrame, efforts: pd.DataFrame) -> pd.DataFrame
             }
         )
     return pd.DataFrame(rows)
+
+
+def _manual_zones() -> dict[str, Any]:
+    import hrzones
+
+    return hrzones.settings()
+
+
+def _lthr(efforts: pd.DataFrame, anchor: pd.Timestamp) -> dict[str, Any] | None:
+    """The threshold heart rate: typed in from a test (Account), else the data's (``physio.threshold_hr``)."""
+    manual = _manual_zones()
+    if manual.get("lthr"):
+        return {"bpm": int(manual["lthr"]), "day": manual.get("measured"), "minutes": None,
+                "effort": manual.get("method") or "manual", "source": "manual"}
+    return physio.threshold_hr(efforts, anchor)

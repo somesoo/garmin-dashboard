@@ -240,7 +240,15 @@ def _explain(active: dict, result: dict) -> None:
                    + " (the reason is on the session).") if cut else ""
     zones = active.get("zones") or {}
     lthr = zones.get("lthr") or {}
-    if zones.get("basis") == "lthr" and zones.get("E"):
+    if zones.get("basis") == "manual" and zones.get("E"):
+        e, t = f"{zones['E'][0]}–{zones['E'][1]}", f"{zones['T'][0]}–{zones['T'][1]}"
+        zone_line = tr(
+            pl=f"**Tętno od Twojego progu** ({lthr.get('bpm')} bpm — wpisane na stronie Konto z testu), nie od "
+               f"% HRmax: spokojnie {e}, próg {t} bpm. Biegi spokojne i długie zegarek prowadzi po tętnie, nie po tempie.",
+            en=f"**Heart rate from your threshold** ({lthr.get('bpm')} bpm — typed in on the Account page from a test), "
+               f"not from % of HRmax: easy {e}, threshold {t} bpm. The watch steers easy and long runs by heart rate, "
+               "not pace.")
+    elif zones.get("basis") == "lthr" and zones.get("E"):
         e, t, when = f"{zones['E'][0]}–{zones['E'][1]}", f"{zones['T'][0]}–{zones['T'][1]}", lthr.get("day", "")
         zone_line = tr(
             pl=f"**Tętno od Twojego progu** ({lthr.get('bpm')} bpm — średnie tętno {lthr.get('minutes'):g}-minutowego "
@@ -258,12 +266,12 @@ def _explain(active: dict, result: dict) -> None:
                           "“Rebuild from tomorrow” will compute them.")
     else:
         zone_line = tr(
-            pl="**Tętno jako % HRmax** — brak ciągłego wysiłku 18–60 min bliskiego maksymalnego w 120 dniach, więc "
+            pl="**Strefy oszacowane z HRmax** (próg ≈ 93,5% HRmax u 1411 biegaczy, ±5 bpm) — brak ciągłego wysiłku 18–60 min bliskiego maksymalnego w 120 dniach, więc "
                "nie da się wyznaczyć tętna progowego. Test: 30 min równo i mocno w pojedynkę; strefy przeliczą się "
-               "same.",
-            en="**Heart rate as % of HRmax** — no continuous near-maximal effort of 18–60 min in 120 days, so the "
+               "same — albo wpisz wynik testu na stronie Konto.",
+            en="**Zones estimated from HRmax** (threshold ≈ 93.5% of HRmax across 1411 runners, ±5 bpm) — no continuous near-maximal effort of 18–60 min in 120 days, so the "
                "threshold heart rate cannot be found. A test: 30 min even and hard on your own; the zones will "
-               "update themselves.")
+               "update themselves — or type a test result in on the Account page.")
     state = active.get("response") or {}
     decision = {"grow": tr(pl="rośnie zgodnie z planem", en="grows as planned"),
                 "hold": tr(pl="stoi (bez przyrostu)", en="holds (no step up)"),

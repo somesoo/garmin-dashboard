@@ -167,16 +167,6 @@ def hr_band(hr_max: float | None, low_pct: float, high_pct: float) -> str:
     return f"{low_pct * hr_max:.0f}–{high_pct * hr_max:.0f} bpm"
 
 
-# Heart-rate guidance per intensity, as fractions of HRmax (Daniels' tables).
-HR_FRACTIONS = {
-    "E": (0.65, 0.79),
-    "M": (0.80, 0.89),
-    "T": (0.88, 0.92),
-    "I": (0.95, 1.00),
-    "R": (None, None),
-}
-
-
 # --------------------------------------------------------------------------
 # zones from the lactate-threshold heart rate
 #
@@ -188,10 +178,16 @@ HR_FRACTIONS = {
 # running zones as fractions of it: Z1 < 85%, Z2 85-89%, Z3 90-94%, Z4 95-99%,
 # Z5 >= 100%. Daniels' E spans Z1-Z2, M is Z3, T is Z4 up to LTHR, I is Z5.
 
+#
+# The top of E is the first ventilatory threshold (VT1): typed in from a test,
+# else ~0.91 x LTHR (Esteve-Lanao et al. 2026, 1411 runners: VT1 85.1% and VT2
+# 93.5% of HRpeak). Without any threshold LTHR is estimated as 93.5% of HRmax.
+# Both live in hrzones.py, which also gives the five display zones.
+
 LTHR_FRACTIONS = {
-    "E": (0.78, 0.89),
+    "E": (0.78, 0.90),
     "recovery": (0.70, 0.84),
-    "M": (0.90, 0.94),
+    "M": (0.91, 0.94),
     "T": (0.95, 1.00),
     "I": (1.00, 1.06),
 }
@@ -222,20 +218,33 @@ def threshold_hr(efforts: pd.DataFrame | None, anchor: pd.Timestamp | None = Non
             "minutes": round(float(best["minutes"]), 1), "effort": str(best.get("effort", ""))}
 
 
-def hr_zones(hr_max: float | None, lthr: float | None) -> dict[str, tuple[int, int] | None]:
-    """Heart-rate band (bpm) per intensity: from LTHR when known, else Daniels' % of HRmax."""
-    out: dict[str, tuple[int, int] | None] = {}
-    for name in ("E", "recovery", "M", "T", "I"):
-        if lthr:
-            low, high = LTHR_FRACTIONS[name]
-            top = high * lthr if not hr_max else min(high * lthr, hr_max)
-            out[name] = (round(low * lthr), round(top))
-        elif hr_max:
-            low, high = HR_FRACTIONS.get(name) or (0.6, 0.72)
-            out[name] = (round(low * hr_max), round(high * hr_max))
-        else:
-            out[name] = None
-    out["basis"] = "lthr" if lthr else "hr_max" if hr_max else None  # type: ignore[assignment]
+def hr_zones(hr_max: float | None, lthr: float | None, vt1: float | None = None,
+             basis: str | None = None) -> dict[str, tuple[int, int] | None]:
+    """Heart-rate band (bpm) per intensity, hung on the thresholds (``hrzones``).
+
+    ``lthr`` measured in the data (or typed in: ``basis="manual"``), else
+    estimated from ``hr_max``; E tops just under VT1 (``vt1`` typed in, else
+    ~0.91 x LTHR), M runs from VT1 to 94% LTHR. No anchor at all -> no bands.
+    """
+    import hrzones
+
+    names = ("E", "recovery", "M", "T", "I")
+    out: dict[str, tuple[int, int] | None] = {name: None for name in names}
+    found = hrzones.anchors(lthr=lthr, hr_max=hr_max, manual={"vt1": int(vt1)} if vt1 else {})
+    if found is None:
+        out["basis"] = None  # type: ignore[assignment]
+        return out
+    top, first, cap = float(found["lthr"]), float(found["vt1"]), found.get("hr_max")
+
+    def band(low: float, high: float) -> tuple[int, int]:
+        return int(round(low)), int(round(min(high, cap) if cap else high))
+
+    out["E"] = band(0.78 * top, first - 1)
+    out["recovery"] = band(0.70 * top, min(0.84 * top, first - 1))
+    out["M"] = band(first, 0.94 * top)
+    out["T"] = band(0.95 * top, top)
+    out["I"] = band(top, 1.06 * top)
+    out["basis"] = basis or hrzones.basis(found)  # type: ignore[assignment]
     return out
 
 

@@ -181,7 +181,8 @@ class Zones(unittest.TestCase):
         self.assertEqual(zones["basis"], "lthr")
         self.assertEqual(zones["T"], (170, 179))
         self.assertLessEqual(zones["I"][1], 192)
-        self.assertEqual(physio.hr_zones(190, None)["E"], (124, 150))
+        self.assertEqual(physio.hr_zones(190, None)["E"], (139, 161))  # LTHR ~ 0.935 x 190, VT1 ~ 0.91 x LTHR
+        self.assertEqual(physio.hr_zones(190, None)["basis"], "hr_max")
         self.assertIsNone(physio.hr_zones(None, None)["E"])
 
     def test_easy_runs_target_heart_rate_on_the_watch(self):

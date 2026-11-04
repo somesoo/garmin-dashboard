@@ -72,9 +72,9 @@ def pending_path() -> Path:
     return tenant.current().root / "rebuild.pending"
 
 
-def request_rebuild() -> str:
+def request_rebuild(args: list[str] | None = None) -> str:
     """After a push: start a rebuild, or leave a marker for the run that is busy. ``started`` / ``queued``."""
-    if start():
+    if start(args):
         return "started"
     path = pending_path()
     path.parent.mkdir(parents=True, exist_ok=True)

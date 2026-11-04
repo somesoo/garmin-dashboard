@@ -796,6 +796,10 @@ def night_profile() -> pd.DataFrame:
 def intensity_distribution(activities: pd.DataFrame) -> pd.DataFrame:
     """Weekly time-in-zone split with a rule-of-thumb training-model label.
 
+    The zones are the person's own (``hrzones``, column ``hr_z*_s`` already
+    replaced from ``zone_time``), read in Seiler's three domains: easy = Z1-Z2
+    (below VT1), middle = Z3-Z4 (between the thresholds), hard = Z5 (from LTHR).
+
     Classification follows the usual descriptive thresholds (polarised:
     mostly easy with a real hard block and little in between), not a published
     index -- it is a label for the distribution, not a score.
@@ -817,8 +821,8 @@ def intensity_distribution(activities: pd.DataFrame) -> pd.DataFrame:
         out[zone.replace("_s", "_pct")] = (100 * weekly[zone] / total).round(1)
     out["total_min"] = (total / 60).round(1)
     easy = out.get("hr_z1_pct", 0).fillna(0) + out.get("hr_z2_pct", 0).fillna(0)
-    middle = out.get("hr_z3_pct", 0).fillna(0)
-    hard = out.get("hr_z4_pct", 0).fillna(0) + out.get("hr_z5_pct", 0).fillna(0)
+    middle = out.get("hr_z3_pct", 0).fillna(0) + out.get("hr_z4_pct", 0).fillna(0)
+    hard = out.get("hr_z5_pct", 0).fillna(0)
     out["easy_pct"] = easy.round(1)
     out["middle_pct"] = middle.round(1)
     out["hard_pct"] = hard.round(1)
@@ -876,6 +880,18 @@ def recovery_quadrants(frame: pd.DataFrame) -> pd.DataFrame:
 # entry point
 
 
+def _zone_time(activities: pd.DataFrame, tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """``hrzones.zone_time`` with the maximum the running pipeline uses (Apple: the import's estimate)."""
+    import hrzones
+    from running import physio, sessions
+
+    runs = sessions.select_runs(activities) if not activities.empty else activities
+    hr_max = physio.robust_hr_max(runs["max_hr"]) if not runs.empty else None
+    if hr_max is None and "hr_max_used" in activities.columns and activities["hr_max_used"].notna().any():
+        hr_max = float(activities["hr_max_used"].dropna().iloc[0])
+    return hrzones.zone_time(activities, db.table("routes"), tables.get("run_efforts"), hr_max)
+
+
 def main() -> int:
     daily = db.table("daily")
     activities = db.table("activities")
@@ -910,7 +926,6 @@ def main() -> int:
         "circadian": circadian(daily, stages),
         "sleep_regularity": sleep_regularity(stages),
         "night_profile": night_profile(),
-        "intensity_distribution": intensity_distribution(activities),
         "quadrants": recovery_quadrants(merged),
     }
     # Running module: classified sessions, km splits, best efforts and the
@@ -927,6 +942,16 @@ def main() -> int:
         )
     except Exception as exc:  # noqa: BLE001 - reported, the rest is written
         print(f"  bieganie pominiete: {type(exc).__name__}: {exc}", flush=True)
+
+    # Time in zones from each activity's heart-rate stream, in the person's own
+    # threshold zones (hrzones.py) -- the watch's split used % of HRmax.
+    import hrzones
+
+    zones = _zone_time(activities, tables)
+    tables["zone_time"] = zones
+    tables["intensity_distribution"] = intensity_distribution(hrzones.with_zone_time(activities, zones))
+    if tables.get("run_sessions") is not None and not tables["run_sessions"].empty:
+        tables["run_sessions"] = hrzones.with_zone_time(tables["run_sessions"], zones)
 
     written = {}
     for name, table in tables.items():

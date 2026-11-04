@@ -231,7 +231,7 @@ class Units(unittest.TestCase):
         self.assertEqual(apple.hr_max_estimate([175, 170, 165], None, dt.date(2026, 1, 1)), 165)
         self.assertAlmostEqual(apple.hr_max_estimate([175, 170, 165], dt.date(2001, 1, 1), dt.date(2026, 1, 1)),
                                190.5, places=1)
-        self.assertEqual(apple.hr_max_estimate([], None, dt.date(2026, 1, 1)), 190.0)
+        self.assertIsNone(apple.hr_max_estimate([], None, dt.date(2026, 1, 1)))
 
 
 class Pipeline(unittest.TestCase):

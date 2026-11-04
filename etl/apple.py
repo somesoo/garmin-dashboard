@@ -94,8 +94,6 @@ WORKOUT_MEANS = {
 }
 HR_RECOVERY = f"{Q}HeartRateRecoveryOneMinute"
 WANTED = set(DAY_SUMS) | set(DAY_MEANS) | set(DAY_LAST) | set(WORKOUT_MEANS) | {HEART_RATE, SLEEP, HR_RECOVERY}
-# HR zones as %HRmax (Garmin's default zones), lower edges of Z2..Z5.
-ZONE_EDGES = (0.6, 0.7, 0.8, 0.9)
 NORM_NIGHTS, NORM_MIN = 60, 14
 
 SLEEP_VALUES = {
@@ -442,25 +440,26 @@ def sleep_stages(sessions: list[dict[str, Any]], skip: Iterable[dt.date] = ()) -
 # ------------------------------------------------------------------ workouts
 
 
-def hr_max_estimate(max_hrs: Iterable[float], birth_date: dt.date | None, today: dt.date) -> float:
+def hr_max_estimate(max_hrs: Iterable[float], birth_date: dt.date | None, today: dt.date) -> float | None:
     """The higher of the third-highest workout maximum (one-off sensor spikes
     skipped, as on the Garmin side) and Tanaka's 208 - 0.7 x age.
 
     With a dozen workouts the third-highest maximum is mostly easy runs and sits
     well under the real maximum; a low HRmax inflates every TRIMP. The age
-    formula is the floor until the record shows more.
+    formula is the floor until the record shows more. Neither known: None --
+    no constant stands in for a maximum nobody measured.
     """
     values = sorted((v for v in max_hrs if v and 120 <= v <= 230), reverse=True)
     observed = float(values[2]) if len(values) >= 3 else None
     by_age = round(208 - 0.7 * (today - birth_date).days / 365.25, 1) if birth_date else None
     candidates = [v for v in (observed, by_age) if v is not None]
-    return max(candidates) if candidates else 190.0
+    return max(candidates) if candidates else None
 
 
 def trimp(duration_min: float | None, avg_hr: float | None, hr_rest: float, hr_max: float,
           sex: str | None) -> float | None:
     """Banister's training impulse: minutes x heart-rate reserve x an exponential weight."""
-    if not duration_min or not avg_hr or hr_max <= hr_rest:
+    if not duration_min or not avg_hr or not hr_max or hr_max <= hr_rest:
         return None
     reserve = min(max((avg_hr - hr_rest) / (hr_max - hr_rest), 0.0), 1.0)
     a, b = (0.86, 1.67) if sex == "female" else (0.64, 1.92)
@@ -502,14 +501,14 @@ class _Timeline:
         return self.frame.iloc[lo:hi]
 
 
-def _zone_seconds(samples: pd.DataFrame, end: dt.datetime, hr_max: float) -> list[float | None]:
-    """Seconds in Z1..Z5 (%HRmax, Garmin's default zones); each sample lasts until the next (<= 60 s)."""
-    if len(samples) < 3 or not hr_max:
+def _zone_seconds(samples: pd.DataFrame, end: dt.datetime, cuts: list[int] | None) -> list[float | None]:
+    """Seconds in Z1..Z5 (lower edges ``cuts`` from hrzones.edges); each sample lasts until the next (<= 60 s)."""
+    if len(samples) < 3 or not cuts:
         return [None] * 5
     times = samples["t"].to_numpy("datetime64[ns]")
     following = np.append(times[1:], np.datetime64(end, "ns"))
     seconds = np.clip((following - times).astype("timedelta64[s]").astype(float), 0, 60)
-    zone = np.searchsorted(np.array(ZONE_EDGES) * hr_max, samples["bpm"].to_numpy(float), side="right")
+    zone = np.searchsorted(np.asarray(cuts, float), samples["bpm"].to_numpy(float), side="right")
     return [round(float(seconds[zone == z].sum())) for z in range(5)]
 
 
@@ -578,9 +577,13 @@ def activities(export: Export, hr_rest: float, today: dt.date) -> pd.DataFrame:
                "pace_min_km", "speed_kmh", "avg_hr", "max_hr", "calories", "elevation_gain_m", "route_file",
                "data_source", *WORKOUT_MEANS.values(), "hr_recovery_1min", "cadence"]
     df = pd.DataFrame(rows, columns=columns)
-    hr_max = hr_max_estimate(df["max_hr"].dropna(), export.birth_date, today)
+    import hrzones
+
+    # A maximum typed in from a test (Account) beats the estimate; zones from the thresholds (hrzones).
+    hr_max = hrzones.settings().get("hr_max") or hr_max_estimate(df["max_hr"].dropna(), export.birth_date, today)
     df["hr_max_used"] = hr_max
-    zones = [_zone_seconds(*inside_hr[k], hr_max) for k in df["activity_id"]]
+    cuts = hrzones.edges(hrzones.anchors(hr_max=hr_max))
+    zones = [_zone_seconds(*inside_hr[k], cuts) for k in df["activity_id"]]
     for index in range(5):
         df[f"hr_z{index + 1}_s"] = [z[index] for z in zones]
     df["training_load"] = [trimp(d, h, hr_rest, hr_max, export.sex) for d, h in zip(df["duration_min"], df["avg_hr"])]

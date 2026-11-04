@@ -27,6 +27,7 @@ garmin-dashboard/
   lifecycle.py       lokalnie serwer gaśnie N min po zamknięciu ostatniej karty
   sync.py            pobieranie w tle: link w górnej linii + automat co N h
   analytics.py       modele fizjologiczne i statystyka -> tabele pochodne
+  hrzones.py         strefy tętna od progów (LTHR, VT1), wpisy z Konta -> zones.json
   db.py              DuckDB in-memory z widokami na parquet
   theme.py           system wykresów: paleta, buildery, mapy, glob
   shell.py           wspólny stan stron: dane, zakres czasu, style
@@ -345,11 +346,38 @@ czytają te same liczby.
 | `circadian` | noc | `bed_hour_cont` (ciągła przez północ), `wake_hour`, `midpoint_hour`, `midpoint_sd_30d` (odporny rozrzut 30 d: IQR/1,349), `is_weekend` |
 | `sleep_regularity` | noc | `sri_pair`, `sri_30d` — Sleep Regularity Index z minutowego hipnogramu |
 | `night_profile` | noc | `hr_min`, `hr_drop` (1. godzina minus minimum), `nadir_at_pct` (kiedy w nocy wypadło minimum tętna), `hrv_first_third`/`hrv_last_third`/`hrv_slope_per_h`, `bb_gain_per_h` + dołączone `sleep_score`, `readiness` |
-| `intensity_distribution` | tydzień ISO | minuty i % w strefach HR, `easy/middle/hard_pct`, `model` (etykieta opisowa) |
+| `intensity_distribution` | tydzień ISO | minuty i % we własnych strefach (`zone_time`): `easy` = Z1–2 (< VT1), `middle` = Z3–4, `hard` = Z5 (≥ LTHR), `model` (etykieta opisowa) |
+| `zone_time` | aktywność | sekundy w Z1–Z5 ze strumienia tętna w strefach z dnia aktywności (`zone_lthr`, `zone_vt1`, `zone_basis`) |
 | `quadrants` | dzień | `hrv_z`, `rhr_z` wobec bazy 60 d + `quadrant` (zregenerowany / obciążony / pobudzony / stłumiony) |
 
 `data/tables/models.json` trzyma dopasowanie modelu Banistera (τ sprawności,
 τ zmęczenia, k1, k2, R², `taper_days_to_peak`).
+
+## Strefy tętna (`hrzones.py`, strona Konto)
+
+Strefy Garmina to 50/60/70/80/90% HRmax (u tego użytkownika HRmax 196, z
+artefaktu czujnika). **Nic w aplikacji ich nie czyta**: `hr_z*_s` Garmina zostają
+w `activities` i jako `garmin_hr_z*_s` w `run_sessions`, a widoki, fakty,
+`intensity_distribution` i kolory śladu biorą `zone_time`. Powód (sprawdzone
+2026-11-04): stały % HRmax wrzuca różne osoby w różne domeny — Iannetta i in.
+2020 (MSSE 52:466), Jamnick i in. 2020 (Sports Med 50:1729), Mann i in. 2013
+(Sports Med 43:613).
+
+- **Kotwice**, w tej kolejności: wpisane z testu na Koncie (`<osoba>/zones.json`:
+  `lthr`, `vt1`, `hr_max`, `method`, `measured`; w `tenant.OWNED`) → z danych
+  (`physio.threshold_hr`, `robust_hr_max`) → szacunek z Esteve-Lanao i in. 2026
+  (Sports 14:29, 1411 biegaczy: VT2 93,5 ± 2,5%, VT1 85,1 ± 4,6% HRpeak, stąd
+  LTHR ≈ 0,935·HRmax, VT1 ≈ 0,91·LTHR). Szacunek jest tak oznaczony (`*_source`).
+- **Bez danych nie ma stref** — żadnego 220 − wiek ani stałej (Apple: bez rekordu
+  i daty urodzenia `hr_max_estimate` zwraca None).
+- Granice Z2…Z5: 85% LTHR, VT1, 95% LTHR, LTHR (Friel dla 85/95%).
+  Trzy domeny Seilera: Z1–2 < VT1, Z3–4 między progami, Z5 ≥ LTHR.
+- `zone_time` liczy LTHR z dnia aktywności (120 dni wstecz); wpisane kotwice
+  obowiązują dla całej historii. Trening bez strumienia tętna nie ma stref
+  (NaN), poza Apple, którego podział liczy `etl/apple.py` z tych samych kotwic.
+- Zapis na Koncie przelicza tabele bez pobierania (`etl/fetch.py
+  --rebuild-only` przez `sync.request_rebuild`); plan bierze nowe strefy po
+  „Przebuduj od jutra”.
 
 ## Tabele surowe wewnątrzdobowe
 
@@ -479,7 +507,7 @@ wydarzyło, zawsze na tle własnej normy.
   komponentu 12, ≥ 1200 — 10, ≥ 1000 — 8, mniej — 6 (ciekawostka liczy się jako
   jeden); czego nie da się zmieścić, wypada od końca. Poniżej 720 px mapa na
   górze, fakty listą pod nią.
-- Kolor śladu = strefy tętna od HRmax biegu (`hr_max_used`, granice 70/80/87/93%),
+- Kolor śladu = strefy tętna biegu (`hero.zone_edges`: `zone_lthr`/`zone_vt1` z `zone_time`),
   Z1–Z3 niebieskie, Z4–Z5 kolory statusu. Klik w fakt otwiera stronę (`go`:
   bieg, sen, regeneracja, plan/zawody, atlas); licznik `clicks` jak w globie.
 - Ładunek jest cache'owany po buildzie, dniu, języku i stemplu plików trenera;
@@ -952,9 +980,11 @@ Plan i cele:
   ≤ 0,35× dystansu startu (4–8 km) — objętość przed startem ~40–60% szczytu.
 - **Strefy tętna od progu** (`physio.threshold_hr`, `hr_zones`): LTHR = średnie
   tętno najmocniejszego wysiłku bliskiego maksymalnego 18–60 min z 120 dni
-  (`run_efforts`; prognoza zwraca je jako `lthr`), strefy Friela jako % LTHR;
-  bez takiego wysiłku — % HRmax jak dawniej. Plan zapisuje je w `plan["zones"]`.
-  Przy LTHR kroki biegów spokojnych, regeneracyjnych i długich mają cel
+  (`run_efforts`; prognoza zwraca je jako `lthr`, a wpisane na Koncie — z
+  `source: "manual"`), E kończy się pod VT1, reszta jak strefy Friela (% LTHR);
+  bez takiego wysiłku — LTHR szacowane z HRmax (`basis: "hr_max"`, patrz
+  „Strefy tętna”). Plan zapisuje je w `plan["zones"]`.
+  Przy LTHR (zmierzonym albo wpisanym) kroki biegów spokojnych, regeneracyjnych i długich mają cel
   `"hr": [od, do]` zamiast `pace` (`garmin_workout`: `heart.rate.zone`), opis
   podaje tętno, tempo tylko orientacyjnie.
 - **Szczebel drabinki z wykonania** (`plan.outcomes`, `_progress`): przy

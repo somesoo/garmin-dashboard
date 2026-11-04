@@ -297,12 +297,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=30,
         help="rebuild tables every N days during a backfill (0 = only at the end)",
     )
+    p.add_argument(
+        "--rebuild-only",
+        action="store_true",
+        help="no pull: rebuild the tables from data/raw/ (after a settings change)",
+    )
     return p.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     person = config._person()
+    if args.rebuild_only:
+        log(f"{person.id}: przebudowa tabel bez pobierania")
+        rebuild()
+        return 0
     if person.source != "garmin":
         # Nothing to pull: the data arrives (export.zip, pushes from the iPhone).
         # A run started by the API after a push only rebuilds the tables.

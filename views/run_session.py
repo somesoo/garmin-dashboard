@@ -817,10 +817,15 @@ def _streams(track: pd.DataFrame) -> None:
 
 def _zones(run: pd.Series) -> None:
     tr = i18n.tr
+    import hrzones
+
     zones = {tr(pl=f"strefa {i}", en=f"zone {i}"): run.get(f"hr_z{i}_s") for i in range(1, 6)}
+    cuts = hrzones.edges({"lthr": run.get("zone_lthr"), "vt1": run.get("zone_vt1")}) \
+        if pd.notna(run.get("zone_lthr")) and pd.notna(run.get("zone_vt1")) else None
+    limits = " / ".join(str(c) for c in cuts) if cuts else "—"
     with bento.tile(tr(pl="Strefy tętna", en="Heart rate zones"), key="zones", terms=["hr_zones"],
-                    caption=tr(pl="Minuty w strefach Garmina (granice z ustawień zegarka).",
-                               en="Minutes in Garmin's zones (limits from the watch settings).")) as t:
+                    caption=tr(pl=f"Minuty w Twoich strefach od progów; granice 2/3/4/5: {limits} bpm.",
+                               en=f"Minutes in your zones from the thresholds; limits 2/3/4/5: {limits} bpm.")) as t:
         if all(pd.isna(v) for v in zones.values()):
             st.caption(tr(pl="Brak tętna.", en="No heart rate."))
             return

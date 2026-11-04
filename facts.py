@@ -353,12 +353,13 @@ def running_year(runs: pd.DataFrame, pmc: pd.DataFrame, start: pd.Timestamp, end
         if all(z in since.columns for z in zones) and since[zones].sum().sum() > 0:
             total = since[zones].sum().sum()
             easy = (since["hr_z1_s"].sum() + since["hr_z2_s"].sum()) / total * 100
-            mid = since["hr_z3_s"].sum() / total * 100
+            mid = (since["hr_z3_s"].sum() + since["hr_z4_s"].sum()) / total * 100
             hard = since["distance_km"].where(since["kind"].isin(HARD), 0).sum() / km * 100 if km else 0
             sats.append(sat("r", tr(pl="Jak mocno", en="How hard"),
                             tr(pl=f"{hard:.0f}% km to treningi jakościowe", en=f"{hard:.0f}% of the km are quality sessions"),
-                            tr(pl=f"Według tętna {easy:.0f}% czasu w strefach 1–2, {mid:.0f}% w strefie 3.",
-                               en=f"By heart rate {easy:.0f}% of the time in zones 1–2, {mid:.0f}% in zone 3."),
+                            tr(pl=f"Według tętna {easy:.0f}% czasu poniżej progu tlenowego, {mid:.0f}% między progami.",
+                               en=f"By heart rate {easy:.0f}% of the time below the aerobic threshold, "
+                                  f"{mid:.0f}% between the thresholds."),
                             go={"page": "obciazenie-biegowe", "label": tr(pl="Obciążenie", en="Load")}))
     if pmc is not None and not pmc.empty:
         frame = pmc.copy()

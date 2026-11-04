@@ -31,7 +31,6 @@ from sport import catalog
 
 # Heart-rate zone edges as a share of HRmax (Z1 | Z2 | Z3 | Z4 | Z5): the
 # colour of each stretch of the track.
-ZONE_EDGES = (0.70, 0.80, 0.87, 0.93)
 EARTH_KM = 40_075
 EVEREST_M = 8_849
 # A drift worth naming: the same pace (±3%) at least this many beats higher.
@@ -127,9 +126,14 @@ def pick_run(runs: pd.DataFrame, today: dt.date) -> tuple[pd.Series | None, bool
     return row, row["start_local"].date() == today
 
 
-def zone_edges(hr_max: Any) -> list[int] | None:
-    hr_max = _num(hr_max)
-    return [int(round(hr_max * edge)) for edge in ZONE_EDGES] if hr_max else None
+def zone_edges(run: Any) -> list[int] | None:
+    """Lower edges (bpm) of Z2..Z5 for the track: the run's own zones (``zone_time``), else from HRmax."""
+    import hrzones
+
+    lthr, vt1 = _num(run.get("zone_lthr")), _num(run.get("zone_vt1"))
+    if lthr and vt1:
+        return hrzones.edges({"lthr": lthr, "vt1": vt1})
+    return hrzones.edges(hrzones.anchors(hr_max=_num(run.get("hr_max_used"))))
 
 
 def track(route: pd.DataFrame, stops: pd.DataFrame) -> dict[str, Any]:
@@ -584,7 +588,7 @@ def build(today: dt.date, *, runs: pd.DataFrame, activities: pd.DataFrame, daily
                   fastest_km(run, splits, efforts), compared(run, runs)]
         if not today_run:
             facts.append(since_last(run, activities, today))
-        payload["run"] = {**track(route, stops), "dim": not today_run, "zones": zone_edges(run.get("hr_max_used"))}
+        payload["run"] = {**track(route, stops), "dim": not today_run, "zones": zone_edges(run)}
     if not today_run:
         facts.append(planned(session, has_plan))
     facts.append(race_fact(races, today, run, today_run))

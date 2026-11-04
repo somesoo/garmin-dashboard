@@ -106,7 +106,7 @@ class Facts(unittest.TestCase):
         self.assertEqual(priorities, sorted(priorities))
         json.dumps(payload)
         self.assertGreater(len(payload["run"]["pts"]), 100)
-        self.assertEqual(payload["run"]["zones"], [134, 154, 167, 179])
+        self.assertEqual(payload["run"]["zones"], [153, 164, 171, 180])  # hrzones from HRmax 192
         self.assertFalse(payload["run"]["dim"])
 
     def test_hrv_is_a_percentage_of_the_week(self):

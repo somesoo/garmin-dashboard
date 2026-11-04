@@ -163,9 +163,12 @@ TERMS: dict[str, tuple[str, str, str, str]] = {
     ),
     "hr_zones": (
         "Heart rate zones",
-        "Five heart rate ranges from the watch settings, from 1 (very easy) to 5 (maximal).",
-        "Let you check whether a session had the intended intensity.",
-        "Easy run: mostly 1–2. Threshold: 4. Intervals: 4–5.",
+        "Five heart rate ranges from your thresholds: 1–2 below the aerobic threshold (VT1), 3–4 between the "
+        "thresholds, 5 from the threshold heart rate (LTHR) up.",
+        "Let you check whether a session had the intended intensity. Garmin sets zones as % of the maximum, "
+        "and the thresholds sit at a different % for each person — so here they start from the thresholds "
+        "(Account → Heart rate zones).",
+        "Easy run: mostly 1–2. Threshold: 4. Intervals: 5.",
     ),
     "te": (
         "Training Effect (TE)",

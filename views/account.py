@@ -19,6 +19,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 
+import pandas as pd
 import streamlit as st
 
 import api
@@ -75,6 +76,7 @@ def render() -> None:
             _shortcut(person)
         else:
             _garmin(person)
+        _zones(person)
     with right:
         _profile(person, email)
         _app(person)
@@ -418,3 +420,152 @@ def _yours(person: tenant.User) -> None:
                 st.session_state.pop("dev_archive_data", None)
                 st.cache_data.clear()
                 st.success(tr(pl=f"Usunięto: {', '.join(removed) or 'nic'}.", en=f"Deleted: {', '.join(removed) or 'nothing'}."))
+
+
+def _zones(person: tenant.User) -> None:
+    """Heart-rate zones: what they rest on now, and anchors typed in from a test (hrzones.py)."""
+    import hrzones
+    from running import physio
+
+    tr = i18n.tr
+    manual = hrzones.settings()
+    has = shell.has_data()
+    efforts = shell.table("run_efforts") if has else pd.DataFrame()
+    runs = shell.table("run_sessions") if has else pd.DataFrame()
+    measured = physio.threshold_hr(efforts) if not efforts.empty else None
+    data_max = physio.robust_hr_max(runs["max_hr"]) if not runs.empty and "max_hr" in runs.columns else None
+    found = hrzones.anchors(lthr=(measured or {}).get("bpm"), hr_max=data_max, manual=manual)
+    source = {"manual": tr(pl="wpisane z testu", en="typed in from a test"),
+              "data": tr(pl="z Twoich danych", en="from your data"),
+              "estimate": tr(pl="szacunek", en="an estimate")}
+    with bento.panel(tr(pl="Strefy tętna", en="Heart rate zones"), key="acc_zones", terms=["hr_zones"],
+                     caption=tr(pl="Od Twoich progów, nie od % tętna maksymalnego jak w Garminie.",
+                                en="From your thresholds, not from % of the maximum as on Garmin.")):
+        if found is None:
+            st.caption(tr(pl="Nie ma jeszcze z czego ich wyznaczyć: brak wysiłku progowego i tętna maksymalnego. "
+                             "Wpisz wynik testu poniżej.",
+                          en="Nothing to set them from yet: no threshold effort and no maximum heart rate. "
+                             "Type a test result in below."))
+        else:
+            _zone_summary(found, measured, source)
+        _zone_form(manual)
+        with st.expander(tr(pl="Na czym to stoi", en="What this rests on")):
+            st.markdown(_zone_sources())
+
+
+def _zone_summary(found: dict, measured: dict | None, source: dict[str, str]) -> None:
+    import hrzones
+
+    tr = i18n.tr
+    lines = [tr(pl=f"Tętno progowe (LTHR): **{found['lthr']}** bpm — {source[found['lthr_source']]}",
+                en=f"Threshold heart rate (LTHR): **{found['lthr']}** bpm — {source[found['lthr_source']]}"),
+             tr(pl=f"Próg tlenowy (VT1): **{found['vt1']}** bpm — {source[found['vt1_source']]}",
+                en=f"Aerobic threshold (VT1): **{found['vt1']}** bpm — {source[found['vt1_source']]}")]
+    if found.get("hr_max"):
+        lines.append(tr(pl=f"Tętno maksymalne: **{found['hr_max']}** bpm — {source[found['hr_max_source']]}",
+                        en=f"Maximum heart rate: **{found['hr_max']}** bpm — {source[found['hr_max_source']]}"))
+    st.markdown("\n".join(f"- {line}" for line in lines))
+    if found["lthr_source"] == "data" and measured:
+        st.caption(tr(pl=f"Próg = średnie tętno najmocniejszego wysiłku {measured['minutes']:g} min bliskiego "
+                         f"maksymalnego z ostatnich 120 dni ({measured['day']}).",
+                      en=f"Threshold = the average heart rate of the hardest near-maximal {measured['minutes']:g}-min "
+                         f"effort of the last 120 days ({measured['day']})."))
+    if found["lthr_source"] == "estimate":
+        st.caption(tr(pl="Bez wysiłku progowego LTHR to 93,5% tętna maksymalnego (średnia 1411 biegaczy, rozrzut "
+                         "±5 bpm). 30 min równo i mocno w pojedynkę da zmierzony próg.",
+                      en="Without a threshold effort LTHR is 93.5% of the maximum (the mean of 1411 runners, spread "
+                         "±5 bpm). 30 min even and hard on your own gives a measured threshold."))
+    if found["vt1_source"] == "estimate":
+        st.caption(tr(pl="VT1 to szacunek: 0,91 × LTHR (te same 1411 osób, rozrzut ±9 bpm). Zmierzony — w laboratorium "
+                         "albo pasem piersiowym przez DFA-α1 — wpisz poniżej.",
+                      en="VT1 is an estimate: 0.91 × LTHR (the same 1411 runners, spread ±9 bpm). A measured one — in "
+                         "a lab or with a chest strap via DFA-α1 — goes below."))
+    names = [tr(pl="1 · regeneracja", en="1 · recovery"), tr(pl="2 · spokojnie", en="2 · easy"),
+             tr(pl="3 · między progami", en="3 · between thresholds"),
+             tr(pl="4 · tuż pod progiem", en="4 · just below threshold"),
+             tr(pl="5 · od progu w górę", en="5 · threshold and up")]
+
+    def text(low: int | None, high: int | None) -> str:
+        return f"< {high + 1}" if low is None else f"≥ {low}" if high is None else f"{low}–{high}"
+
+    st.dataframe(pd.DataFrame({tr(pl="strefa", en="zone"): names,
+                               "bpm": [text(low, high) for low, high in hrzones.bands(found)]}),
+                 hide_index=True)
+
+
+def _zone_form(manual: dict) -> None:
+    import hrzones
+
+    tr = i18n.tr
+    methods = {"lab": tr(pl="laboratorium (wymiana gazowa / mleczan)", en="lab (gas exchange / lactate)"),
+               "field": tr(pl="test w terenie (30 min, średnia z ostatnich 20)", en="field test (30 min, last 20 averaged)"),
+               "dfa": tr(pl="DFA-α1 z pasa piersiowego (VT1)", en="DFA-α1 from a chest strap (VT1)"),
+               "other": tr(pl="inne", en="other")}
+    today = dt.date.today()
+    with st.form("acc_zones_form", border=False):
+        st.markdown(tr(pl="**Wynik testu** — puste pole liczy się z danych.",
+                       en="**A test result** — an empty field comes from the data."))
+        a, b, c = st.columns(3)
+        lthr = a.number_input("LTHR", min_value=120, max_value=215, value=manual.get("lthr"), step=1,
+                              placeholder=tr(pl="z danych", en="from data"))
+        vt1 = b.number_input("VT1", min_value=100, max_value=205, value=manual.get("vt1"), step=1,
+                             placeholder=tr(pl="z danych", en="from data"))
+        top = c.number_input("HRmax", min_value=140, max_value=230, value=manual.get("hr_max"), step=1,
+                             placeholder=tr(pl="z danych", en="from data"))
+        m, d = st.columns(2)
+        method = m.selectbox(tr(pl="Skąd te liczby", en="Where from"), list(methods), format_func=methods.get,
+                             index=list(methods).index(manual.get("method", "field")))
+        when = d.date_input(tr(pl="Data testu", en="Test date"), max_value=today,
+                            value=dt.date.fromisoformat(manual["measured"]) if manual.get("measured") else today)
+        save, back = st.columns(2)
+        saved = save.form_submit_button(tr(pl="Zapisz i przelicz", en="Save and rebuild"), type="primary")
+        reset = back.form_submit_button(tr(pl="Wróć do danych", en="Back to the data"), disabled=not manual)
+    if not (saved or reset):
+        return
+    values = {} if reset else {"lthr": lthr, "vt1": vt1, "hr_max": top, "method": method, "measured": when.isoformat()}
+    wrong = hrzones.problems(values)
+    if wrong:
+        st.error({"vt1_above_lthr": tr(pl="VT1 musi być niższe niż LTHR.", en="VT1 has to be below LTHR."),
+                  "lthr_above_max": tr(pl="LTHR musi być niższe niż tętno maksymalne.",
+                                       en="LTHR has to be below the maximum heart rate.")}.get(
+            wrong[0], tr(pl="Ta liczba jest poza zakresem.", en="That number is out of range.")))
+        return
+    hrzones.save(values)
+    started = sync.request_rebuild(["--rebuild-only"])
+    st.success(tr(pl="Zapisane — tabele przeliczają się w tle (minuta–dwie). " if started == "started"
+                  else "Zapisane — przeliczy się po trwającym pobieraniu. ",
+                  en="Saved — the tables are being rebuilt in the background (a minute or two). " if started == "started"
+                  else "Saved — it is rebuilt after the pull running now. ")
+               + tr(pl="Plan weźmie nowe strefy po „Przebuduj od jutra”.",
+                    en="The plan takes the new zones after “Rebuild from tomorrow”."))
+
+
+def _zone_sources() -> str:
+    tr = i18n.tr
+    return tr(
+        pl="- **Dlaczego nie strefy Garmina.** Garmin domyślnie dzieli tętno na 50/60/70/80/90% maksymalnego. "
+           "Progi wypadają u różnych osób przy bardzo różnym % HRmax, więc te same procenty wrzucają ludzi w różne "
+           "domeny wysiłku: [Iannetta i in. 2020](https://doi.org/10.1249/MSS.0000000000002147) (n = 100), "
+           "[Jamnick i in. 2020](https://doi.org/10.1007/s40279-020-01322-8), "
+           "[Mann i in. 2013](https://doi.org/10.1007/s40279-013-0045-x).\n"
+           "- **Szacunki bez testu**: VT2 ≈ 93,5 ± 2,5% i VT1 ≈ 85,1 ± 4,6% tętna szczytowego u 1411 biegaczy "
+           "z testem gazometrycznym ([Esteve-Lanao i in. 2026](https://pmc.ncbi.nlm.nih.gov/articles/PMC12845794/)).\n"
+           "- **Granice stref 2 i 4** (85% i 95% LTHR) to strefy Friela — praktyka trenerska, nie badanie.\n"
+           "- **VT1 bez laboratorium**: DFA-α1 = 0,75 z pasa piersiowego "
+           "([Rogers i in. 2021](https://doi.org/10.3389/fphys.2020.596567)); czujnik na nadgarstku jest do tego "
+           "za mało dokładny ([Gillinov i in. 2017](https://doi.org/10.1249/MSS.0000000000001284)).\n"
+           "- **Bez danych nie ma stref** — żadnego 220 − wiek: wzór nie ma podstaw w badaniach (Robergs i "
+           "Landwehr 2002, *J Exerc Physiol Online* 5(2)).",
+        en="- **Why not Garmin's zones.** Garmin splits heart rate into 50/60/70/80/90% of the maximum by default. "
+           "The thresholds sit at very different % of HRmax from person to person, so the same percentages put people "
+           "in different intensity domains: [Iannetta et al. 2020](https://doi.org/10.1249/MSS.0000000000002147) "
+           "(n = 100), [Jamnick et al. 2020](https://doi.org/10.1007/s40279-020-01322-8), "
+           "[Mann et al. 2013](https://doi.org/10.1007/s40279-013-0045-x).\n"
+           "- **Estimates without a test**: VT2 ≈ 93.5 ± 2.5% and VT1 ≈ 85.1 ± 4.6% of peak heart rate in 1411 "
+           "runners with a gas-exchange test ([Esteve-Lanao et al. 2026](https://pmc.ncbi.nlm.nih.gov/articles/PMC12845794/)).\n"
+           "- **The limits of zones 2 and 4** (85% and 95% LTHR) are Friel's zones — coaching practice, not a study.\n"
+           "- **VT1 without a lab**: DFA-α1 = 0.75 from a chest strap "
+           "([Rogers et al. 2021](https://doi.org/10.3389/fphys.2020.596567)); a wrist sensor is not accurate enough "
+           "for it ([Gillinov et al. 2017](https://doi.org/10.1249/MSS.0000000000001284)).\n"
+           "- **No data, no zones** — no 220 − age: the formula has no research behind it (Robergs & Landwehr 2002, "
+           "*J Exerc Physiol Online* 5(2)).")

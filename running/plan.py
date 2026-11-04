@@ -420,7 +420,7 @@ def _hr_target(zones: dict[str, Any] | None, name: str) -> list[int] | None:
     """The watch target of an easy run: its heart-rate zone, when the zones come
     from a measured threshold heart rate (``physio.hr_zones``)."""
     band = (zones or {}).get(name)
-    return [int(band[0]), int(band[1])] if band and (zones or {}).get("basis") == "lthr" else None
+    return [int(band[0]), int(band[1])] if band and (zones or {}).get("basis") in ("lthr", "manual") else None
 
 
 def _target(step: dict[str, Any], hr: list[int] | None) -> dict[str, Any]:
@@ -654,7 +654,7 @@ def generate_goals(
                             en="No races ahead — add a goal under Races and goals."))
     vdot = float(result["vdot"])
     lthr = result.get("lthr")
-    zones = physio.hr_zones(result.get("hr_max"), (lthr or {}).get("bpm"))
+    zones = _zones(result)
     # T never faster than critical speed when clean efforts give one (physio.cap_threshold).
     paces = physio.cap_threshold(physio.training_paces(vdot), result.get("cs"))
     base0 = baseline(runs, pd.Timestamp(anchor), vdot)
@@ -738,7 +738,7 @@ def generate_goals(
         "paces": {name: [round(a, 3), round(b, 3)] for name, (a, b) in paces.items()},
         "cs": result.get("cs"),
         "response": adapt,
-        "zones": {"basis": zones.get("basis"), "lthr": lthr,
+        "zones": {"basis": zones.get("basis"), "lthr": lthr, "vt1": result.get("vt1"),
                   **{name: list(band) for name, band in zones.items() if name != "basis" and band}},
         "weeks": [
             {**{k: v for k, v in w.items() if k != "monday"}, "monday": w["monday"].isoformat()} for w in weeks
@@ -1123,7 +1123,9 @@ def outcomes(plan: dict[str, Any], runs: pd.DataFrame, today: dt.date, laps: pd.
 
 
 def _zones(result: dict[str, Any]) -> dict[str, Any]:
-    return physio.hr_zones(result.get("hr_max"), (result.get("lthr") or {}).get("bpm"))
+    lthr = result.get("lthr") or {}
+    return physio.hr_zones(result.get("hr_max"), lthr.get("bpm"), vt1=result.get("vt1"),
+                           basis="manual" if lthr.get("source") == "manual" else None)
 
 
 def _last_weeks(plan: dict[str, Any], runs: pd.DataFrame, today: dt.date, days: int = 14) -> dict[str, Any]:

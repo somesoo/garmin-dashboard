@@ -176,9 +176,12 @@ TERMS: dict[str, Term] = {
         ),
         "hr_zones": (
             "Strefy tętna",
-            "Pięć przedziałów tętna z ustawień zegarka, od 1 (bardzo lekko) do 5 (maksymalnie).",
-            "Pozwalają sprawdzić, czy trening miał zamierzoną intensywność.",
-            "Spokojny bieg: głównie 1–2. Próg: 4. Interwały: 4–5.",
+            "Pięć przedziałów tętna od Twoich progów: 1–2 poniżej progu tlenowego (VT1), 3–4 między progami, "
+            "5 od tętna progowego (LTHR) w górę.",
+            "Pozwalają sprawdzić, czy trening miał zamierzoną intensywność. Garmin liczy strefy z % tętna "
+            "maksymalnego, a progi wypadają u różnych osób przy różnym % — dlatego tu liczą się od progów "
+            "(Konto → Strefy tętna).",
+            "Spokojny bieg: głównie 1–2. Próg: 4. Interwały: 5.",
         ),
         "te": (
             "Training Effect (TE)",

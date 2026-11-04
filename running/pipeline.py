@@ -19,6 +19,10 @@ from running import forecast, physio, sessions
 def context(activities: pd.DataFrame, daily: pd.DataFrame) -> dict[str, Any]:
     runs = sessions.select_runs(activities)
     hr_max = physio.robust_hr_max(runs["max_hr"]) if not runs.empty else None
+    # A maximum measured in a test (Account -> heart rate zones) beats the one read off the record.
+    import hrzones
+
+    hr_max = hrzones.settings().get("hr_max") or hr_max
     daily = daily.copy() if daily is not None else pd.DataFrame()
     if not daily.empty:
         daily["day"] = pd.to_datetime(daily["day"])

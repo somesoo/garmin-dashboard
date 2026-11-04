@@ -43,6 +43,7 @@ DERIVED_TABLES = (
     "sleep_regularity",
     "night_profile",
     "intensity_distribution",
+    "zone_time",
     "quadrants",
     "run_sessions",
     "run_splits",

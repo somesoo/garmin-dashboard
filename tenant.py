@@ -74,7 +74,7 @@ SOURCES = ("garmin", "apple")
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 # What belongs to one person in the old layout -- moved by ``migrate``.
 OWNED = ("raw", "tables", "coach", "state.json", "excluded_nights.json", "sport.json", "ui.json",
-         "fetch.json", "fetch.log")
+         "fetch.json", "fetch.log", "zones.json")
 
 _current: contextvars.ContextVar[str | None] = contextvars.ContextVar("tenant", default=None)
 
@@ -124,6 +124,11 @@ class User:
     @property
     def sport_settings(self) -> Path:
         return self.root / "sport.json"
+
+    @property
+    def zone_settings(self) -> Path:
+        # Heart-rate anchors typed in from a test (hrzones.py); like coach/, not rebuildable from raw/.
+        return self.root / "zones.json"
 
     @property
     def fetch_lock(self) -> Path:
