@@ -844,6 +844,14 @@ def why_line(item: dict[str, Any]) -> str:
                          f"{item.get('top')}) — tempo było za ciężkie na dziś; ten sam szczebel.",
                       en=f"{when}: average rep heart rate {item.get('hr')} bpm, above the threshold zone (up to "
                          f"{item.get('top')}) — the pace was too hard for now; the same rung.")
+    if key == "new_threshold":
+        moved = tr(pl="wyżej", en="up") if item["to"] > item["from"] else tr(pl="niżej", en="down")
+        return tr(pl=f"Plan przeliczony na nowe tętno progowe: {item['from']} → {item['to']} bpm ({moved}, z "
+                     "najmocniejszych wysiłków 18–60 min). Cele tętna biegów spokojnych i długich przesunęły się "
+                     "razem z nim.",
+                  en=f"The plan was rebuilt on a new threshold heart rate: {item['from']} → {item['to']} bpm "
+                     f"({moved}, from the hardest 18–60 min efforts). The heart-rate targets of easy and long runs "
+                     "moved with it.")
     if key == "spike":
         return tr(pl=f"Skrócone z {item['from_km']:g} do {item['cap']:g} km: najdłuższy bieg z ostatnich 30 dni to "
                      f"{item['longest']:g} km, a pojedynczy bieg dłuższy o ponad 10% od niego wyraźnie zwiększa "

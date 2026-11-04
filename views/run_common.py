@@ -328,20 +328,29 @@ def active_plan(today: dt.date | None = None) -> dict[str, Any] | None:
         return None
     races = upcoming_races(today)
     if races and planning.stale(plan, races, today):
-        frame = runs()
         try:
-            plan = store.save_only_plan(planning.replan(plan, frame, current_forecast(),
-                                                        today=today + dt.timedelta(days=1),
-                                                        goals=[planning.goal_of(r) for r in races],
-                                                        strength_history=strength_done(),
-                                                        laps=shell.table("run_laps"),
-                                                        activities=shell.table("activities"),
-                                                        daily=shell.daily(),
-                                                        efficiency=shell.table("efficiency")))
+            plan = _replan(plan, today, goals=[planning.goal_of(r) for r in races])
         except ValueError as error:
             st.warning(i18n.tr(pl=f"Nie udało się dopasować planu do nowych celów: {error}",
                                en=f"Could not fit the plan to the new goals: {error}"))
+    elif planning.next_goal(plan, today):
+        # The threshold moved (a harder effort, an old one out of the window, a test typed in on
+        # the Account page): the heart-rate targets of the plan and the watch follow from tomorrow.
+        shift = planning.threshold_shift(plan, current_forecast())
+        if shift:
+            try:
+                plan = _replan(plan, today, threshold=shift)
+            except ValueError as error:
+                st.warning(i18n.tr(pl=f"Nie udało się przeliczyć planu na nowy próg: {error}",
+                                   en=f"Could not rebuild the plan on the new threshold: {error}"))
     return plan if planning.next_goal(plan, today) else None
+
+
+def _replan(plan: dict[str, Any], today: dt.date, **why: Any) -> dict[str, Any]:
+    return store.save_only_plan(planning.replan(plan, runs(), current_forecast(), today=today + dt.timedelta(days=1),
+                                                strength_history=strength_done(), laps=shell.table("run_laps"),
+                                                activities=shell.table("activities"), daily=shell.daily(),
+                                                efficiency=shell.table("efficiency"), **why))
 
 
 def forecast_tiles(result: dict[str, Any], keys: list[str] | None = None, compact: bool = False) -> None:

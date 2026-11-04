@@ -193,14 +193,27 @@ LTHR_FRACTIONS = {
 }
 LTHR_MINUTES = (18.0, 60.0)
 LTHR_DAYS = 120
+# The median of this many hardest efforts: one hot day or one sensor spike no
+# longer sets the zones for four months.
+LTHR_TOP = 3
+# With no hard effort in LTHR_DAYS the last measured threshold still holds --
+# marked stale, with its age -- for this long; only then do the zones fall back
+# to the estimate from HRmax. A training break must not make them jump.
+LTHR_KEEP_DAYS = 365
 
 
 def threshold_hr(efforts: pd.DataFrame | None, anchor: pd.Timestamp | None = None,
                  days: int = LTHR_DAYS) -> dict[str, Any] | None:
-    """LTHR from the hardest near-maximal effort of 18-60 minutes in ``days``.
+    """LTHR: the median heart rate of the ``LTHR_TOP`` hardest near-maximal 18-60 min efforts in ``days``.
 
-    ``efforts`` is ``run_efforts`` (``near_max``, ``minutes``, ``avg_hr``). None
-    when no such effort exists -- the zones then fall back to % of HRmax.
+    ``efforts`` is ``run_efforts`` (``near_max``, ``minutes``, ``avg_hr``).
+    Without such an effort in ``days`` before ``anchor``, the same median over
+    the ``days`` that ended with the last one, up to ``LTHR_KEEP_DAYS`` back,
+    with ``stale`` set. None when there is none in a year either -- the zones
+    then rest on HRmax (hrzones.anchors).
+
+    ``bpm``, ``day`` (the newest effort used), ``minutes``/``effort`` (the one
+    closest to the median), ``n`` (efforts used), ``stale``, ``age_days``.
     """
     if efforts is None or efforts.empty or not {"near_max", "minutes", "avg_hr", "day"} <= set(efforts.columns):
         return None
@@ -210,12 +223,21 @@ def threshold_hr(efforts: pd.DataFrame | None, anchor: pd.Timestamp | None = Non
     low, high = LTHR_MINUTES
     frame = frame[frame["near_max"].fillna(False).astype(bool) & frame["minutes"].between(low, high)
                   & frame["avg_hr"].notna() & (frame["day"] <= anchor)
-                  & (frame["day"] > anchor - pd.Timedelta(days=days))]
+                  & (frame["day"] > anchor - pd.Timedelta(days=LTHR_KEEP_DAYS))]
     if frame.empty:
         return None
-    best = frame.loc[frame["avg_hr"].idxmax()]
-    return {"bpm": round(float(best["avg_hr"])), "day": str(best["day"].date()),
-            "minutes": round(float(best["minutes"]), 1), "effort": str(best.get("effort", ""))}
+    window = frame[frame["day"] > anchor - pd.Timedelta(days=days)]
+    stale = window.empty
+    if stale:
+        last = frame["day"].max()
+        window = frame[frame["day"] > last - pd.Timedelta(days=days)]
+    top = window.nlargest(LTHR_TOP, "avg_hr")
+    bpm = float(top["avg_hr"].median())
+    closest = top.iloc[int(np.argmin((top["avg_hr"] - bpm).abs().to_numpy()))]
+    newest = top["day"].max()
+    return {"bpm": int(math.floor(bpm + 0.5)), "day": str(newest.date()),
+            "minutes": round(float(closest["minutes"]), 1), "effort": str(closest.get("effort", "")),
+            "n": int(len(top)), "stale": bool(stale), "age_days": int((anchor - newest).days)}
 
 
 def hr_zones(hr_max: float | None, lthr: float | None, vt1: float | None = None,

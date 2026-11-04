@@ -1601,8 +1601,12 @@ def replan(
     activities: pd.DataFrame | None = None,
     daily: pd.DataFrame | None = None,
     efficiency: pd.DataFrame | None = None,
+    threshold: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Rebuild everything from ``today`` on with fresh data; the past stays as it was.
+
+    ``threshold`` (``threshold_shift``): the rebuild happens because the
+    threshold heart rate moved; the first run from ``today`` says so.
 
     The workout ladders continue from what was really done (``outcomes``:
     the watch laps, when given, check reps and pace); with ``daily`` the next
@@ -1636,11 +1640,39 @@ def replan(
     # it to remove workouts of sessions this rebuild replaced.
     if plan.get("garmin"):
         fresh["garmin"] = dict(plan["garmin"])
+    if threshold:
+        first = next((s for s in fresh["sessions"] if s["date"] >= today.isoformat()
+                      and s["type"] in RUN_TYPES and s["type"] != "race"), None)
+        if first is not None:
+            first.setdefault("why", []).insert(0, {"key": "new_threshold", **threshold})
+    action = "threshold" if threshold else "replan" if goals is None else "goals"
     fresh["history"] = list(plan.get("history", [])) + [
-        {"at": dt.datetime.now().isoformat(timespec="seconds"), "action": "replan" if goals is None else "goals",
-         "vdot": fresh["forecast"]["vdot"]}
+        {"at": dt.datetime.now().isoformat(timespec="seconds"), "action": action,
+         "vdot": fresh["forecast"]["vdot"], **({"threshold": threshold} if threshold else {})}
     ]
     return fresh
+
+
+# A plan follows its runner's threshold: a move this large rebuilds it from tomorrow.
+THRESHOLD_SHIFT_BPM = 3
+
+
+def threshold_shift(plan: dict[str, Any], result: dict[str, Any]) -> dict[str, int] | None:
+    """``{"from", "to"}`` (bpm) when today's threshold differs from the plan's by ``THRESHOLD_SHIFT_BPM`` or more.
+
+    Both sides are the top of the T band (LTHR, capped by HRmax), so a plan
+    built on the HRmax estimate moves too once a threshold is measured or
+    typed in on the Account page. A plan from before the zones (no ``zones``)
+    and a forecast that failed are left alone.
+    """
+    band = (plan.get("zones") or {}).get("T")
+    if not band or result.get("status") != "ok":
+        return None
+    now = _zones(result).get("T")
+    if not now:
+        return None
+    old, new = int(band[1]), int(now[1])
+    return {"from": old, "to": new} if abs(new - old) >= THRESHOLD_SHIFT_BPM else None
 
 
 # The reasons a plan can be adjusted for (labels: text.adjustment_label).

@@ -7,7 +7,7 @@ import unittest
 
 import pandas as pd
 
-from running import coach, library, physio, plan as planning, store
+from running import coach, library, physio, plan as planning, store, text
 from tests.test_plan_store_coach import fixture
 
 
@@ -169,12 +169,45 @@ class Zones(unittest.TestCase):
             {"day": pd.Timestamp("2026-02-12"), "effort": "3k", "minutes": 12.0, "avg_hr": 185.0, "near_max": True},
         ])
 
-    def test_threshold_hr_from_the_hardest_sustained_effort(self):
+    def test_threshold_hr_from_the_hardest_sustained_efforts(self):
         found = physio.threshold_hr(self.efforts(), pd.Timestamp("2026-03-01"))
-        self.assertEqual((found["bpm"], found["day"]), (179, "2026-02-20"))  # 12 min is too short to count
+        # 179 and 170 count (12 min is too short): median 174.5, rounded half up.
+        self.assertEqual((found["bpm"], found["day"], found["n"], found["stale"]), (175, "2026-02-20", 2, False))
         self.assertEqual(physio.threshold_hr(self.efforts(near_max=False), pd.Timestamp("2026-03-01"))["bpm"], 170)
         self.assertIsNone(physio.threshold_hr(self.efforts().iloc[2:], pd.Timestamp("2026-03-01")))
-        self.assertIsNone(physio.threshold_hr(self.efforts(), pd.Timestamp("2026-09-01")))  # older than 120 days
+
+    def test_one_hot_day_does_not_set_the_threshold(self):
+        efforts = pd.DataFrame([{"day": pd.Timestamp(f"2026-02-{d:02d}"), "effort": "5k", "minutes": 25.0,
+                                 "avg_hr": hr, "near_max": True} for d, hr in ((5, 176), (12, 177), (19, 191))])
+        self.assertEqual(physio.threshold_hr(efforts, pd.Timestamp("2026-03-01"))["bpm"], 177)  # the max was 191
+
+    def test_a_break_keeps_the_last_threshold_for_a_year(self):
+        later = physio.threshold_hr(self.efforts(), pd.Timestamp("2026-09-01"))  # 193 days without a hard effort
+        self.assertEqual((later["bpm"], later["stale"], later["age_days"]), (175, True, 193))
+        self.assertIsNone(physio.threshold_hr(self.efforts(), pd.Timestamp("2027-03-01")))  # over a year: estimate
+        zones = physio.hr_zones(192, later["bpm"])
+        self.assertEqual(zones["basis"], "lthr")
+
+    def test_a_new_threshold_rebuilds_the_plan_from_tomorrow(self):
+        runs, _, _, result = fixture()
+        result = {**result, "lthr": {"bpm": 175, "day": "2026-02-27", "minutes": 25.0, "effort": "5k"}}
+        request = planning.PlanRequest("hm", dt.date(2026, 6, 14), run_days=[1, 3, 5, 6], long_day=6,
+                                       start=dt.date(2026, 3, 2))
+        plan = planning.generate(request, runs, result, anchor=pd.Timestamp("2026-03-01"))
+        self.assertIsNone(planning.threshold_shift(plan, result))
+        self.assertIsNone(planning.threshold_shift(plan, {**result, "lthr": {**result["lthr"], "bpm": 177}}))
+        harder = {**result, "lthr": {**result["lthr"], "bpm": 180}}
+        shift = planning.threshold_shift(plan, harder)
+        self.assertEqual(shift, {"from": 175, "to": 180})
+        fresh = planning.replan(plan, runs, harder, today=dt.date(2026, 3, 10), threshold=shift)
+        self.assertEqual(store.validate_plan(fresh), [])
+        self.assertEqual(fresh["zones"]["T"][1], 180)
+        self.assertIsNone(planning.threshold_shift(fresh, harder))  # no loop: the plan now stands on 180
+        first = next(s for s in fresh["sessions"] if s["date"] >= "2026-03-10"
+                     and s["type"] in planning.RUN_TYPES and s["type"] != "race")
+        self.assertEqual(first["why"][0], {"key": "new_threshold", "from": 175, "to": 180})
+        self.assertIn("175 → 180", text.why_line(first["why"][0]))
+        self.assertEqual(fresh["history"][-1]["action"], "threshold")
 
     def test_zones_follow_lthr_and_fall_back_to_hr_max(self):
         zones = physio.hr_zones(192, 179)

@@ -432,7 +432,8 @@ def _zones(person: tenant.User) -> None:
     has = shell.has_data()
     efforts = shell.table("run_efforts") if has else pd.DataFrame()
     runs = shell.table("run_sessions") if has else pd.DataFrame()
-    measured = physio.threshold_hr(efforts) if not efforts.empty else None
+    # Anchored on today: without it the window would follow the last effort and never age.
+    measured = physio.threshold_hr(efforts, pd.Timestamp.today().normalize()) if not efforts.empty else None
     data_max = physio.robust_hr_max(runs["max_hr"]) if not runs.empty and "max_hr" in runs.columns else None
     found = hrzones.anchors(lthr=(measured or {}).get("bpm"), hr_max=data_max, manual=manual)
     source = {"manual": tr(pl="wpisane z testu", en="typed in from a test"),
@@ -466,10 +467,21 @@ def _zone_summary(found: dict, measured: dict | None, source: dict[str, str]) ->
                         en=f"Maximum heart rate: **{found['hr_max']}** bpm — {source[found['hr_max_source']]}"))
     st.markdown("\n".join(f"- {line}" for line in lines))
     if found["lthr_source"] == "data" and measured:
-        st.caption(tr(pl=f"Próg = średnie tętno najmocniejszego wysiłku {measured['minutes']:g} min bliskiego "
-                         f"maksymalnego z ostatnich 120 dni ({measured['day']}).",
-                      en=f"Threshold = the average heart rate of the hardest near-maximal {measured['minutes']:g}-min "
-                         f"effort of the last 120 days ({measured['day']})."))
+        n = measured.get("n", 1)
+        st.caption(tr(pl=f"Próg = mediana średniego tętna {n} najmocniejszych wysiłków 18–60 min bliskich maksymalnego "
+                         f"z 120 dni (ostatni {measured['day']}). Liczy się na nowo po każdym pobraniu; gdy zmieni "
+                         "się o 3 bpm lub więcej, plan sam przelicza się od jutra.",
+                      en=f"Threshold = the median average heart rate of the {n} hardest near-maximal 18–60 min "
+                         f"efforts of 120 days (the latest {measured['day']}). It is recomputed after every pull; when "
+                         "it moves by 3 bpm or more, the plan rebuilds itself from tomorrow."))
+        if measured.get("stale"):
+            st.warning(tr(pl=f"Ostatni mocny wysiłek był {measured['age_days']} dni temu. Strefy trzymają ostatni "
+                             "zmierzony próg zamiast przeskakiwać na szacunek; po roku bez takiego wysiłku przejdą na "
+                             "szacunek z HRmax. 30 min równo i mocno w pojedynkę odświeży próg.",
+                          en=f"The last hard effort was {measured['age_days']} days ago. The zones keep the last "
+                             "measured threshold instead of jumping to an estimate; after a year without such an "
+                             "effort they move to the estimate from HRmax. 30 min even and hard on your own refreshes "
+                             "the threshold."))
     if found["lthr_source"] == "estimate":
         st.caption(tr(pl="Bez wysiłku progowego LTHR to 93,5% tętna maksymalnego (średnia 1411 biegaczy, rozrzut "
                          "±5 bpm). 30 min równo i mocno w pojedynkę da zmierzony próg.",

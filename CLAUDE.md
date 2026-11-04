@@ -1004,8 +1004,15 @@ Plan i cele:
 - **Tydzień startu** (Bosquet 2007, Mujika): jeden krótki akcent 4–6 dni przed
   startem (`library.SHARPENER`, `text.sharpen`), spokojne biegi tego tygodnia
   ≤ 0,35× dystansu startu (4–8 km) — objętość przed startem ~40–60% szczytu.
-- **Strefy tętna od progu** (`physio.threshold_hr`, `hr_zones`): LTHR = średnie
-  tętno najmocniejszego wysiłku bliskiego maksymalnego 18–60 min z 120 dni
+- **Strefy tętna od progu** (`physio.threshold_hr`, `hr_zones`): LTHR = mediana
+  średniego tętna 3 najmocniejszych wysiłków bliskich maksymalnego 18–60 min
+  z 120 dni (`LTHR_TOP`; jeden upalny dzień nie ustawia stref na 4 miesiące).
+  **Bez takiego wysiłku w 120 dniach** obowiązuje ostatni zmierzony próg
+  (`stale`, `age_days`) do roku (`LTHR_KEEP_DAYS`), dopiero potem szacunek z
+  HRmax — przerwa w treningu nie przestawia stref skokiem. Gdy próg planu (górna
+  granica T) różni się od dzisiejszego o ≥ 3 bpm (`plan.threshold_shift`),
+  `rc.active_plan` przebudowuje plan od jutra (`replan(threshold=...)`, `why:
+  new_threshold`, w historii `action: threshold`) — także po wpisie z Konta.
   (`run_efforts`; prognoza zwraca je jako `lthr`, a wpisane na Koncie — z
   `source: "manual"`), E kończy się pod VT1, reszta jak strefy Friela (% LTHR);
   bez takiego wysiłku — LTHR szacowane z HRmax (`basis: "hr_max"`, patrz

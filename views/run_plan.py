@@ -250,15 +250,23 @@ def _explain(active: dict, result: dict) -> None:
                "not pace.")
     elif zones.get("basis") == "lthr" and zones.get("E"):
         e, t, when = f"{zones['E'][0]}–{zones['E'][1]}", f"{zones['T'][0]}–{zones['T'][1]}", lthr.get("day", "")
+        n = int(lthr.get("n") or 1)  # plans from before the median carry one effort
+        origin = tr(pl=f"mediana {n} najmocniejszych wysiłków 18–60 min bliskich maksymalnego, ostatni z {when}",
+                    en=f"the median of the {n} hardest near-maximal 18–60 min efforts, the latest on {when}") \
+            if n > 1 else tr(pl=f"średnie tętno {lthr.get('minutes'):g}-minutowego wysiłku bliskiego maksymalnego z {when}",
+                             en=f"the average heart rate of a {lthr.get('minutes'):g}-minute near-maximal effort on {when}")
+        if lthr.get("stale"):
+            origin += tr(pl=f"; ostatni mocny wysiłek {lthr.get('age_days')} dni temu — próg trzymany do roku",
+                         en=f"; the last hard effort was {lthr.get('age_days')} days ago — the threshold holds for a year")
         zone_line = tr(
-            pl=f"**Tętno od Twojego progu** ({lthr.get('bpm')} bpm — średnie tętno {lthr.get('minutes'):g}-minutowego "
-               f"wysiłku bliskiego maksymalnego z {when}), nie od % HRmax: spokojnie {e}, próg {t} bpm (strefy Friela). "
-               "Biegi spokojne i długie zegarek prowadzi po tętnie, nie po tempie — tempo z krótkich odcinków wyprzedza "
-               "wytrzymałość tlenową, a spokojnie ma być spokojnie.",
-            en=f"**Heart rate from your threshold** ({lthr.get('bpm')} bpm — the average heart rate of a "
-               f"{lthr.get('minutes'):g}-minute near-maximal effort on {when}), not from % of HRmax: easy {e}, "
+            pl=f"**Tętno od Twojego progu** ({lthr.get('bpm')} bpm — {origin}), nie od % HRmax: spokojnie {e}, próg "
+               f"{t} bpm (strefy Friela). Biegi spokojne i długie zegarek prowadzi po tętnie, nie po tempie — tempo z "
+               "krótkich odcinków wyprzedza wytrzymałość tlenową, a spokojnie ma być spokojnie. Gdy próg zmieni się "
+               "o 3 bpm lub więcej, plan sam przelicza się od jutra.",
+            en=f"**Heart rate from your threshold** ({lthr.get('bpm')} bpm — {origin}), not from % of HRmax: easy {e}, "
                f"threshold {t} bpm (Friel's zones). The watch steers easy and long runs by heart rate, not pace — "
-               "pace from short reps runs ahead of aerobic endurance, and easy has to be easy.")
+               "pace from short reps runs ahead of aerobic endurance, and easy has to be easy. When the threshold "
+               "moves by 3 bpm or more, the plan rebuilds itself from tomorrow.")
     elif "zones" not in active:
         zone_line = tr(pl="**Tętno jako % HRmax** — plan powstał przed strefami od tętna progowego; „Przebuduj od "
                           "jutra” je przeliczy.",
@@ -266,10 +274,10 @@ def _explain(active: dict, result: dict) -> None:
                           "“Rebuild from tomorrow” will compute them.")
     else:
         zone_line = tr(
-            pl="**Strefy oszacowane z HRmax** (próg ≈ 93,5% HRmax u 1411 biegaczy, ±5 bpm) — brak ciągłego wysiłku 18–60 min bliskiego maksymalnego w 120 dniach, więc "
+            pl="**Strefy oszacowane z HRmax** (próg ≈ 93,5% HRmax u 1411 biegaczy, ±5 bpm) — brak ciągłego wysiłku 18–60 min bliskiego maksymalnego od roku, więc "
                "nie da się wyznaczyć tętna progowego. Test: 30 min równo i mocno w pojedynkę; strefy przeliczą się "
                "same — albo wpisz wynik testu na stronie Konto.",
-            en="**Zones estimated from HRmax** (threshold ≈ 93.5% of HRmax across 1411 runners, ±5 bpm) — no continuous near-maximal effort of 18–60 min in 120 days, so the "
+            en="**Zones estimated from HRmax** (threshold ≈ 93.5% of HRmax across 1411 runners, ±5 bpm) — no continuous near-maximal effort of 18–60 min for a year, so the "
                "threshold heart rate cannot be found. A test: 30 min even and hard on your own; the zones will "
                "update themselves — or type a test result in on the Account page.")
     state = active.get("response") or {}

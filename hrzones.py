@@ -19,8 +19,9 @@ in this order, from:
 1. **manual** -- typed in on the Account page from a test (lab gas exchange or
    lactate, Friel's 30-min field test, DFA-a1 = 0.75 for VT1: Rogers et al.,
    *Front Physiol* 11:596567, 2021), stored in ``<person>/zones.json``;
-2. **data** -- LTHR from the hardest near-maximal 18-60 min effort in 120 days
-   (``physio.threshold_hr``), HRmax as the third-highest run maximum
+2. **data** -- LTHR as the median of the three hardest near-maximal 18-60 min
+   efforts in 120 days; with none, the last measured one, marked stale, for up
+   to a year (``physio.threshold_hr``); HRmax as the third-highest run maximum
    (``physio.robust_hr_max``);
 3. **estimate** -- population ratios from 1411 treadmill-tested runners
    (Esteve-Lanao et al., *Sports* 14(1):29, 2026, table 2): VT2 = 93.5 +/- 2.5%
