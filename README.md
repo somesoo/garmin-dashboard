@@ -1,10 +1,11 @@
 # Garmin Dashboard (lokalnie)
 
-Pobiera dane z Garmin Connect, buduje hurtownię na dysku i hostuje dashboard
-na `http://localhost:8501`. Nic nie wychodzi na zewnątrz.
-
-Na razie aplikacja działa tylko z Garminem — patrz
-[Inne zegarki](#inne-zegarki-huawei-apple-watch).
+Pobiera dane z Garmin Connect (albo z Apple Health), buduje hurtownię na
+dysku i hostuje dashboard na `http://localhost:8501`. Nic nie wychodzi na
+zewnątrz. Jeden serwer może obsłużyć kilka osób, każdą z jej własnym katalogiem
+danych — patrz [docs/DOSTEP.md](docs/DOSTEP.md); wdrożenie na VPS:
+[docs/DEPLOY.md](docs/DEPLOY.md). Opis działania modułów jest w [docs/](docs/),
+zasady pracy z kodem w [AGENTS.md](AGENTS.md).
 
 ## Uruchomienie
 
@@ -32,7 +33,7 @@ Ręcznie (macOS/Linux; na Windowsie `.venv\Scripts\python.exe`):
 .venv/bin/python etl/run.py              # aktualizacja (14 dni wstecz)
 .venv/bin/python etl/run.py --backfill   # cała historia
 .venv/bin/python etl/load.py             # tylko przebudowa tabel
-.venv/bin/python analytics.py            # tylko modele i statystyka
+.venv/bin/python etl/analytics.py        # tylko modele i statystyka
 .venv/bin/python -m streamlit run app.py # tylko serwer (bez auto-wyłączania)
 ```
 
@@ -72,10 +73,10 @@ Bez tokenów wystarczy raz `.venv/bin/python etl/login.py`.
 |---|---|---|
 | pobieranie | `etl/fetch.py` | `data/raw/<metryka>/<data>.json` |
 | transformacja | `etl/load.py` | `daily`, `activities`, `sleep_stages`, `night_series`, `intraday` |
-| modele i statystyka | `analytics.py` | `pmc`, `load_weekly`, `critical_speed`, `riegel`, `efficiency`, `correlations`, `acf`, `changepoints`, `weekday_effects`, `circadian`, `sleep_regularity`, `intensity_distribution`, `quadrants`, `models.json` |
-| zapytania | `db.py` | DuckDB in-memory z widokami na parquet |
-| system wykresów | `theme.py` | paleta, buildery, mapy, glob — jedno miejsce na wygląd |
-| widoki | `app.py` + `views/` + `guide.py` | router `st.navigation`: 4 grupy menu, prowadzenie po stronach |
+| modele i statystyka | `etl/analytics.py` | `pmc`, `load_weekly`, `critical_speed`, `riegel`, `efficiency`, `correlations`, `acf`, `changepoints`, `weekday_effects`, `circadian`, `sleep_regularity`, `intensity_distribution`, `quadrants`, `models.json` |
+| zapytania | `core/db.py` | DuckDB in-memory z widokami na parquet |
+| system wykresów | `ui/theme.py` | paleta, buildery, mapy, glob — jedno miejsce na wygląd |
+| widoki | `app.py` + `views/` + `ui/guide.py` | router `st.navigation`: 4 grupy menu, prowadzenie po stronach |
 
 ### Co liczy warstwa analityczna
 
@@ -139,7 +140,7 @@ Nowy wniosek dodaje Claude Code:
 /garmin-insight hrv vs obciążenie treningowe
 ```
 
-Format opisuje `insights/_template.md`, schemat danych — `CLAUDE.md`.
+Format opisuje `insights/_template.md`, schemat danych — `docs/dane.md`.
 
 ## Tokeny
 
@@ -170,16 +171,16 @@ Windows:
 schtasks /create /tn GarminETL /sc daily /st 07:00 /tr "\"$PWD\.venv\Scripts\python.exe\" \"$PWD\etl\run.py\""
 ```
 
-## Inne zegarki (Huawei, Apple Watch)
+## Inne zegarki (Apple Watch, Huawei)
 
-Na razie aplikacja jest pisana pod Garmina: dane idą z Garmin Connect przez
-`garminconnect`, a część stron opiera się na liczbach, które liczy tylko Garmin.
-Zanim pojawi się drugie źródło danych, warto pilnować jednej zasady: **funkcja,
-która potrzebuje czegoś tylko z Garmina, ma być modułem opcjonalnym** — gdy
-dane są, używa ich; gdy ich nie ma, strona działa dalej na tym, co da się
-policzyć z dowolnego zegarka, zamiast pokazywać zera albo puste kafle.
-Użytkownik Huaweia czy Apple Watcha nie powinien dostać dashboardu z samymi
-„brak danych”.
+Źródła są dwa: Garmin Connect (`garminconnect`) i Apple Health (`etl/apple.py`
+— eksport `export.zip` i codzienne paczki z iPhone'a, `etl/apple_push.py`).
+Oba zapisują te same tabele (`etl/schema.py`), więc widoki nie wiedzą, skąd
+przyszły dane. Część stron opiera się jednak na liczbach, które liczy tylko
+Garmin, dlatego obowiązuje zasada: **funkcja, która potrzebuje czegoś tylko
+z Garmina, ma być modułem opcjonalnym** — gdy dane są, używa ich; gdy ich nie
+ma, strona działa dalej na tym, co da się policzyć z dowolnego zegarka, zamiast
+pokazywać zera albo puste kafle.
 
 Co jest dziś tylko z Garmina (u innych producentów nie ma odpowiednika albo
 liczy się inaczej):
@@ -207,8 +208,8 @@ tabel `daily` / `activities`, żeby widoki nie wiedziały, skąd przyszły dane.
 
 ## Co nie jest pobierane
 
-Szczegóły pojedynczych treningów (`get_activity`: splity, GPS, strumienie
-sekundowe), SpO2 minuta po minucie, golf, żywienie, sprzęt. Hipnogramy, nocne
-HRV i 3-minutowe próbki stresu/Body Battery **są** pobierane. Dodanie kolejnej
+SpO2 minuta po minucie, golf, żywienie, sprzęt. Ślady GPS i strumienie
+treningów (`get_activity_details`), okrążenia (`get_activity_splits`),
+hipnogramy, nocne HRV i 3-minutowe próbki stresu/Body Battery **są** pobierane. Dodanie kolejnej
 metryki: wpis w `config.DAILY_METRICS` (lub `MONTHLY_METRICS`) + mapowanie
 w `etl/load.py`.

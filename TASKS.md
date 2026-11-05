@@ -2,15 +2,15 @@
 
 ## Do zrobienia
 
-### Wiele osób → SaaS (plan 2026-11-02, zasady w CLAUDE.md → „Wiele osób”)
+### Wiele osób → SaaS (plan 2026-11-02, zasady w AGENTS.md → „Wiele osób”)
 
 Osoba X — Garmin, osoba Y — Apple Watch (iPhone); dane całkowicie osobne.
 Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
 
-- [x] 1. Osobne dane: `tenant.py` (rejestr, `data/users/<id>/`, migracja),
+- [x] 1. Osobne dane: `core/tenant.py` (rejestr, `data/users/<id>/`, migracja),
       ścieżki per osoba, cache per osoba, SQL zamknięty w katalogu osoby,
       pobieranie per osoba, insighty tylko dla swojej osoby.
-- [x] 2. Kto patrzy: `auth.py` — jedna osoba bez logowania, OIDC (`st.login`),
+- [x] 2. Kto patrzy: `core/auth.py` — jedna osoba bez logowania, OIDC (`st.login`),
       nagłówek `tailscale serve`, przeglądarka lokalna; nieznany = odmowa.
 - [x] 3. Model wielu źródeł: `etl/schema.py` (wspólne kolumny `daily`/`activities`,
       puste, gdy źródło ich nie zna), kolumny `source` i `load_source`; HRV Apple (SDNN)
@@ -38,33 +38,33 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
       `garmin-dashboard/1` i Health Auto Export, paczki w `raw/apple/push/` (idempotentnie),
       przebudowa w tle z kolejką (`rebuild.pending`), tokeny per osoba (hash, zakres).
       Sprawdzone na żywo: paczka → 202 → nowy dzień w tabelach po ~11 s.
-  - [ ] Zbudować i przetestować Skrót na prawdziwym iPhonie (format w DOSTEP.md);
+  - [ ] Zbudować i przetestować Skrót na prawdziwym iPhonie (format w docs/DOSTEP.md);
         sprawdzić Health Auto Export na prawdziwej paczce.
-- [x] Logowanie Google (`st.login`, `python -m auth setup`, tylko zweryfikowany e-mail),
+- [x] Logowanie Google (`st.login`, `python -m core.auth setup`, tylko zweryfikowany e-mail),
       serwer na 127.0.0.1 przy kilku osobach, strona **Konto** (wgranie eksportu,
       klucze do wysyłki i odczytu, odwołanie). Sign in with Apple wymaga płatnego konta.
   - [ ] Utworzyć klienta OAuth w Google Cloud i przejść logowanie w przeglądarce.
 - [x] 5. API dla aplikacji (`/api/manifest`, `/api/db` SQLite, `/api/summary?lang=`) i PWA
-      (`pwa/`, `/api/app/`): nagłówki z `facts.py` liczone na serwerze (`summary.py`),
+      (`pwa/`, `/api/app/`): nagłówki z `analysis/facts.py` liczone na serwerze (`analysis/summary.py`),
       offline z ostatniej kopii, parowanie kluczem (link z fragmentem), PL/EN, CSP.
       Zamiast sql.js w telefonie — JSON ~10 KB (mniej kodu, bez drugiej implementacji liczb).
       Sprawdzone: renderowanie `app.js` w Node na prawdziwym API (PL/EN, odwołany klucz).
   - [ ] Obejrzeć na prawdziwym S23 i iPhonie (bez przeglądarki tutaj nie było zrzutów).
 - [x] 6a. Prawa osoby na stronie Konto: archiwum wszystkich swoich danych (bez
       sekretów: hashy kluczy, tokenów Garmina, cache) i usunięcie wszystkiego po wpisaniu
-      nazwy; `python -m tenant remove <id> --yes` usuwa też wpis z rejestru.
+      nazwy; `python -m core.tenant remove <id> --yes` usuwa też wpis z rejestru.
 - [ ] 6. SaaS: zgoda i polityka (dane zdrowotne = art. 9 RODO), eksport/usunięcie
       konta, szyfrowanie, kopie per osoba, hosting (nie eve302).
       **Ryzyko**: `garminconnect` to nieoficjalny login — dla obcych użytkowników
       trzeba oficjalnego Garmin Developer Program.
 
-### Angielska wersja interfejsu (`i18n.py`, zasady w CLAUDE.md → „Języki”)
+### Angielska wersja interfejsu (`core/i18n.py`, zasady w AGENTS.md → „Języki”)
 
-- [x] **Etap 1** — moduł `i18n.py`, przełącznik PL/EN w szynie, menu i tytuły
-      stron, szyna (zakres, pobieranie, status), chrome kafli (`bento.py`,
-      pomoc „Co to jest?”), daty na osiach i podpisy builderów (`theme.py`).
+- [x] **Etap 1** — moduł `core/i18n.py`, przełącznik PL/EN w szynie, menu i tytuły
+      stron, szyna (zakres, pobieranie, status), chrome kafli (`ui/bento.py`,
+      pomoc „Co to jest?”), daty na osiach i podpisy builderów (`ui/theme.py`).
 - [x] **Etap 2** — wszystkie strony w `views/` (w `i18n.BILINGUAL`), słownik
-      pojęć (`glossary_en.py`), teksty globu (przekazywane z `globe.py`).
+      pojęć (`ui/glossary_en.py`), teksty globu (przekazywane z `ui/globe.py`).
       Kody zapisywane przez analitykę i `running/` (`form_zone`, `quadrant`,
       `model`, typ treningu, pewność, decyzja dnia, status celu, fazy planu)
       zostają kodami — tłumaczy je widok.
@@ -152,7 +152,7 @@ ocena wykonania (`outcomes`) może sterować wzrostem tygodnia.
 
 - [x] **8b. EF przy stałym tętnie jako sygnał postępu** — w 8 weszły HRV,
       tętno spoczynkowe i realizacja; EF (`efficiency`) wymaga grupowania po
-      przedziale tętna (pułapka z CLAUDE.md), więc osobno.
+      przedziale tętna (pułapka z AGENTS.md), więc osobno.
 
 **Przegląd wstecz po 8 (2026-10-28):** decyzja dnia (`coach.next_session`)
 i tydzień planu patrzą na HRV z dwóch stron — rano status Garmina dla jednej
