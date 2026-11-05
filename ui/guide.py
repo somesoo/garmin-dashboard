@@ -224,22 +224,41 @@ def tour() -> None:
          tr(pl="Glob z każdym treningiem (przybliż — zobaczysz mapę ciepła tras) i pełny dziennik aktywności.",
             en="A globe with every session (zoom in for a heat map of your routes) and the full activity log.")),
     ]
-    with bento.panel(tr(pl="Jak czytać ten dashboard", en="How to read this dashboard"), key="tour",
-                     caption=_inline(tr(pl="Cztery przystanki. Reszta menu to szczegóły, a *Laboratorium* — dla "
-                                           "dociekliwych.",
-                                        en="Four stops. The rest of the menu is detail, and the *Lab* is for the "
-                                           "curious."))):
-        for column, (icon, title, body) in zip(st.columns(4, gap="medium"), stops):
-            with column:
-                st.markdown(f"{icon} **{title}**")
-                st.markdown(f"<div class='tile-caption'>{_inline(body)}</div>", unsafe_allow_html=True)
-        st.caption(tr(pl="Każdy kafel ma w nagłówku „?” z objaśnieniem, a na dole każdej strony są linki *Dalej*. "
-                         "Zakres czasu i pobieranie z Garmina są w szynie po lewej.",
-                      en="Every tile has a “?” in its header with an explanation, and every page ends with *Next* "
-                         "links. The time range and the Garmin pull are in the rail on the left."))
+    title_text = tr(pl="Jak czytać ten dashboard", en="How to read this dashboard")
+    caption = _inline(tr(pl="Cztery przystanki. Reszta menu to szczegóły, a *Laboratorium* — dla dociekliwych.",
+                         en="Four stops. The rest of the menu is detail, and the *Lab* is for the curious."))
+
+    def hide() -> None:
         if st.button(tr(pl="Rozumiem, schowaj", en="Got it, hide this"), key="tour_hide", icon=":material/check:"):
             _remember(True)
             st.rerun()
+
+    if shell.phone():
+        # Stacked, the four stops with their paragraphs run about 900 px -- the
+        # KPIs of the page being introduced started below them, which is a
+        # guide that buries what it is explaining. On a phone it is the four
+        # names and where the chrome went; each page says the rest itself.
+        with bento.panel(title_text, key="tour", caption=caption):
+            st.markdown(" · ".join(f"{icon} **{name}**" for icon, name, _body in stops))
+            st.caption(tr(pl="Każdy kafel ma w nagłówku „?” z objaśnieniem, a na dole każdej strony są linki "
+                             "*Dalej*. Zakres czasu, język i pobieranie są pod *Widok* w górnej linii.",
+                          en="Every tile has a “?” in its header with an explanation, and every page ends with "
+                             "*Next* links. The range, the language and the pull are under *View* on the top line."))
+            hide()
+        return
+
+    with bento.panel(title_text, key="tour", caption=caption):
+        for column, (icon, name, body) in zip(st.columns(4, gap="medium"), stops):
+            with column:
+                st.markdown(f"{icon} **{name}**")
+                st.markdown(f"<div class='tile-caption'>{_inline(body)}</div>", unsafe_allow_html=True)
+        # The sidebar this used to point at has been gone since the top line
+        # took its place (story.topbar); the sentence had kept pointing left.
+        st.caption(tr(pl="Każdy kafel ma w nagłówku „?” z objaśnieniem, a na dole każdej strony są linki *Dalej*. "
+                         "Zakres czasu i pobieranie z Garmina są w górnej linii.",
+                      en="Every tile has a “?” in its header with an explanation, and every page ends with *Next* "
+                         "links. The time range and the Garmin pull are on the top line."))
+        hide()
 
 
 def _inline(text: str) -> str:

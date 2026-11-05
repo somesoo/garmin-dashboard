@@ -234,22 +234,54 @@ export function render(stage, args, opts) {
   }
 
   // One cursor for every panel, one tooltip listing them all.
+  //
+  // Pointer events, not mouse events: a phone never sends mousemove, so with
+  // onmousemove alone the hero was a picture with no way to read a value off
+  // it -- the one chart the page is built around, mute on the screen it gets
+  // read on in the morning. A tap reads the day under the finger, a drag
+  // scrubs along the axis, and nothing here calls preventDefault: a finger
+  // that starts on the chart must still scroll the page.
   const tip = stage.querySelector(".tip");
+  const clear = () => {
+    tip.style.opacity = 0;
+    hosts.forEach((o) => (o.host.querySelector(".cur").style.display = "none"));
+  };
+  const readout = (host, f, clientX, clientY) => {
+    const r = host.getBoundingClientRect();
+    const inner = Math.max(1, f.W - f.pad.l - f.pad.r);
+    // Clamped: a fingertip is wide enough to land in the padding often, and an
+    // unclamped tap there reads a day outside the chart's own range.
+    const at = Math.min(1, Math.max(0, (clientX - r.left - f.pad.l) / inner));
+    const t = f.x0 + at * (f.x1 - f.x0);
+    const day = new Date(t).toLocaleDateString(text.lang === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
+    const rows = [`<b>${day}</b>`];
+    for (const o of hosts) {
+      const cur = o.host.querySelector(".cur"), X = o.f.X(t);
+      cur.style.display = ""; cur.setAttribute("x1", X); cur.setAttribute("x2", X);
+      for (const [k, v] of o.hover(t)) rows.push(`${esc(k)}: <b>${esc(v)}</b>`);
+    }
+    tip.innerHTML = rows.join("<br>");
+    tip.style.opacity = 1;
+    // The stage rect is measured now, not once at render: the page scrolls
+    // between the two, and a tooltip placed against a stale rect lands off the
+    // chart entirely -- which on a phone is most of the time.
+    const box = stage.getBoundingClientRect();
+    const right = box.width - tip.offsetWidth - 8;
+    tip.style.left = Math.max(4, Math.min(clientX - box.left + 14, right)) + "px";
+    tip.style.top = (clientY - box.top + 14) + "px";
+  };
   for (const { host, f } of hosts) {
-    host.onmousemove = (e) => {
-      const r = host.getBoundingClientRect(), t = f.x0 + (e.clientX - r.left - f.pad.l) / (f.W - f.pad.l - f.pad.r) * (f.x1 - f.x0);
-      const day = new Date(t).toLocaleDateString(text.lang === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
-      const rows = [`<b>${day}</b>`];
-      for (const o of hosts) {
-        const cur = o.host.querySelector(".cur"), X = o.f.X(t);
-        cur.style.display = ""; cur.setAttribute("x1", X); cur.setAttribute("x2", X);
-        for (const [k, v] of o.hover(t)) rows.push(`${esc(k)}: <b>${esc(v)}</b>`);
-      }
-      tip.innerHTML = rows.join("<br>"); tip.style.opacity = 1;
-      const left = e.clientX - sb.left + 14, top = e.clientY - sb.top + 14;
-      tip.style.left = Math.min(left, sb.width - tip.offsetWidth - 8) + "px"; tip.style.top = top + "px";
+    host.onpointerdown = (e) => readout(host, f, e.clientX, e.clientY);
+    // A mouse reads on hover; a finger only while it is down. buttons is 0 for
+    // a mouse merely passing over and for a finger that has lifted.
+    host.onpointermove = (e) => {
+      if (e.pointerType === "mouse" || e.buttons) readout(host, f, e.clientX, e.clientY);
     };
-    host.onmouseleave = () => { tip.style.opacity = 0; hosts.forEach((o) => (o.host.querySelector(".cur").style.display = "none")); };
+    host.onpointerleave = (e) => { if (e.pointerType === "mouse") clear(); };
+    host.onpointercancel = clear;
   }
+  // A finger has no "leave", so the last reading stays up -- which is the
+  // useful behaviour: you tap, then read. The next tap off the charts clears it.
+  stage.addEventListener("pointerdown", (e) => { if (!e.target.closest(".chart")) clear(); });
   return stage.scrollHeight + 4;
 }

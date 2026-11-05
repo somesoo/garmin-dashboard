@@ -94,14 +94,47 @@ def loop(current: str) -> None:
                     unsafe_allow_html=True)
 
 
+def loop_compact(current: str) -> None:
+    """The loop as one line of stages, for a phone.
+
+    The loop is the navigation -- there is no sidebar -- so it cannot simply be
+    dropped on a narrow screen. Stacked under the headline, though, the full
+    loop is four stages with their page links: a wall of twelve words above the
+    hero, and the hero is what the reader came for. Here each stage is one chip
+    carrying its number, and its pages are behind it; the stage you are standing
+    in is the primary one, so it wears the blue rule every chosen thing in this
+    interface wears.
+    """
+    here = stage_of(current)
+    values = loop_values()
+    names = _stage_names()
+    with st.container(horizontal=True, key="loopc", vertical_alignment="center", gap="small"):
+        for key, pages in STAGE_PAGES.items():
+            stage, _title = names[key]
+            value = values.get(key, "—")
+            with st.popover(f"{stage} {value}", type="primary" if key == here else "tertiary"):
+                for url in pages:
+                    page = routing.page(url)
+                    if page is None:
+                        continue
+                    if url == current:
+                        st.markdown(f"<span class='lp-here'>{i18n.page(url)}</span>", unsafe_allow_html=True)
+                    else:
+                        st.page_link(page, label=i18n.page(url))
+
+
 def head(current: str, headline: str, sub: str | None = None) -> None:
-    """The finding on the left, the loop on the right."""
+    """The finding on the left, the loop on the right -- or both stacked on a phone."""
     from ui import bento
     bento.HEADED = True
+    title = f"<h1 class='story-h'>{headline}</h1>" + (f"<p class='story-sub'>{sub}</p>" if sub else "")
+    if shell.phone():
+        st.markdown(title, unsafe_allow_html=True)
+        loop_compact(current)
+        return
     left, right = st.columns([2.6, 1], gap="large", vertical_alignment="top")
     with left:
-        st.markdown(f"<h1 class='story-h'>{headline}</h1>" + (f"<p class='story-sub'>{sub}</p>" if sub else ""),
-                    unsafe_allow_html=True)
+        st.markdown(title, unsafe_allow_html=True)
     with right:
         loop(current)
 
@@ -116,35 +149,83 @@ def details(label: str, render: Callable[[], None], *, key: str) -> None:
         st.dialog(tr(pl="Szczegóły", en="Details") + " · " + label, width="large")(render)()
 
 
+def second(label: str, render: Callable[[], None], *, key: str) -> None:
+    """A page's second plan: inline on a wide screen, behind "Szczegóły" on a phone.
+
+    This is the one lever a page pulls to be a phone page. A page keeps above
+    the fold what answers its question -- the headline, the four numbers, the
+    one chart -- and hands everything else to ``second``. On a desktop nothing
+    changes; on a phone the tiles are not merely pushed below the fold, they are
+    not computed until the button is pressed, which is also why this takes a
+    callable and not a ``with`` block.
+    """
+    if shell.phone():
+        details(label, render, key=key)
+    else:
+        render()
+
+
 # ------------------------------------------------------------------ the top line
+
+def _everyday(current: str) -> None:
+    for url in EVERYDAY:
+        page = routing.page(url)
+        if page is None:
+            continue
+        if url == current:
+            st.markdown(f"<span class='tb-here'>{i18n.page(url)}</span>", unsafe_allow_html=True, width="content")
+        else:
+            st.page_link(page, label=i18n.page(url))
+
+
+def _lab_popover() -> None:
+    with st.popover(i18n.group("lab"), type="tertiary"):
+        # "admin" is registered for the server's admin only (app.py); for anyone else it is skipped.
+        for url in ["fizjologia", *LAB, "admin"]:
+            page = routing.page(url)
+            if page is not None:
+                st.page_link(page, label=i18n.page(url))
+        st.caption(shell.status_lines())
+        from ui import guide
+        guide.rail()
+
+
+def _pull() -> None:
+    if tenant.current().source == "garmin":
+        st.fragment(run_every=3 if sync.running() else 60)(shell.pull_inline)(sync.running())
+
 
 def topbar(current: str) -> None:
     """What the sidebar carried: everyday pages and the lab on the left; range, language, Garmin on the right."""
     from ui import bento
     bento.HEADED = False  # a new run: no page headline yet
+    if shell.phone():
+        return _topbar_phone(current)
     with st.container(horizontal=True, key="topbar", vertical_alignment="center", gap="medium"):
-        for url in EVERYDAY:
-            page = routing.page(url)
-            if page is None:
-                continue
-            if url == current:
-                st.markdown(f"<span class='tb-here'>{i18n.page(url)}</span>", unsafe_allow_html=True, width="content")
-            else:
-                st.page_link(page, label=i18n.page(url))
-        with st.popover(i18n.group("lab"), type="tertiary"):
-            # "admin" is registered for the server's admin only (app.py); for anyone else it is skipped.
-            for url in ["fizjologia", *LAB, "admin"]:
-                page = routing.page(url)
-                if page is not None:
-                    st.page_link(page, label=i18n.page(url))
-            st.caption(shell.status_lines())
-            from ui import guide
-            guide.rail()
+        _everyday(current)
+        _lab_popover()
         st.space("stretch")
         shell.range_picker()
         shell.language_picker()
-        if tenant.current().source == "garmin":
-            st.fragment(run_every=3 if sync.running() else 60)(shell.pull_inline)(sync.running())
+        _pull()
+        _account_chip(current)
+
+
+def _topbar_phone(current: str) -> None:
+    """The top line on a phone: the three everyday pages, then everything else folded.
+
+    The range, the language and the Garmin pull are settings, consulted once and
+    then left alone; in one line on a 360 px screen they crush the page links,
+    which are the part used on every visit. So they move behind one word, and
+    the line keeps what it is for -- going somewhere.
+    """
+    with st.container(horizontal=True, key="topbar", vertical_alignment="center", gap="medium"):
+        _everyday(current)
+        _lab_popover()
+        with st.popover(i18n.tr(pl="Widok", en="View"), type="tertiary"):
+            shell.range_picker()
+            shell.language_picker()
+            _pull()
         _account_chip(current)
 
 

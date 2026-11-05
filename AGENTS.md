@@ -186,6 +186,18 @@ Zachowania celowe (nie „naprawiaj”):
   reload i utrata zakresu czasu. Strona domyślna ma `url_path == ""` — dlatego
   `routing.named` / `routing.name(page)`.
 - Bloki z własnymi kontrolkami → `@st.fragment`.
+- **Telefon to ta sama strona, krótsza** (`docs/interfejs.md` → „Telefon”).
+  Układ robi CSS po szerokości okna (`@media (max-width: 760px)` w
+  `page_style`), treść — Python po nagłówku żądania (`shell.phone()`).
+  Zawijaj **tylko rzędy kolumn** (`:has(> [data-testid="stColumn"])`) — kontener
+  poziomy musi zostać w linii. Pasek KPI na telefonie idzie po dwa.
+  Nowa strona, która sypie kafle wprost (nie przez `story.frame_page`), oddaje
+  drugi plan do `story.second(label, render, key=...)` — to **funkcja**, bo na
+  telefonie treść nie ma się policzyć, dopóki nikt nie naciśnie „Szczegóły”.
+  `?layout=phone` / `?layout=wide` wymusza układ do przeglądu.
+- Komponenty JS obsługują **zdarzenia wskaźnika, nie myszy**: `onmousemove`
+  nigdy nie odpala na telefonie. Żaden handler odczytu nie woła
+  `preventDefault` — palec, który zaczął na wykresie, musi przewinąć stronę.
 - Streamlit trzyma DOM między rerunami — animacje grają tylko przy wejściu;
   `prefers-reduced-motion` wyłącza wszystko.
 - Pułapki CSS: bloki markdown mają `margin-bottom: -1rem` (zerowane dla

@@ -248,6 +248,59 @@ _STYLE = """
 
   /* ---- "Dalej": words with an arrow, no boxes ------------------------------ */
   .st-key-guide_next {margin-top: 0.8rem !important; padding-top: 0.6rem !important; border-top: 0 !important; gap: 1.6rem !important;}
+  /* ---- narrow screens: the phone layout -----------------------------------
+     Streamlit columns do not wrap by themselves. A bento row of four stays
+     four at 360 px -- 68 px a tile, which is what "it goes to pieces on the
+     phone" actually is. Here every row of columns wraps and a column takes the
+     whole width; a KPI strip is the exception and goes two by two, because four
+     full-width numbers are a screen of scrolling for four numbers. The house
+     rule "KPIs always four" is about the strip having four tiles, not about
+     them standing in one line.
+
+     The switch is the viewport, not the device, so a narrow desktop window gets
+     the same layout -- that is how this is checked without a phone in hand.
+     *What* a phone is shown instead is a separate question, decided in Python
+     (``shell.phone``, ``story.second``): CSS can only move things, and the
+     point on a phone is to render less, not to hide more. */
+  @media (max-width: 760px) {
+    .block-container {max-width: none !important;
+        padding: 0.2rem 0.95rem 2.4rem 0.95rem !important;}
+    /* Rows of columns only: a horizontal container (the tile header, the top
+       line) holds elements, not stColumn, and must keep standing in a line. */
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]) {flex-wrap: wrap !important;}
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]) > [data-testid="stColumn"] {
+        flex: 1 1 100% !important; width: 100% !important; min-width: 0 !important;}
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [class*="st-key-kpi_"])
+        > [data-testid="stColumn"] {flex: 1 1 38% !important; width: auto !important;}
+    /* Stacked, the column stagger would run down the page twice (once per row,
+       once per column) and the last tile would wait 0.6 s. One axis is enough. */
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {--col-delay: 0ms;}
+
+    h1 {font-size: 1.35rem !important;}
+    h2 {font-size: 1rem !important; margin-top: 1.5rem !important;}
+    .story-h {font-size: 1.5rem !important; line-height: 1.16 !important; max-width: none;}
+    .story-sub {max-width: none;}
+    [class*="st-key-kpi_"] [data-testid="stMetricValue"] {font-size: 1.3rem;}
+    [class*="st-key-wgt_"], [class*="st-key-kpi_"], [class*="st-key-pnl_"] {padding-left: 0; padding-right: 0;}
+
+    .st-key-topbar {flex-wrap: wrap !important; gap: 0.1rem 0.9rem !important;}
+    /* "stretch" in a wrapping line would push the right-hand half onto a row of
+       its own; on a phone the top line is words that flow. */
+    .st-key-topbar [data-testid="stSpacer"] {display: none !important;}
+    [data-testid="stButtonGroup"] > div {gap: 0.7rem !important;}
+    .st-key-guide_next {gap: 0.9rem !important;}
+
+    /* The globe still bleeds past the text, by the page padding, not by 3.5rem. */
+    .st-key-globe_stage {margin: 0 -0.95rem;}
+    /* Details are the whole screen: a dialog inset on a phone is a letterbox. */
+    [data-testid="stDialog"] div[role="dialog"] {width: 100vw !important; max-height: 100vh !important;
+        border-radius: 0 !important;}
+  }
+
+  /* ---- the loop as a line of stages (story.loop_compact, phones only) ------ */
+  .st-key-loopc {flex-wrap: wrap !important; gap: 0.1rem 1rem !important; margin: 0.1rem 0 0.2rem 0;}
+  .st-key-loopc [data-testid="stPopover"] button p {font-size: 0.8rem;}
+  .lpc-v {font-variant-numeric: tabular-nums;}
 </style>
 """
 
@@ -276,6 +329,68 @@ def page_style(mode: str = "light") -> str:
     for token, value in tokens.items():
         style = style.replace(token, value)
     return style
+
+
+# ---------------------------------------------------------------- which layout
+
+# Two layouts, not two apps. The *arrangement* is settled in CSS by the
+# viewport (the media query above), so a narrow desktop window behaves like a
+# phone and nothing has to be guessed. This decides the other half: *what gets
+# rendered at all*. A phone screen holds roughly the headline, four numbers and
+# one chart before the fold, and the whole page on a phone should be that -- the
+# rest moved behind "Szczegóły" (``story.second``), not merely pushed down.
+#
+# Only the server can skip rendering, and the only thing the server knows about
+# the screen is the request. ``st.context.headers`` is free (no component, no
+# rerun, no second paint); a viewport width measured in the browser would arrive
+# one rerun late and the first paint would still be the desktop page.
+LAYOUTS = ("phone", "wide")
+_LAYOUT_KEY = "layout_choice"
+# Hand-held by name. Android tablets send "Android" without "Mobile", and an
+# iPad reports itself as a Mac -- both are wide screens, and both are right to
+# get the whole dashboard.
+_HANDHELD = ("iphone", "ipod", "windows phone", "iemobile", "blackberry", "opera mini")
+
+
+def phone_ua(agent: str) -> bool:
+    """Is this user agent a phone? (Pure, so it is testable without a server.)"""
+    ua = (agent or "").lower()
+    if "ipad" in ua or "tablet" in ua:
+        return False
+    if any(name in ua for name in _HANDHELD):
+        return True
+    return "android" in ua and "mobile" in ua
+
+
+def _user_agent() -> str:
+    try:
+        return st.context.headers.get("User-Agent") or ""
+    except Exception:  # no request in scope (a CLI, a test, a bare rerun)
+        return ""
+
+
+def layout() -> str:
+    """``"phone"`` or ``"wide"`` -- which page this visitor gets.
+
+    ``?layout=phone`` / ``?layout=wide`` wins and is remembered for the tab: the
+    phone page can be opened on a desktop (how it is reviewed), and a phone can
+    ask for the whole dashboard when that is what it came for.
+    """
+    try:
+        asked = st.query_params.get("layout")
+        if asked in LAYOUTS:
+            st.session_state[_LAYOUT_KEY] = asked
+        chosen = st.session_state.get(_LAYOUT_KEY)
+    except Exception:
+        chosen = None
+    if chosen in LAYOUTS:
+        return chosen
+    return "phone" if phone_ua(_user_agent()) else "wide"
+
+
+def phone() -> bool:
+    """Shorthand for ``layout() == "phone"``."""
+    return layout() == "phone"
 
 
 # Activity tables: the warehouse field, its header in the interface language,
