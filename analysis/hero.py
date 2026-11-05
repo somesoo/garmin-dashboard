@@ -596,15 +596,20 @@ def build(today: dt.date, *, runs: pd.DataFrame, activities: pd.DataFrame, daily
     facts = sorted((f for f in facts if f), key=lambda f: f["priority"])
 
     night, week = _night(daily, today)
-    suffix = ""
+    # The night joins the headline only as "today, after the night"; a past run
+    # gets it as a sentence of its own, or it would read as the night before that run.
+    suffix = aside = ""
     if night is not None and len(week) >= 3:
         hours = float(night["sleep_h"])
         if hours <= week["sleep_h"].min():
             suffix = tr(pl=" — po najkrótszej nocy tygodnia", en=" — after the shortest night of the week")
+            aside = tr(pl=" Ostatnia noc najkrótsza w tygodniu.", en=" Last night was the shortest of the week.")
         elif hours >= week["sleep_h"].max():
             suffix = tr(pl=" — po najdłuższej nocy tygodnia", en=" — after the longest night of the week")
+            aside = tr(pl=" Ostatnia noc najdłuższa w tygodniu.", en=" Last night was the longest of the week.")
         else:
             suffix = tr(pl=f" — po {_hm(hours)} snu", en=f" — after {_hm(hours)} of sleep")
+            aside = tr(pl=f" Ostatnia noc: {_hm(hours)} snu.", en=f" Last night: {_hm(hours)} of sleep.")
     if today_run:
         headline = tr(pl=f"Dziś <em>{_dec(run['distance_km'], 2)} km</em> w {_pace(run['pace_min_km'])}/km{suffix}.",
                       en=f"Today <em>{_dec(run['distance_km'], 2)} km</em> at {_pace(run['pace_min_km'])}/km{suffix}.")
@@ -617,8 +622,8 @@ def build(today: dt.date, *, runs: pd.DataFrame, activities: pd.DataFrame, daily
             state = tr(pl="przed biegiem", en="before the run")
         elif run is not None:
             when = pd.Timestamp(run["start_local"])
-            headline = tr(pl=f"Ostatni bieg: <em>{_weekday(when)}, {_dec(run['distance_km'], 1)} km</em>{suffix}.",
-                          en=f"Last run: <em>{_weekday(when)}, {_dec(run['distance_km'], 1)} km</em>{suffix}.")
+            headline = tr(pl=f"Ostatni bieg: <em>{_weekday(when)}, {_dec(run['distance_km'], 1)} km</em>.{aside}",
+                          en=f"Last run: <em>{_weekday(when)}, {_dec(run['distance_km'], 1)} km</em>.{aside}")
             state = ""
         else:
             headline = tr(pl=f"Dzień w faktach{suffix}.", en=f"The day in facts{suffix}.")
