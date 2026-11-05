@@ -55,12 +55,17 @@ def render() -> None:
     story.head("atlas", headline, note)
 
     _hero(activities)
-    left, right = bento.row(2, 2)
-    with left:
-        _places(activities)
-    with right:
-        _sports()
-    log()
+
+    def rest() -> None:
+        left, right = bento.row(2, 2)
+        with left:
+            _places(activities)
+        with right:
+            _sports()
+        log()
+
+    story.second(i18n.tr(pl="miejsca, sporty, dziennik aktywności", en="places, sports, the activity log"),
+                 rest, key="atlas_rest")
 
 
 def _hero(activities: pd.DataFrame) -> None:

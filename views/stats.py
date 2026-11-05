@@ -9,6 +9,7 @@ import streamlit as st
 from ui import bento
 from core import i18n
 from ui import shell
+from ui import story
 from ui import theme as tz
 
 # analytics.weekday_effects stores English weekday names, Monday first.
@@ -38,12 +39,27 @@ def render() -> None:
     bento.stat(columns[3], tr(pl="Dni w analizie (max n)", en="Days analysed (max n)"),
                f"{int(corr['n'].max())}" if not corr.empty else "—", key="n")
 
+    def rest() -> None:
+        if shell.phone():
+            _acf()
+            _weekdays()
+            _significant(significant)
+            _changepoints(points)
+            return
+        _acf()
+        _weekdays()
+
+    if shell.phone():
+        _correlations(corr)
+        story.second(tr(pl="autokorelacja, dni tygodnia, istotne pary, punkty zmiany",
+                        en="autocorrelation, weekdays, significant pairs, change points"), rest, key="stats_rest")
+        return
+
     left, right = bento.row(2, 2)
     with left:
         _correlations(corr)
     with right:
-        _acf()
-        _weekdays()
+        rest()
 
     left, right = bento.row(2, 2)
     with left:

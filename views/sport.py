@@ -17,6 +17,7 @@ from ui import bento
 from core import i18n
 from ui import routing
 from ui import shell
+from ui import story
 from ui import theme as tz
 from running import store as run_store
 from sport import catalog, readiness, recommend, store, text, variety
@@ -75,11 +76,12 @@ def render() -> None:
                       en=f"The last night in the data is {state['stale_days']} days old — readiness counts only the "
                          "load. Sync the watch."))
 
-    left, right = bento.row(2, 2)
-    with left, bento.tile(tr(pl="Co dziś", en="What today"), rows=2, key="sport_picks",
-                          terms=["sport_pick", "sport_conditions"], caption=text.level_advice(state["level"])):
-        _picks(chosen, planned)
-    with right:
+    def picks_tile() -> None:
+        with bento.tile(tr(pl="Co dziś", en="What today"), rows=2, key="sport_picks",
+                        terms=["sport_pick", "sport_conditions"], caption=text.level_advice(state["level"])):
+            _picks(chosen, planned)
+
+    def parts_tiles() -> None:
         with bento.tile(tr(pl="Z czego ta liczba", en="What the number is made of"), key="sport_parts",
                         terms=["sport_readiness"]):
             _parts(state)
@@ -87,18 +89,46 @@ def render() -> None:
                         terms=["body_systems"], caption=_systems_note(state["systems"])) as t:
             _systems(t, state["systems"])
 
+    def trend_tile() -> None:
+        with bento.tile(tr(pl="Gotowość, 90 dni", en="Readiness, 90 days"), key="sport_trend",
+                        terms=["sport_readiness"], how=tr(
+                            pl="Kropki to dni, linia to średnia 7 d; pas 52–68 to „umiarkowanie”, nad nim dzień "
+                               "na mocny trening, pod nim na spokojny.",
+                            en="Dots are days, the line is the 7-day mean; the 52–68 band is “moderate”, above it "
+                               "a day for hard training, below it an easy one.")) as t:
+            _trend(t, trend)
+
+    def profile_tile() -> None:
+        with bento.tile(tr(pl="Czego brakowało w 28 dniach", en="What the last 28 days lacked"),
+                        key="sport_profile", terms=["quality_mix"],
+                        caption=_profile_note(result["profile"])) as t:
+            _profile(t, result["profile"])
+
+    if shell.phone():
+        picks_tile()
+
+        def rest() -> None:
+            parts_tiles()
+            trend_tile()
+            profile_tile()
+            _conditions(available, result["skipped"])
+
+        story.second(tr(pl="z czego ta liczba, zmęczenie układów, gotowość w czasie, warunki",
+                        en="what the number is made of, fatigue by system, readiness over time, conditions"),
+                     rest, key="sport_rest")
+        return
+
     left, right = bento.row(2, 2)
-    with left, bento.tile(tr(pl="Gotowość, 90 dni", en="Readiness, 90 days"), key="sport_trend",
-                          terms=["sport_readiness"], how=tr(
-                              pl="Kropki to dni, linia to średnia 7 d; pas 52–68 to „umiarkowanie”, nad nim dzień "
-                                 "na mocny trening, pod nim na spokojny.",
-                              en="Dots are days, the line is the 7-day mean; the 52–68 band is “moderate”, above it "
-                                 "a day for hard training, below it an easy one.")) as t:
-        _trend(t, trend)
-    with right, bento.tile(tr(pl="Czego brakowało w 28 dniach", en="What the last 28 days lacked"),
-                           key="sport_profile", terms=["quality_mix"],
-                           caption=_profile_note(result["profile"])) as t:
-        _profile(t, result["profile"])
+    with left:
+        picks_tile()
+    with right:
+        parts_tiles()
+
+    left, right = bento.row(2, 2)
+    with left:
+        trend_tile()
+    with right:
+        profile_tile()
 
     _conditions(available, result["skipped"])
 

@@ -153,6 +153,79 @@ Zasady układu, które trzymają spójność:
 - **Dane tylko przez `shell.table/query/daily/clip`** — cache jest kluczowany
   znacznikiem builda, więc przebudowa tabel sama unieważnia widok.
 
+### Telefon: ten sam dashboard, krótsza strona (2026-11-05)
+
+Dashboard da się zainstalować na ekranie telefonu jako osobna aplikacja
+(`ui/webapp.py`, `docs/DOSTEP.md`) — i wtedy jest to **cała** strona, nie
+widżet spod `/api/app/`. Żeby to miało sens na 360 px, działają dwa osobne
+mechanizmy. Rozdzielenie jest celowe:
+
+| | co decyduje | gdzie | czego dotyczy |
+|---|---|---|---|
+| **układ** | szerokość okna (`@media (max-width: 760px)`) | `shell.page_style` | jak rzeczy **stoją** |
+| **treść** | nagłówek żądania (`shell.phone()`) | `story.second` w widokach | co się w ogóle **rysuje** |
+
+**Dlaczego nie jeden.** Streamlitowe kolumny **nie zawijają się same** — rząd
+bento z czterech kafli zostaje czterema i przy 360 px daje 68 px na kafel. To
+właśnie było „rozjeżdża się”. Naprawia to CSS i tylko CSS, bo przeglądarka zna
+szerokość, a serwer nie. Ale CSS umie wyłącznie przestawiać: kafel schowany
+`display: none` jest nadal policzony i wysłany, a na telefonie chodzi o to, żeby
+**mniej rysować**, nie żeby więcej ukrywać. Decyzję „czego nie licz” może podjąć
+tylko Python, a jedyne, co serwer wie o ekranie, jest w żądaniu —
+`st.context.headers` (bez komponentu, bez reruna, bez drugiego malowania).
+Szerokość zmierzona w przeglądarce przyszłaby o jeden rerun za późno, a pierwsze
+malowanie byłoby i tak stroną na biurko.
+
+Reguły układu (blok `@media` w `page_style`):
+
+- Zawijają się **tylko rzędy kolumn** — selektor ma
+  `:has(> [data-testid="stColumn"])`. Kontener poziomy (nagłówek kafla,
+  górna linia) to ten sam `stHorizontalBlock`, a on musi zostać w jednej linii.
+  Test tego pilnuje (`tests/test_phone.py`).
+- Kolumna bierze całą szerokość, **z jednym wyjątkiem: pasek KPI idzie po dwa**
+  (`flex: 1 1 38%`). Zasada „KPI zawsze po 4” mówi o czterech kaflach w pasku,
+  nie o czterech w jednej linii — cztery liczby jedna pod drugą to ekran
+  przewijania na cztery liczby.
+- Stagger kolumn jest zerowany (`--col-delay: 0ms`): po spłaszczeniu obie osie
+  opóźnienia biegną w dół strony i ostatni kafel czekałby ponad pół sekundy.
+- Glob wychodzi poza tekst o padding strony, nie o 3,5rem; „Szczegóły” to pełny
+  ekran (dialog z marginesem na telefonie to listwa).
+
+Reguły treści:
+
+- `story.second(label, render, key=...)` to **jedyna dźwignia**, jakiej strona
+  używa, żeby być stroną na telefon. Nad zgięciem zostaje to, co odpowiada na
+  pytanie strony — nagłówek, cztery liczby, jeden wykres; wszystko inne idzie do
+  `second`. Na biurku nic się nie zmienia (`render()` w miejscu), na telefonie
+  ląduje za „Szczegóły” i **nie jest liczone, dopóki nikt nie naciśnie** —
+  dlatego bierze funkcję, a nie blok `with`.
+- Pętla pod nagłówkiem zamienia się w linię „chipów”
+  (`story.loop_compact`): etap + jego liczba, strony w popoverze, bieżący etap
+  jako `type="primary"`, czyli z niebieską linią jak każdy wybrany element.
+  Pełna pętla stacknięta pod nagłówkiem to dwanaście słów nad wykresem.
+- Górna linia zostawia strony codzienne i Laboratorium; zakres, język i
+  pobieranie — ustawienia, do których zagląda się raz — schodzą pod „Widok”.
+- Stron z `story.frame_page` (*Regeneracja*, *Sen*, *Prognoza*, *Fizjologia*,
+  *Bieganie*, *Plan*) **nie trzeba ruszać**: nagłówek + hero + „Szczegóły” jest
+  już krótką stroną. `second` dostały te, które sypały kafle wprost na stronę:
+  *Dziś*, *Sport*, *Obciążenie biegowe*, *Statystyka*, *Historia*.
+- *Dzień* (strona startowa, czyli `start_url` ikony) ma własny tryb wąski
+  w komponencie od początku: mapa na górze, fakty listą pod nią.
+
+`?layout=phone` i `?layout=wide` wymuszają wybór i zostają zapamiętane na
+zakładkę — tak się ten układ przegląda bez telefonu w ręku i tak telefon może
+poprosić o całość. Tablety (Android bez „Mobile”, iPad) dostają całość.
+
+**Wykres główny czyta się palcem.** `herochart` miał tylko `onmousemove`, więc
+na telefonie był obrazkiem, z którego nie dało się odczytać ani jednej wartości.
+Teraz zdarzenia wskaźnika: dotknięcie czyta dzień pod palcem, przeciągnięcie
+przesuwa kursor, mysz nadal czyta na hover. Nic nie woła `preventDefault` —
+palec, który zaczął na wykresie, musi dalej przewijać stronę. Odczyt zostaje na
+ekranie po podniesieniu palca (palec nie ma „leave”); czyści go dotknięcie poza
+wykresami. Prostokąt scenki jest mierzony w chwili odczytu, nie przy renderze —
+między jednym a drugim strona się przewija, a dymek postawiony według starego
+prostokąta ląduje poza wykresem.
+
 ## System wykresów (`ui/theme.py`)
 
 Każda figura w dashboardzie powstaje przez buildery z `ui/theme.py`. Nie dodawaj

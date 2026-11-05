@@ -54,6 +54,18 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
         obejrzane w przeglądarce na 280/320/360/412/600/740/768/1024/1280 i w poziomie.
   - [ ] Obejrzeć na prawdziwym S23 i iPhonie (przeglądarka to nie zegarkowy DPI
         ani pasek systemowy).
+- [x] Dashboard (nie widżet) na telefonie: układ po szerokości okna
+      (`@media (max-width: 760px)` w `shell.page_style` — rzędy kolumn zawijają się,
+      KPI po dwa) i treść po nagłówku żądania (`shell.phone`, `story.second` —
+      drugi plan za „Szczegóły”, nieliczony, dopóki nikt nie naciśnie). `Dziś`,
+      `Sport`, `Obciążenie`, `Statystyka`, `Historia` skrócone; przewodnik na telefonie
+      w trzech liniach; `herochart` czyta się palcem (zdarzenia wskaźnika).
+      Obejrzane w przeglądarce w ramce 360 i 412 px: zero przewijania w poziomie,
+      KPI 2×2, układ na biurko bez zmian. `?layout=phone|wide` wymusza.
+  - [ ] Obejrzeć na prawdziwym S23 (ikona z ekranu, bez paska adresu).
+  - [ ] Rozróżnić obie ikony na ekranie telefonu: pełny dashboard i widżet spod
+        `/api/app/` mają ten sam `short_name` („Dashboard”) i te same pliki ikon,
+        więc po instalacji nie da się ich odróżnić.
 - [x] 6a. Prawa osoby na stronie Konto: archiwum wszystkich swoich danych (bez
       sekretów: hashy kluczy, tokenów Garmina, cache) i usunięcie wszystkiego po wpisaniu
       nazwy; `python -m core.tenant remove <id> --yes` usuwa też wpis z rejestru.

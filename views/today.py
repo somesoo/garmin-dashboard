@@ -61,31 +61,64 @@ def render() -> None:
                       en=f"Last night in the data: {row['day']:%d.%m} ({stale} days ago) — sync the watch and run "
                          "an update before you trust the decision below."))
 
-    left, right = bento.row(2, 2)
-    with left:
+    # The tiles as their own small functions: the phone page needs them in a
+    # different order from the grid (the decision first and alone, the rest
+    # behind "Szczegóły"), and a tile written twice is a tile that drifts.
+    def decision_tile() -> None:
         with bento.tile(tr(pl="Trening na dziś", en="Today's session"), key="today_decision",
                         terms=["today_decision", "run_kind"]):
             _decision(active, suggestion, today)
+
+    def load_tile() -> None:
         with bento.tile(tr(pl="Obciążenie", en="Load"), key="today_load", terms=["run_ratio", "quality_sessions"]) as t:
             _load(t, suggestion)
-    with right, bento.tile(i18n.page("regeneracja"), rows=2, key="today_recovery", terms=["hrv", "deviation"]) as t:
-        _recovery(t, days, suggestion)
 
-    with bento.tile(tr(pl="Ten tydzień", en="This week"), key="today_week", caption=_week_note(active)):
-        if frame.empty:
-            st.caption(tr(pl="Brak tabel biegowych.", en="No running tables."))
-        else:
-            rc.week_strip(active, frame, today)
+    def recovery_tile() -> None:
+        with bento.tile(i18n.page("regeneracja"), rows=2, key="today_recovery", terms=["hrv", "deviation"]) as t:
+            _recovery(t, days, suggestion)
 
-    left, middle, right = bento.row(2, 1, 1)
-    with left, bento.tile(tr(pl="Prognoza", en="Forecast"), key="today_forecast",
-                          terms=["realistic", "interval80"]) as t:
-        _forecast(t, result, active)
-    with middle, bento.tile(tr(pl="Poza bieganiem", en="Beyond running"), key="today_sport",
-                            terms=["sport_readiness", "sport_pick"]) as t:
-        _sport(t, today)
-    with right, bento.tile(tr(pl="Ostatnie biegi", en="Recent runs"), key="today_recent", terms=["run_kind"]):
-        _recent(frame)
+    def week_tile() -> None:
+        with bento.tile(tr(pl="Ten tydzień", en="This week"), key="today_week", caption=_week_note(active)):
+            if frame.empty:
+                st.caption(tr(pl="Brak tabel biegowych.", en="No running tables."))
+            else:
+                rc.week_strip(active, frame, today)
+
+    def outlook() -> None:
+        left, middle, right = bento.row(2, 1, 1)
+        with left, bento.tile(tr(pl="Prognoza", en="Forecast"), key="today_forecast",
+                              terms=["realistic", "interval80"]) as t:
+            _forecast(t, result, active)
+        with middle, bento.tile(tr(pl="Poza bieganiem", en="Beyond running"), key="today_sport",
+                                terms=["sport_readiness", "sport_pick"]) as t:
+            _sport(t, today)
+        with right, bento.tile(tr(pl="Ostatnie biegi", en="Recent runs"), key="today_recent", terms=["run_kind"]):
+            _recent(frame)
+
+    if shell.phone():
+        # The morning answer and nothing else: the headline already said the
+        # decision, the four numbers say what it was made of, and this tile has
+        # the buttons that act on it. Everything below is why, not what.
+        decision_tile()
+
+        def rest() -> None:
+            load_tile()
+            recovery_tile()
+            week_tile()
+            outlook()
+
+        story.second(tr(pl="obciążenie, regeneracja, tydzień, prognoza, inne sporty",
+                        en="load, recovery, the week, the forecast, other sports"), rest, key="dzis_rest")
+        return
+
+    left, right = bento.row(2, 2)
+    with left:
+        decision_tile()
+        load_tile()
+    with right:
+        recovery_tile()
+    week_tile()
+    outlook()
 
 
 def _headline(suggestion: dict | None, today: dt.date) -> str:

@@ -9,6 +9,7 @@ from ui import bento
 from core import i18n
 from ui import routing
 from ui import shell
+from ui import story
 from ui import theme as tz
 from running import plan as planning, sessions
 from views import hubs, run_common as rc
@@ -44,6 +45,33 @@ def render() -> None:
                key="longest_break")
     bento.stat(columns[3], tr(pl="Od ostatniego biegu", en="Since the last run"), days(info["days_since_last"]),
                key="since_last")
+
+    def rest() -> None:
+        if shell.phone():
+            _spikes(frame)
+            _intensity(weeks)
+            _recovery()
+            _breaks(frame, edge)
+            _ratio(frame)
+            return
+        left, right = bento.row(2, 2)
+        with left:
+            _spikes(frame)
+            _intensity(weeks)
+        with right:
+            _recovery()
+            _breaks(frame, edge)
+        (wide,) = bento.row(4)
+        with wide:
+            _ratio(frame)
+
+    # The page's point is the weekly volume; the ramp, the breaks and the ratio
+    # explain it. On a phone the explanation waits to be asked for.
+    if shell.phone():
+        _volume(weeks)
+        story.second(tr(pl="skoki objętości, intensywność, regeneracja, przerwy, iloraz",
+                        en="volume spikes, intensity, recovery, breaks, the ratio"), rest, key="load_rest")
+        return
 
     left, right = bento.row(2, 2)
     with left:
