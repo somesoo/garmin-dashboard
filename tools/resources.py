@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import time
@@ -105,7 +104,7 @@ pages = json.loads(sys.argv[1])
 times = {}
 for name, call in pages.items():
     module = call.split(".")[0]
-    script = f"import sys; sys.path.insert(0, '.')\nimport streamlit as st, shell\nst.markdown(shell.page_style('dark'), unsafe_allow_html=True)\nfrom views import {module}\n{call}\n"
+    script = f"import sys; sys.path.insert(0, '.')\nimport streamlit as st\nfrom ui import shell\nst.markdown(shell.page_style('dark'), unsafe_allow_html=True)\nfrom views import {module}\n{call}\n"
     t0 = time.perf_counter()
     at = AppTest.from_string(script, default_timeout=300).run()
     first = time.perf_counter() - t0
@@ -152,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
                                 "data/tables": round(du(ROOT / "data" / "tables")), ".venv": round(du(ROOT / ".venv"))}}
     if not args.skip_etl:
         report["etl"] = [run_sampled([PY, "etl/load.py"], "etl/load.py"),
-                         run_sampled([PY, "analytics.py"], "analytics.py")]
+                         run_sampled([PY, "etl/analytics.py"], "etl/analytics.py")]
     report["pages"] = pages()
     report["server"] = server()
 

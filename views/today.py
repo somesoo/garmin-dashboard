@@ -12,13 +12,13 @@ import html
 import pandas as pd
 import streamlit as st
 
-import bento
-import guide
-import i18n
-import routing
-import shell
-import story
-import theme as tz
+from ui import bento
+from ui import guide
+from core import i18n
+from ui import routing
+from ui import shell
+from ui import story
+from ui import theme as tz
 from running import coach, plan as planning, store, units
 from sport import catalog, readiness, recommend, store as sport_store
 from views import run_common as rc, sport as sp

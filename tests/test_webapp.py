@@ -4,7 +4,7 @@ import json
 import unittest
 from pathlib import Path
 
-import webapp
+from ui import webapp
 
 PWA = Path(__file__).resolve().parent.parent / "pwa"
 

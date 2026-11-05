@@ -9,8 +9,8 @@ another page opens a given view.
 
 from __future__ import annotations
 
-import bento
-import i18n
+from ui import bento
+from core import i18n
 from views import form, run_load, run_plan, run_races, sport, sport_disciplines
 
 PLAN, LOAD, SPORT = "plan_view", "load_view", "sport_view"
@@ -19,7 +19,7 @@ PLAN, LOAD, SPORT = "plan_view", "load_view", "sport_view"
 def plan() -> None:
     import datetime as dt
 
-    import story
+    from ui import story
     from views import run_common as rc
     tr = i18n.tr
     today = dt.date.today()
@@ -47,10 +47,10 @@ def load() -> None:
     """Fitness and fatigue of every sport as the hero; the two old views behind the details link."""
     import pandas as pd
 
-    import facts
-    import herochart as hc
-    import shell
-    import story
+    from analysis import facts
+    from ui import herochart as hc
+    from ui import shell
+    from ui import story
     from running import plan as planning
     from views import run_common as rc
 
@@ -118,7 +118,7 @@ def _load_views() -> None:
 
 
 def sports() -> None:
-    import story
+    from ui import story
     story.head("sport", sport.headline())
     choice = bento.switch(SPORT, {"today": i18n.view("sport"), "disciplines": i18n.view("dyscypliny")})
     (sport_disciplines if choice == "disciplines" else sport).render()

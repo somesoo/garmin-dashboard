@@ -8,10 +8,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-import bento
-import i18n
-import routing
-import theme as tz
+from ui import bento
+from core import i18n
+from ui import routing
+from ui import theme as tz
 from running import forecast, plan as planning, store, text, units
 from views import hubs, run_common as rc
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import config
+from core import config
 from sport import catalog
 
 def settings_path() -> Path:

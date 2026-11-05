@@ -10,7 +10,7 @@
 #
 # Opcje: --email=adres (certbot bez pytan), --user=nazwa (domyslnie garmin; root
 # dla katalogu w /root), --http-port=N (zwykly HTTP na porcie N, IPv4 i IPv6,
-# bez certyfikatu - gdy HTTPS konczy sie na proxy dostawcy). Opis: DEPLOY.md.
+# bez certyfikatu - gdy HTTPS konczy sie na proxy dostawcy). Opis: docs/DEPLOY.md.
 set -euo pipefail
 
 usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
@@ -97,10 +97,10 @@ as_user "$APP/.venv/bin/pip" install -q -r "$APP/requirements.txt"
 step "Logowanie Google (data/secrets.toml)"
 secrets="$APP/data/secrets.toml"
 if [[ ! -f "$secrets" ]]; then
-    (cd "$APP" && as_user .venv/bin/python -m auth setup "https://$DOMAIN")
+    (cd "$APP" && as_user .venv/bin/python -m core.auth setup "https://$DOMAIN")
 elif ! grep -q "https://$DOMAIN/oauth2callback" "$secrets"; then
     echo "UWAGA: $secrets ma inny redirect_uri niz https://$DOMAIN/oauth2callback."
-    echo "       Popraw go recznie albo: .venv/bin/python -m auth setup https://$DOMAIN --force"
+    echo "       Popraw go recznie albo: .venv/bin/python -m core.auth setup https://$DOMAIN --force"
     echo "       (--force losuje nowy cookie_secret i kasuje wklejone client_id/secret)."
 else
     echo "Jest, redirect_uri zgadza sie z domena."
@@ -167,10 +167,10 @@ curl -fsS -o /dev/null "https://$DOMAIN/api/health" && echo "https://$DOMAIN: ok
 
 cat <<EOF
 
-Gotowe. Dalej (DEPLOY.md):
+Gotowe. Dalej (docs/DEPLOY.md):
   1. Dane z Maca:   tar do $APP/data (sekcja 4), potem: systemctl restart garmin-dashboard
   2. Google:        Authorised redirect URI = https://$DOMAIN/oauth2callback,
                     client_id/client_secret do $APP/data/secrets.toml, restart uslugi (sekcja 5)
-  3. Osoby:         cd $APP && .venv/bin/python -m tenant list
+  3. Osoby:         cd $APP && .venv/bin/python -m core.tenant list
   4. Aktualizacja:  $APP/deploy/update.sh
 EOF

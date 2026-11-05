@@ -1,7 +1,7 @@
 #!/bin/bash
 # Shortcut entry point on macOS: make sure the local site is up and open it.
 # Data is pulled from the sidebar button or by the server on its own once the
-# last pull is GARMIN_AUTO_FETCH_H hours old (sync.py). Arguments run etl/run.py
+# last pull is GARMIN_AUTO_FETCH_H hours old (core/sync.py). Arguments run etl/run.py
 # in this window first, e.g. ./Dashboard.command --backfill
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -10,7 +10,7 @@ PORT=8501
 URL="http://localhost:$PORT"
 LOG="$HERE/data/streamlit.log"
 # The server stops itself this many minutes after the last tab is closed
-# (lifecycle.py); the next double-click starts it again.
+# (core/lifecycle.py); the next double-click starts it again.
 export GARMIN_IDLE_EXIT_MIN="${GARMIN_IDLE_EXIT_MIN:-5}"
 export GARMIN_AUTO_FETCH_H="${GARMIN_AUTO_FETCH_H:-6}"
 

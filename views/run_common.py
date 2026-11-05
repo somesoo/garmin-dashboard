@@ -15,8 +15,8 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-import i18n
-import shell
+from core import i18n
+from ui import shell
 from running import coach, forecast, plan as planning, segments, sessions, store, text, units, workouts
 
 KIND_ORDER = ["recovery", "easy", "long", "tempo", "threshold", "intervals", "race"]
@@ -266,7 +266,7 @@ def run_columns() -> dict[str, Any]:
 
 def pickable_runs(frame: pd.DataFrame, key: str, height: int | None = None, hint: bool = True) -> None:
     """Run log where clicking a row opens the session page."""
-    import routing
+    from ui import routing
 
     shown = frame.sort_values("start_local", ascending=False).reset_index(drop=True)
     event = st.dataframe(

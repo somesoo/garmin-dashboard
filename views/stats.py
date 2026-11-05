@@ -6,10 +6,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-import bento
-import i18n
-import shell
-import theme as tz
+from ui import bento
+from core import i18n
+from ui import shell
+from ui import theme as tz
 
 # analytics.weekday_effects stores English weekday names, Monday first.
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]

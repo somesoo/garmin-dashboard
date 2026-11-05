@@ -16,8 +16,8 @@ from unittest import mock
 import pandas as pd
 
 import api
-import sync
-import tenant
+from core import sync
+from core import tenant
 from etl import apple, apple_push
 from tests.helpers import people
 

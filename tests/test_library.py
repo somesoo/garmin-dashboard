@@ -506,7 +506,7 @@ class Descriptions(unittest.TestCase):
                                delta=0.06)
 
     def test_strength_lists_every_exercise_of_its_programme(self):
-        import i18n
+        from core import i18n
         from running import text
 
         for lang in ("pl", "en"):

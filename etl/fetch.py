@@ -17,7 +17,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import config  # noqa: E402
+from core import config  # noqa: E402
 
 from garminconnect import (  # noqa: E402
     Garmin,
@@ -264,7 +264,7 @@ def rebuild() -> None:
     # Analytics is a separate step so a modelling failure never costs the
     # fetched data: the base tables are already on disk by this point.
     try:
-        import analytics
+        from etl import analytics
 
         analytics.main()
     except Exception as exc:  # noqa: BLE001 - logged, fetch continues

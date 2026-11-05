@@ -7,12 +7,12 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
-import bento
-import i18n
-import routing
-import shell
-import theme as tz
-import config
+from ui import bento
+from core import i18n
+from ui import routing
+from ui import shell
+from ui import theme as tz
+from core import config
 from running import coach, forecast, garmin_workout as gw, library, plan as planning, store, text, units
 from views import hubs, run_common as rc
 

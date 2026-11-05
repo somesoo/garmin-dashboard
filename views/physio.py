@@ -7,14 +7,14 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-import bento
-import facts
-import herochart as hc
-import glossary
-import i18n
-import shell
-import story
-import theme as tz
+from ui import bento
+from analysis import facts
+from ui import herochart as hc
+from ui import glossary
+from core import i18n
+from ui import shell
+from ui import story
+from ui import theme as tz
 
 
 def render() -> None:

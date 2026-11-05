@@ -47,7 +47,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-import i18n
+from core import i18n
 
 M_PER_DEG = 111_320.0
 STEP_M = 10.0

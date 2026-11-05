@@ -5,11 +5,11 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-import bento
-import i18n
-import routing
-import shell
-import theme as tz
+from ui import bento
+from core import i18n
+from ui import routing
+from ui import shell
+from ui import theme as tz
 from running import plan as planning, segments, sessions, store, units, workouts
 from views import run_common as rc
 
@@ -817,7 +817,7 @@ def _streams(track: pd.DataFrame) -> None:
 
 def _zones(run: pd.Series) -> None:
     tr = i18n.tr
-    import hrzones
+    from running import hrzones
 
     zones = {tr(pl=f"strefa {i}", en=f"zone {i}"): run.get(f"hr_z{i}_s") for i in range(1, 6)}
     cuts = hrzones.edges({"lthr": run.get("zone_lthr"), "vt1": run.get("zone_vt1")}) \

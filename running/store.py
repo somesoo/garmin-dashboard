@@ -21,8 +21,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-import config
-import i18n
+from core import config
+from core import i18n
 from running import text
 
 def root() -> Path:
@@ -279,10 +279,6 @@ def save_plan(payload: dict[str, Any]) -> dict[str, Any]:
 
 def delete_plan(plan_id: str) -> None:
     (plans_dir() / f"{plan_id}.json").unlink(missing_ok=True)
-
-
-def plans_for(race_id: str) -> list[dict[str, Any]]:
-    return [p for p in plans() if p.get("race_id") == race_id]
 
 
 def current_plan() -> dict[str, Any] | None:

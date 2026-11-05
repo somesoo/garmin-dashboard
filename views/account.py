@@ -23,11 +23,11 @@ import pandas as pd
 import streamlit as st
 
 import api
-import bento
-import i18n
-import shell
-import sync
-import tenant
+from ui import bento
+from core import i18n
+from ui import shell
+from core import sync
+from core import tenant
 
 NEW_TOKEN = "devices_new_token"
 
@@ -103,7 +103,7 @@ def _wait_for_data() -> None:
 
 def _profile(person: tenant.User, email: str | None) -> None:
     tr = i18n.tr
-    import auth
+    from core import auth
 
     with bento.panel(tr(pl="Profil", en="Profile"), key="acc_profile",
                      caption=tr(pl=f"Konto Google: {email}" if email else "Bez logowania (jedna osoba na serwerze).",
@@ -424,7 +424,7 @@ def _yours(person: tenant.User) -> None:
 
 def _zones(person: tenant.User) -> None:
     """Heart-rate zones: what they rest on now, and anchors typed in from a test (hrzones.py)."""
-    import hrzones
+    from running import hrzones
     from running import physio
 
     tr = i18n.tr
@@ -455,7 +455,7 @@ def _zones(person: tenant.User) -> None:
 
 
 def _zone_summary(found: dict, measured: dict | None, source: dict[str, str]) -> None:
-    import hrzones
+    from running import hrzones
 
     tr = i18n.tr
     lines = [tr(pl=f"Tętno progowe (LTHR): **{found['lthr']}** bpm — {source[found['lthr_source']]}",
@@ -506,7 +506,7 @@ def _zone_summary(found: dict, measured: dict | None, source: dict[str, str]) ->
 
 
 def _zone_form(manual: dict) -> None:
-    import hrzones
+    from running import hrzones
 
     tr = i18n.tr
     methods = {"lab": tr(pl="laboratorium (wymiana gazowa / mleczan)", en="lab (gas exchange / lactate)"),

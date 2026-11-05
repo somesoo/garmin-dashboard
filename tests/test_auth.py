@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import auth
+from core import auth
 from tests.helpers import people
 
 TWO = {"x": {"identities": ["x@example.com"], "local": True},

@@ -1,6 +1,6 @@
 """Admin: how many people, what the server uses, the state of every warehouse and pull.
 
-Only for a person marked ``admin`` in the registry (``python -m tenant admin
+Only for a person marked ``admin`` in the registry (``python -m core.tenant admin
 <id>``): app.py registers the page for them alone, and ``render`` checks again.
 The numbers come from ``monitor.py``; nothing here reads anyone's health data.
 
@@ -17,11 +17,11 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
-import bento
-import i18n
-import monitor
-import sync
-import tenant
+from ui import bento
+from core import i18n
+from core import monitor
+from core import sync
+from core import tenant
 
 REFRESH_S = 15
 
@@ -218,9 +218,9 @@ def _people(folks: list[dict]) -> None:
         })
     with bento.panel(tr(pl="Osoby", en="People"), key="adm_people_table",
                      caption=tr(pl=f"{len(folks)} w rejestrze (data/users.json). Admina nadaje "
-                                   "`python -m tenant admin <id>` w konsoli serwera.",
+                                   "`python -m core.tenant admin <id>` w konsoli serwera.",
                                 en=f"{len(folks)} in the registry (data/users.json). Admin is granted with "
-                                   "`python -m tenant admin <id>` in the server's shell.")):
+                                   "`python -m core.tenant admin <id>` in the server's shell.")):
         st.dataframe(pd.DataFrame(rows), hide_index=True)
 
 

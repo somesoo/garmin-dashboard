@@ -1,4 +1,4 @@
-# Dashboard na wlasnej domenie przez Caddy (DEPLOY.md, sekcja 6) - prostsza droga
+# Dashboard na wlasnej domenie przez Caddy (docs/DEPLOY.md, sekcja 6) - prostsza droga
 # niz nginx + certbot: Caddy sam pobiera i odnawia certyfikat Let's Encrypt,
 # a WebSocket Streamlita przepuszcza bez dodatkowych linii.
 #
@@ -9,7 +9,7 @@
 # Warunek certyfikatu: rekord DNS (A, a przy IPv6 takze AAAA) domeny wskazuje juz
 # na ten serwer, a porty 80 i 443 sa otwarte.
 #
-# Bez basic auth: kto patrzy, rozstrzyga logowanie Google w aplikacji (auth.py),
+# Bez basic auth: kto patrzy, rozstrzyga logowanie Google w aplikacji (core/auth.py),
 # telefony maja wlasne klucze do /api (api.py).
 
 DOMENA {

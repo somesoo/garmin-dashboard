@@ -24,7 +24,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-import i18n
+from core import i18n
 
 RECOVERY = ("recovery", "rest")
 QUALITY = ("intervals", "threshold", "tempo", "race")

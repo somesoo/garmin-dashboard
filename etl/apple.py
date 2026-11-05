@@ -52,7 +52,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import config  # noqa: E402
+from core import config  # noqa: E402
 from etl import schema  # noqa: E402
 
 Q = "HKQuantityTypeIdentifier"
@@ -577,7 +577,7 @@ def activities(export: Export, hr_rest: float, today: dt.date) -> pd.DataFrame:
                "pace_min_km", "speed_kmh", "avg_hr", "max_hr", "calories", "elevation_gain_m", "route_file",
                "data_source", *WORKOUT_MEANS.values(), "hr_recovery_1min", "cadence"]
     df = pd.DataFrame(rows, columns=columns)
-    import hrzones
+    from running import hrzones
 
     # A maximum typed in from a test (Account) beats the estimate; zones from the thresholds (hrzones).
     hr_max = hrzones.settings().get("hr_max") or hr_max_estimate(df["max_hr"].dropna(), export.birth_date, today)
@@ -794,7 +794,7 @@ def main() -> int:
     pushed = apple_push.pushes()
     if path is None and not pushed:
         print(f"{person.id}: brak eksportu w {exports_dir()} i brak wysyłek z iPhone'a — najpierw "
-              "`python -m etl.apple import <export.zip>` albo Skrót (DOSTEP.md)", flush=True)
+              "`python -m etl.apple import <export.zip>` albo Skrót (docs/DOSTEP.md)", flush=True)
         return 1
     skip = set(load.excluded_nights())
     tables = build(apple_push.combine(([parse(path)] if path else []) + pushed), skip=skip)

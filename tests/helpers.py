@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import tenant  # noqa: E402
+from core import tenant  # noqa: E402
 
 
 def _point_registry(stack: contextlib.ExitStack, base: Path) -> None:

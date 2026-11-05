@@ -7,7 +7,7 @@ in both, or pushed twice, counts once.
 
 Two body formats are understood:
 
-**``garmin-dashboard/1``** -- what the iOS Shortcut sends (DOSTEP.md, "Skrót")::
+**``garmin-dashboard/1``** -- what the iOS Shortcut sends (docs/DOSTEP.md, "Skrót")::
 
     {"format": "garmin-dashboard/1",
      "records":  [{"type": "HeartRate", "start": "2026-11-02T07:00:00+01:00",

@@ -6,15 +6,15 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-import bento
-import facts
-import herochart as hc
-import glossary
-import i18n
-import routing
-import shell
-import story
-import theme as tz
+from ui import bento
+from analysis import facts
+from ui import herochart as hc
+from ui import glossary
+from core import i18n
+from ui import routing
+from ui import shell
+from ui import story
+from ui import theme as tz
 from running import forecast, physio, units
 from views import physio as physio_view, run_common as rc, trends
 
@@ -68,8 +68,6 @@ def _details() -> None:
     frame = rc.guard()
     result = rc.current_forecast() if frame is not None else {}
     tr = i18n.tr
-    vdot = tr(pl=f" Wydolność dziś: VDOT {result['vdot']:.1f}.", en=f" Fitness today: VDOT {result['vdot']:.1f}.") \
-        if result.get("status") == "ok" else ""
     if frame is None:
         return
     if result.get("status") != "ok":

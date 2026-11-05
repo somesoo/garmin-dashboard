@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-import config  # noqa: E402
+from core import config  # noqa: E402
 from etl import schema  # noqa: E402
 
 

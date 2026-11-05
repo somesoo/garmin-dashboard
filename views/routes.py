@@ -11,11 +11,11 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-import bento
-import i18n
-import routing
-import shell
-import theme as tz
+from ui import bento
+from core import i18n
+from ui import routing
+from ui import shell
+from ui import theme as tz
 
 def _colour_choices() -> dict[str, str]:
     tr = i18n.tr

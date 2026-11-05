@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import streamlit as st
 
-import bento
-import db
-import i18n
-import insights as insights_mod
-import shell
-import theme as tz
+from ui import bento
+from core import db
+from core import i18n
+from analysis import insights as insights_mod
+from ui import shell
+from ui import theme as tz
 
 
 def insights() -> None:

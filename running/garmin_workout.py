@@ -19,7 +19,7 @@ import hashlib
 import json
 from typing import Any
 
-import i18n
+from core import i18n
 from running import text
 
 

@@ -20,7 +20,7 @@ import json
 import re
 from typing import Any
 
-import i18n
+from core import i18n
 from running import units
 
 PROSE = ("title", "warmup", "main", "cooldown", "purpose")

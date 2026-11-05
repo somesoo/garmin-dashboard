@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import sync  # noqa: E402
+from core import sync  # noqa: E402
 from etl import fetch  # noqa: E402
 
 

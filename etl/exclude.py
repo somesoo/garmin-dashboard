@@ -19,8 +19,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import config  # noqa: E402
-import i18n  # noqa: E402
+from core import config  # noqa: E402
+from core import i18n  # noqa: E402
 from etl import load  # noqa: E402
 
 

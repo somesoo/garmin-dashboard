@@ -9,7 +9,7 @@ import unittest
 
 import pandas as pd
 
-import i18n
+from core import i18n
 from running import garmin_workout as gw, plan as planning, sessions, store, text
 from tests.test_plan_store_coach import TempStore, fixture
 

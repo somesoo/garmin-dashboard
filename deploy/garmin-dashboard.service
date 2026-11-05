@@ -22,7 +22,7 @@ Environment=HOME=/home/garmin
 # Tokeny osoby ze starym ukladem (root: "." w data/users.json); osoby
 # z wlasnym katalogiem trzymaja je w data/users/<id>/garmin/.
 Environment=GARMIN_TOKENSTORE=/home/garmin/.garminconnect
-# Pobieranie z Garmina: co 6 h dla kazdej osoby z Garminem (sync.py).
+# Pobieranie z Garmina: co 6 h dla kazdej osoby z Garminem (core/sync.py).
 Environment=GARMIN_AUTO_FETCH_H=6
 # API (pushe z iPhone'a, PWA pod /api/app/) - takze przy jednej osobie.
 Environment=GARMIN_API_PORT=8502
@@ -42,7 +42,7 @@ RestartSec=5
 # Pobieranie (etl/run.py) to osobny, odlaczony proces: restart uslugi go nie zabija.
 KillMode=process
 # Liczniki zasobow: `systemctl status` pokazuje wtedy Memory (biezaca i szczyt)
-# i CPU, a `systemd-cgtop` na zywo - patrz DEPLOY.md, sekcja 9.
+# i CPU, a `systemd-cgtop` na zywo - patrz docs/DEPLOY.md, sekcja 9.
 MemoryAccounting=yes
 CPUAccounting=yes
 NoNewPrivileges=true

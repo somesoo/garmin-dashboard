@@ -19,15 +19,15 @@ sys.path.insert(0, str(ROOT))
 
 import streamlit as st  # noqa: E402
 
-import auth  # noqa: E402
-import guide  # noqa: E402
-import i18n  # noqa: E402
-import routing  # noqa: E402
-import shell  # noqa: E402
-import story  # noqa: E402
-import theme  # noqa: E402
-import webapp  # noqa: E402
-import tenant  # noqa: E402
+from core import auth  # noqa: E402
+from ui import guide  # noqa: E402
+from core import i18n  # noqa: E402
+from ui import routing  # noqa: E402
+from ui import shell  # noqa: E402
+from ui import story  # noqa: E402
+from ui import theme  # noqa: E402
+from ui import webapp  # noqa: E402
+from core import tenant  # noqa: E402
 from views import (  # noqa: E402
     account,
     admin,
@@ -77,7 +77,7 @@ def _page(render, url_path: str, icon: str, **kwargs) -> st.Page:
 # (views/hubs.py); detail pages have no entry and are opened from lists.
 PAGES = {
     i18n.group("everyday"): [
-        # The start page: the day in facts around a run (hero.py, hero_component/).
+        # The start page: the day in facts around a run (analysis/hero.py, ui/components/hero/).
         _page(day.render, "dzien", "wb_sunny", default=True),
         _page(today.render, "dzis", "today"),
         _page(hubs.sports, "sport", "sports_gymnastics"),

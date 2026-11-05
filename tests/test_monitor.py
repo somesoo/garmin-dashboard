@@ -9,8 +9,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import monitor
-import tenant
+from core import monitor
+from core import tenant
 from tests import helpers
 
 NOW = dt.datetime(2026, 11, 4, 12, 0)

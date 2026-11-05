@@ -6,14 +6,14 @@ import re
 import unittest
 from pathlib import Path
 
-import glossary
+from ui import glossary
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 class Glossary(unittest.TestCase):
     def test_referenced_terms_exist(self):
-        sources = [*(ROOT / "views").glob("*.py"), ROOT / "shell.py"]
+        sources = [*(ROOT / "views").glob("*.py"), ROOT / "ui" / "shell.py"]
         used = set()
         for path in sources:
             text = path.read_text(encoding="utf-8")

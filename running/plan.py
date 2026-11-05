@@ -65,13 +65,13 @@ from __future__ import annotations
 
 import datetime as dt
 import math
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-import i18n
+from core import i18n
 from running import library, physio, store, text, units, workouts
 from running.sessions import HARD_KINDS
 

@@ -13,11 +13,11 @@ import html
 import pandas as pd
 import streamlit as st
 
-import bento
-import i18n
-import routing
-import shell
-import theme as tz
+from ui import bento
+from core import i18n
+from ui import routing
+from ui import shell
+from ui import theme as tz
 from running import store as run_store
 from sport import catalog, readiness, recommend, store, text, variety
 

@@ -22,7 +22,7 @@ from typing import Any
 
 import pandas as pd
 
-import i18n
+from core import i18n
 from running import forecast, plan as planning
 
 RULES = ("spike", "hard_adjacent", "strength_before_hard", "quality_near_race", "long_near_race")

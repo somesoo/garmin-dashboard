@@ -6,14 +6,14 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-import bento
-import glossary
-import i18n
-import shell
-import facts
-import herochart as hc
-import story
-import theme as tz
+from ui import bento
+from ui import glossary
+from core import i18n
+from ui import shell
+from analysis import facts
+from ui import herochart as hc
+from ui import story
+from ui import theme as tz
 from views import run_common as rc, trends
 
 

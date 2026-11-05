@@ -13,13 +13,13 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-import globe
-import bento
-import i18n
-import routing
-import shell
-import story
-import theme as tz
+from ui import globe
+from ui import bento
+from core import i18n
+from ui import routing
+from ui import shell
+from ui import story
+from ui import theme as tz
 from sport import catalog
 from views import sport as sp
 from views.activities import log

@@ -4,7 +4,7 @@ title Garmin Dashboard
 
 rem Shortcut entry point: make sure the local site is up and open it.
 rem Data is pulled from the sidebar button or by the server on its own once the
-rem last pull is GARMIN_AUTO_FETCH_H hours old (sync.py). Arguments run
+rem last pull is GARMIN_AUTO_FETCH_H hours old (core/sync.py). Arguments run
 rem etl\run.py in this window first, e.g. Dashboard.cmd --backfill
 
 set "HERE=%~dp0"
@@ -13,7 +13,7 @@ set "PYW=%HERE%.venv\Scripts\pythonw.exe"
 set "PORT=8501"
 set "URL=http://localhost:%PORT%"
 rem The server stops itself this many minutes after the last tab is closed
-rem (lifecycle.py); the next double-click starts it again.
+rem (core/lifecycle.py); the next double-click starts it again.
 if not defined GARMIN_IDLE_EXIT_MIN set "GARMIN_IDLE_EXIT_MIN=5"
 if not defined GARMIN_AUTO_FETCH_H set "GARMIN_AUTO_FETCH_H=6"
 

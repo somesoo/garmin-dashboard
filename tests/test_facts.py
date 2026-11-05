@@ -9,8 +9,8 @@ import unittest
 import numpy as np
 import pandas as pd
 
-import facts
-import i18n
+from analysis import facts
+from core import i18n
 
 TODAY = dt.date(2026, 11, 1)
 

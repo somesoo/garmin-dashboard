@@ -20,7 +20,7 @@ Endpoints (``Authorization: Bearer <token>``):
 Tokens: random, shown once, stored only as SHA-256 in ``data/users/<id>/tokens.json``,
 each with a scope. A token opens exactly one person's data. Like Streamlit, the
 API listens on 127.0.0.1 only; ``tailscale serve --set-path /api`` puts it on
-HTTPS next to the dashboard (DOSTEP.md).
+HTTPS next to the dashboard (docs/DOSTEP.md).
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import tenant
+from core import tenant
 
 SCOPES = ("ingest", "read")
 MAX_BODY = 64 * 1024 * 1024  # a day of watch samples is ~1-3 MB; a week's backfill fits too
@@ -120,7 +120,7 @@ def sqlite_export(person: tenant.User) -> tuple[Path, str] | None:
     """The person's tables in one SQLite file, cached per build; (path, etag)."""
     import pandas as pd
 
-    import db
+    from core import db
 
     try:
         state = json.loads(person.state_file.read_text(encoding="utf-8"))
@@ -171,7 +171,7 @@ def build_app():
     from starlette.routing import Mount, Route
     from starlette.staticfiles import StaticFiles
 
-    import sync
+    from core import sync
     from etl import apple_push
 
     def refused() -> JSONResponse:
@@ -235,7 +235,7 @@ def build_app():
 
     def summary_json(request: Request) -> Response:
         """What the phone app shows (summary.py), per language; ETag/304."""
-        import summary
+        from analysis import summary
 
         person = verify(_bearer(request), "read")
         if person is None:

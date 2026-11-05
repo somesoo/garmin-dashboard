@@ -1,4 +1,4 @@
-import i18n
+from core import i18n
 from tests import helpers
 
 # Nothing a test writes may land in the real data/ (tenant.py): every test runs

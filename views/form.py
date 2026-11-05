@@ -5,11 +5,11 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-import bento
-import glossary
-import i18n
-import shell
-import theme as tz
+from ui import bento
+from ui import glossary
+from core import i18n
+from ui import shell
+from ui import theme as tz
 
 
 def render() -> None:

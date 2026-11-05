@@ -9,9 +9,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import glossary
-import glossary_en
-import i18n
+from ui import glossary
+from ui import glossary_en
+from core import i18n
 from tests.helpers import person
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -79,7 +79,7 @@ class Bilingual(unittest.TestCase):
             self.assertIsNone(POLISH.search(" ".join((name, what, why, read))), key)
 
     def test_every_insight_has_an_english_twin(self):
-        import insights
+        from analysis import insights
 
         self.assertTrue(insights.originals())
         for path in insights.originals():

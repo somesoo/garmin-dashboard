@@ -4,7 +4,7 @@ A hero, not a mosaic: the run of the day (or the last one, faded, while today's
 is still ahead) fills the middle, and what happened -- the run's key stretch,
 its stops, last night against the week, the body this morning, the next race,
 a piece of trivia -- is laid out in the free space around the track by the
-browser (``hero_component/``). The facts themselves come from ``hero.py``;
+browser (``ui/components/hero/``). The facts themselves come from ``hero.py``;
 nothing here suggests what to do, that is *Dziś* one entry below.
 
 The component is static, like the globe: the payload is built once per
@@ -22,15 +22,15 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-import hero
-import i18n
-import routing
-import shell
-import theme as tz
+from analysis import hero
+from core import i18n
+from ui import routing
+from ui import shell
+from ui import theme as tz
 from running import store
 from views import hubs, run_common as rc
 
-COMPONENT = Path(__file__).resolve().parent.parent / "hero_component"
+COMPONENT = Path(__file__).resolve().parents[1] / "ui" / "components" / "hero"
 _component = components.declare_component("garmin_hero", path=str(COMPONENT))
 
 

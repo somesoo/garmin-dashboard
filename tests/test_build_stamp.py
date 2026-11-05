@@ -1,7 +1,7 @@
 import json
 import unittest
 
-import config
+from core import config
 from etl import load
 
 

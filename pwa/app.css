@@ -1,5 +1,5 @@
 /* The dashboard on a phone: black ground, flat graphite tiles, one blue accent.
-   No gradients anywhere (CLAUDE.md) -- depth is an edge and spacing. */
+   No gradients anywhere (AGENTS.md) -- depth is an edge and spacing. */
 :root {
   --bg: #000000;
   --tile: #1a1c20;

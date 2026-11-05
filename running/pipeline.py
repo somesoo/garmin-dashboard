@@ -20,7 +20,7 @@ def context(activities: pd.DataFrame, daily: pd.DataFrame) -> dict[str, Any]:
     runs = sessions.select_runs(activities)
     hr_max = physio.robust_hr_max(runs["max_hr"]) if not runs.empty else None
     # A maximum measured in a test (Account -> heart rate zones) beats the one read off the record.
-    import hrzones
+    from running import hrzones
 
     hr_max = hrzones.settings().get("hr_max") or hr_max
     daily = daily.copy() if daily is not None else pd.DataFrame()
@@ -84,8 +84,8 @@ def build(
 
 def rebuild() -> dict[str, int]:
     """Recompute only the running tables from the warehouse (after a race is linked)."""
-    import analytics
-    import db
+    from etl import analytics
+    from core import db
     from etl.load import mark_built, write_table
 
     from running import store

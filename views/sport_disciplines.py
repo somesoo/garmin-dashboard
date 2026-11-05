@@ -5,10 +5,10 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-import bento
-import i18n
-import shell
-import theme as tz
+from ui import bento
+from core import i18n
+from ui import shell
+from ui import theme as tz
 from sport import catalog, text, variety
 from views import sport as sp
 

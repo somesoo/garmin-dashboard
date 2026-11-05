@@ -1,7 +1,7 @@
 """A synthetic Apple Health export shaped like an Apple Watch's -- to build against before the watch arrives.
 
     .venv/bin/python tools/synthetic_watch.py out.zip [--days 180] [--seed 7]
-    .venv/bin/python -m tenant add demo --name "Demo (Apple Watch)" --source apple
+    .venv/bin/python -m core.tenant add demo --name "Demo (Apple Watch)" --source apple
     GARMIN_USER=demo .venv/bin/python -m etl.apple import out.zip
 
 Everything is made up, seeded and labelled (source "Apple Watch (demo)"); it

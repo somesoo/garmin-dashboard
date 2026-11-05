@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-import i18n
+from core import i18n
 
 LEVELS = ["recover", "easy", "moderate", "hard"]
 SYSTEMS = ["impact", "legs", "upper"]

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 
-import tenant
+from core import tenant
 from etl import apple, load, schema
 from tests.helpers import person
 

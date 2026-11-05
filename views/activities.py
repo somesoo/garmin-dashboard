@@ -6,11 +6,11 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-import bento
-import i18n
-import routing
-import shell
-import theme as tz
+from ui import bento
+from core import i18n
+from ui import routing
+from ui import shell
+from ui import theme as tz
 
 COLUMNS = ["start_local", "sport", "name", "location", "distance_km", "duration_min", "pace_min_km", "avg_hr",
            "max_hr", "training_load", "te_aerobic", "te_anaerobic", "best_1k_s", "best_5k_s", "calories",

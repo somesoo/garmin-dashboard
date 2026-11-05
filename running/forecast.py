@@ -55,7 +55,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-import i18n
+from core import i18n
 from running import physio, text, units
 from running.text import HIGH, LOW, MEDIUM
 from running.sessions import HARD_KINDS
@@ -79,17 +79,6 @@ NEAR_MAX_MINUTES = 6.0
 Z80 = 1.2816  # two-sided 80% interval
 GARMIN_COLUMNS = {"5k": "race_5k_s", "10k": "race_10k_s", "hm": "race_hm_s", "m": "race_marathon_s"}
 STEADY_KINDS = ("easy", "long", "recovery", "tempo", "threshold")
-
-
-@dataclass
-class Inputs:
-    """Everything the forecast reads, already restricted to <= anchor."""
-
-    runs: pd.DataFrame
-    efforts: pd.DataFrame
-    daily: pd.DataFrame
-    hr_max: float | None
-    anchor: pd.Timestamp
 
 
 @dataclass
@@ -613,12 +602,11 @@ def confidence_reasons(item: DistanceForecast, perf: dict[str, Any] | None) -> l
     return [text for _, text in reasons]
 
 
-# goal_status codes (labels: text.goal_status).
-GOAL_STATUS = ("none", "now", "plan", "steady", "ambitious", "stretch")
-
-
 def goal_status(item: DistanceForecast | None, goal_s: float | None) -> str:
-    """Where a goal time sits against today's forecast and the post-plan target."""
+    """Where a goal time sits against today's forecast and the post-plan target.
+
+    Codes (labels: ``text.goal_status``): none, now, plan, steady, ambitious, stretch.
+    """
     if item is None or goal_s is None:
         return "none"
     if goal_s >= item.realistic_s:
@@ -801,7 +789,7 @@ def backtest(history_frame: pd.DataFrame, efforts: pd.DataFrame) -> pd.DataFrame
 
 
 def _manual_zones() -> dict[str, Any]:
-    import hrzones
+    from running import hrzones
 
     return hrzones.settings()
 

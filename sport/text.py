@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import i18n
+from core import i18n
 from sport import catalog
 
 

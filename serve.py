@@ -23,7 +23,7 @@ import sys
 import time
 from pathlib import Path
 
-import sync
+from core import sync
 
 ROOT = Path(__file__).resolve().parent
 RECORD = ROOT / "data" / "server.json"
@@ -56,8 +56,8 @@ def security_flags(given: list[str]) -> list[str]:
     - no usage statistics leave the browser.
     An option given on the command line wins.
     """
-    import auth
-    import tenant
+    from core import auth
+    from core import tenant
 
     def unset(name: str) -> bool:
         return not any(arg == f"--{name}" or arg.startswith(f"--{name}=") for arg in given)
@@ -80,7 +80,7 @@ def start_api() -> int | None:
     in this process: pushes from iPhones and the warehouse for the apps (api.py)."""
     import threading
 
-    import tenant
+    from core import tenant
 
     port = os.environ.get("GARMIN_API_PORT")
     if not port and len(tenant.users()) < 2:
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     if sys.argv[1:2] == ["--stop-if-stale"]:
         sys.exit(stop_if_stale())
 
-    import lifecycle
+    from core import lifecycle
     from streamlit.web import cli
 
     RECORD.parent.mkdir(parents=True, exist_ok=True)

@@ -7,14 +7,14 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
-import bento
-import facts
-import herochart as hc
-import i18n
-import routing
-import shell
-import story
-import theme as tz
+from ui import bento
+from analysis import facts
+from ui import herochart as hc
+from core import i18n
+from ui import routing
+from ui import shell
+from ui import story
+from ui import theme as tz
 from running import coach, sessions, units
 from views import activities, run_common as rc
 

@@ -5,11 +5,11 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-import bento
-import i18n
-import routing
-import story
-import theme as tz
+from ui import bento
+from core import i18n
+from ui import routing
+from ui import story
+from ui import theme as tz
 from running import store, units, workouts
 from views import run_common as rc
 

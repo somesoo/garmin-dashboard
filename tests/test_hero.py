@@ -8,8 +8,8 @@ import unittest
 
 import pandas as pd
 
-import hero
-import i18n
+from analysis import hero
+from core import i18n
 
 TODAY = dt.date(2026, 11, 1)
 

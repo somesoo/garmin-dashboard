@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import streamlit as st
 
-import bento
-import glossary
-import i18n
+from ui import bento
+from ui import glossary
+from core import i18n
 
 
 def render() -> None:

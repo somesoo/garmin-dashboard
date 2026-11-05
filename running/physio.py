@@ -110,7 +110,7 @@ def training_paces(vdot_value: float | None) -> dict[str, tuple[float, float]]:
 # heart-rate anchors
 
 
-def robust_hr_max(max_hr: Any, recent_days: pd.Series | None = None, rank: int = 3) -> float | None:
+def robust_hr_max(max_hr: Any, rank: int = 3) -> float | None:
     """Maximum heart rate as the ``rank``-th highest recorded run maximum.
 
     Optical sensors produce single spikes (cadence lock, a strap slipping);
@@ -159,12 +159,6 @@ def vo2max_from_hr(speed_ms_value: float, avg_hr: float, hr_max: float, hr_rest:
     if cost <= 3.5:
         return None
     return (cost - 3.5) / reserve + 3.5
-
-
-def hr_band(hr_max: float | None, low_pct: float, high_pct: float) -> str:
-    if hr_max is None:
-        return f"{low_pct:.0%}–{high_pct:.0%} HRmax"
-    return f"{low_pct * hr_max:.0f}–{high_pct * hr_max:.0f} bpm"
 
 
 # --------------------------------------------------------------------------
@@ -248,7 +242,7 @@ def hr_zones(hr_max: float | None, lthr: float | None, vt1: float | None = None,
     estimated from ``hr_max``; E tops just under VT1 (``vt1`` typed in, else
     ~0.91 x LTHR), M runs from VT1 to 94% LTHR. No anchor at all -> no bands.
     """
-    import hrzones
+    from running import hrzones
 
     names = ("E", "recovery", "M", "T", "I")
     out: dict[str, tuple[int, int] | None] = {name: None for name in names}

@@ -7,11 +7,10 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-import bento
-import glossary
-import i18n
-import shell
-import theme as tz
+from ui import bento
+from ui import glossary
+from core import i18n
+from ui import theme as tz
 
 
 def vo2max(view: pd.DataFrame, rows: int = 1) -> None:
@@ -54,10 +53,6 @@ def weight(view: pd.DataFrame) -> None:
         else:
             st.caption(tr(pl="Za mało pomiarów na wykres — waga trafia do Garmina tylko z wagi Bluetooth.",
                           en="Too few measurements for a chart — weight reaches Garmin only from a Bluetooth scale."))
-
-
-def has_weight(view: pd.DataFrame) -> bool:
-    return int(pd.to_numeric(view.get("weight_kg"), errors="coerce").notna().sum()) >= 3
 
 
 def weekly(view: pd.DataFrame) -> None:

@@ -13,10 +13,10 @@ from unittest import mock
 import duckdb
 import pandas as pd
 
-import config
-import db
-import insights
-import tenant
+from core import config
+from core import db
+from analysis import insights
+from core import tenant
 from running import store
 from tests.helpers import people
 

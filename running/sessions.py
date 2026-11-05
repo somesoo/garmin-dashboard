@@ -208,7 +208,7 @@ def _classify_one(
             block_pace = units.pace_from_speed(block["active_speed"])
             where = dict(km=block["active_m"] / 1000, pace=block_pace)
             if "T" in paces:
-                t_fast, t_slow = paces["T"]
+                t_slow = paces["T"][1]
                 if block_pace <= t_slow * 1.02:
                     return "threshold", reason_code("block_threshold", **where), HIGH
                 if "M" in paces and block_pace <= paces["M"][1] * 1.03:

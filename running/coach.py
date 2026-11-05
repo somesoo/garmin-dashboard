@@ -23,7 +23,7 @@ from typing import Any
 
 import pandas as pd
 
-import i18n
+from core import i18n
 from running import forecast, physio, plan as planning, sessions, store, text, units
 
 LOW_READINESS = ("LOW", "POOR")
@@ -586,7 +586,7 @@ def markdown(data: dict[str, Any]) -> str:
 
 def load_warehouse() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Materialised running tables, typed (for the CLI and the pages)."""
-    import db  # repository root module; imported lazily to keep the package pure
+    from core import db  # repository root module; imported lazily to keep the package pure
 
     runs = db.table("run_sessions")
     efforts = db.table("run_efforts")
@@ -634,7 +634,7 @@ def main(argv: list[str] | None = None) -> int:
     if runs.empty:
         print(tr(pl="Brak tabeli run_sessions — uruchom analytics.py.", en="No run_sessions table — run analytics.py."))
         return 1
-    import db
+    from core import db
 
     data = brief(runs, efforts, daily, plan_id=args.plan, laps=db.table("run_laps"))
     print(json.dumps(data, indent=2, ensure_ascii=False, default=str) if args.json else markdown(data))

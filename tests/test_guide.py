@@ -7,8 +7,8 @@ import re
 import unittest
 from pathlib import Path
 
-import guide
-import i18n
+from ui import guide
+from core import i18n
 from views import hubs
 
 ROOT = Path(__file__).resolve().parent.parent

@@ -8,16 +8,17 @@ from unittest import mock
 
 from streamlit.testing.v1 import AppTest
 
-import auth
-import sync
-import tenant
+from core import auth
+from core import sync
+from core import tenant
 from etl import garmin_auth
 from tests.helpers import people
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = f"""
 import sys; sys.path.insert(0, {str(ROOT)!r})
-import streamlit as st, tenant
+import streamlit as st
+from core import tenant
 st.session_state[tenant.SESSION_KEY] = "y"
 from views import account
 account.render()
@@ -103,7 +104,7 @@ class AccountPage(unittest.TestCase):
 
 SIGNIN = f"""
 import sys; sys.path.insert(0, {str(ROOT)!r})
-import auth
+from core import auth
 auth.gate()
 import streamlit as st
 st.write("INSIDE")

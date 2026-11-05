@@ -4,8 +4,8 @@ import os
 import unittest
 from unittest import mock
 
-import sync
-import tenant
+from core import sync
+from core import tenant
 from etl import run
 from tests.helpers import people, person
 
