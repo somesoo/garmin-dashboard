@@ -121,6 +121,7 @@ function renderSetup(message) {
   document.getElementById("who").textContent = "Dashboard";
   document.getElementById("status").textContent = "";
   const main = document.getElementById("main");
+  painters.length = 0;
   main.replaceChildren();
   const box = el("section", "setup");
   box.append(el("div", "headline", w("setup_title")), el("p", "status", w("setup_text")));
@@ -141,6 +142,7 @@ function renderSetup(message) {
 
 function render(data, warning) {
   const main = document.getElementById("main");
+  painters.length = 0;
   main.replaceChildren();
   document.getElementById("who").textContent = data.name || "Dashboard";
   const status = document.getElementById("status");
@@ -151,14 +153,19 @@ function render(data, warning) {
   if (data.empty) { main.append(el("p", "status", w("no_data"))); return; }
 
   const stories = data.stories || {};
-  if (stories.recovery && stories.recovery.headline) add(main, el("div", "headline")).append(rich(stories.recovery.headline));
-  main.append(el("h2", null, w("today")), todayTiles(data.today || {}));
+  if (stories.recovery && stories.recovery.headline) {
+    add(add(main, el("section", "block hero")), el("div", "headline")).append(rich(stories.recovery.headline));
+  }
+  const today = add(main, el("section", "block"));
+  today.append(el("h2", null, w("today")), todayTiles(data.today || {}));
 
+  const told = el("div", "stories");
   for (const [key, title] of [["recovery", w("recovery")], ["sleep", w("sleep")], ["running", w("running")]]) {
     const story = stories[key];
     if (!story || (!story.headline && !(story.cards || []).length)) continue;
-    main.append(el("h2", null, title));
-    if (key !== "recovery" && story.headline) add(main, el("div", "headline")).append(rich(story.headline));
+    const block = add(told, el("section", "block"));
+    block.append(el("h2", null, title));
+    if (key !== "recovery" && story.headline) add(block, el("div", "headline")).append(rich(story.headline));
     const cards = el("div", "cards");
     for (const card of story.cards || []) {
       const node = el("div", "card");
@@ -167,20 +174,31 @@ function render(data, warning) {
       if (card.text) add(node, el("div", "text")).append(rich(card.text));
       cards.append(node);
     }
-    main.append(cards);
+    block.append(cards);
   }
+  if (told.children.length) main.append(told);
 
   const s = data.series || {};
-  main.append(el("h2", null, w("trends")));
-  if ((s.hrv_last_night || []).some((v) => v !== null)) {
-    main.append(chart(w("hrv_chart"), lineChart(s.day, s.hrv_last_night, s.hrv_last_night_roll7, s.hrv_baseline_low, s.hrv_baseline_high, "ms")));
-  }
-  if ((s.sleep_h || []).some((v) => v !== null)) main.append(chart(w("sleep_chart"), barChart(s.day, s.sleep_h, hm)));
   const weeks = data.weeks || {};
-  if ((weeks.km || []).length) main.append(chart(w("km_chart"), barChart(weeks.week, weeks.km, (v) => `${num(v, 0)} km`)));
+  const figures = el("div", "charts");
+  if ((s.hrv_last_night || []).some((v) => v !== null)) {
+    figures.append(chart(w("hrv_chart"), (width) =>
+      lineChart(width, s.day, s.hrv_last_night, s.hrv_last_night_roll7, s.hrv_baseline_low, s.hrv_baseline_high, "ms")));
+  }
+  if ((s.sleep_h || []).some((v) => v !== null)) {
+    figures.append(chart(w("sleep_chart"), (width) => barChart(width, s.day, s.sleep_h, hm)));
+  }
+  if ((weeks.km || []).length) {
+    figures.append(chart(w("km_chart"), (width) => barChart(width, weeks.week, weeks.km, (v) => `${num(v, 0)} km`)));
+  }
+  if (figures.children.length) {
+    const block = add(main, el("section", "block"));
+    block.append(el("h2", null, w("trends")), figures);
+  }
 
   if ((data.activities || []).length) {
-    main.append(el("h2", null, w("workouts")));
+    const block = add(main, el("section", "block"));
+    block.append(el("h2", null, w("workouts")));
     const list = el("div", "list");
     for (const a of data.activities) {
       const row = el("div", "row");
@@ -193,13 +211,13 @@ function render(data, warning) {
       row.append(left, right);
       list.append(row);
     }
-    main.append(list);
+    block.append(list);
+    main.append(block);
   }
-  const off = el("button", "link", w("disconnect"));
+  const off = el("button", "link off", w("disconnect"));
   off.type = "button";
-  off.style.marginTop = "28px";
   off.onclick = () => { write(STORE.token, null); renderSetup(); };
-  main.append(off);
+  add(main, el("section", "block")).append(off);
 }
 
 function tile(label, value, note, warn) {
@@ -236,6 +254,12 @@ function todayTiles(t) {
 }
 
 // ------------------------------------------------------------------ charts (inline SVG, flat colours)
+//
+// A figure is drawn in CSS pixels: the viewBox equals the box it was measured
+// at, so 11 px type stays 11 px on a 320 px phone and on a 1600 px window --
+// a stretched viewBox would blow the labels up with the box. The figure
+// redraws itself whenever its width changes (rotation, a fold opening, a
+// resized window), at most once per frame.
 
 const SVG = "http://www.w3.org/2000/svg";
 function svg(tag, attrs) {
@@ -243,12 +267,44 @@ function svg(tag, attrs) {
   for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
   return node;
 }
-function chart(caption, figure) {
+
+// Height from width: tall enough to read on a phone, never a square on a
+// tablet. One ratio for every figure, so two charts side by side end level.
+function tall(width) { return Math.round(Math.min(205, Math.max(124, width * 0.42))); }
+
+// The figures on the page right now. render() empties the list, so repainting
+// never reaches a figure that has been replaced, and one window listener
+// serves them all instead of one per chart per render.
+const painters = [];
+const repaint = () => { for (const paint of painters) paint(); };
+window.addEventListener("resize", repaint);
+window.addEventListener("orientationchange", repaint);
+
+function chart(caption, draw) {
   const box = el("div", "chart");
+  const figure = el("div", "figure");
   box.append(figure, el("div", "caption", caption));
-  const gap = el("div"); gap.style.height = "10px";
-  const wrap = el("div"); wrap.append(box, gap);
-  return wrap;
+  let drawn = 0, frame = 0;
+  const paint = () => {
+    frame = 0;
+    const width = Math.round(figure.clientWidth);
+    if (!width || width === drawn) return;         // 0 while off-screen, so it waits
+    drawn = width;
+    const picture = draw(width);
+    picture.setAttribute("aria-label", caption);
+    figure.replaceChildren(picture);
+  };
+  // Re-booking the frame rather than holding a "scheduled" flag: a frame that
+  // never arrives (the tab was hidden when the figure was built) must not lock
+  // the figure out of every later redraw.
+  const soon = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(paint); };
+  if (typeof ResizeObserver === "function") {
+    box.watch = new ResizeObserver(soon);   // an observer nobody holds can be collected
+    box.watch.observe(figure);
+  }
+  painters.push(soon);
+  soon();
+  return box;
 }
 
 function scale(values, pad = 0.08) {
@@ -259,45 +315,51 @@ function scale(values, pad = 0.08) {
   return [lo - span * pad, hi + span * pad];
 }
 
-function lineChart(days, values, smooth, low, high, unit) {
-  const W = 340, H = 150, L = 4, R = 36, T = 8, B = 18;
+function lineChart(W, days, values, smooth, low, high, unit) {
+  const H = tall(W);
+  const L = 2, T = 10, B = 20;
+  const R = Math.round(Math.min(64, Math.max(40, W * 0.14)));   // room for the last value
   const n = days.length;
   const [lo, hi] = scale([...values, ...(low || []), ...(high || [])]);
   const x = (i) => L + (W - L - R) * (n <= 1 ? 0 : i / (n - 1));
   const y = (v) => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
-  const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+  const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img" });
   if (low && high) {
-    let path = "";
     const top = [], bottom = [];
     days.forEach((_, i) => { if (low[i] !== null && high[i] !== null) { top.push([x(i), y(high[i])]); bottom.push([x(i), y(low[i])]); } });
     if (top.length > 1) {
-      path = "M" + top.map((p) => p.join(",")).join("L") + "L" + bottom.reverse().map((p) => p.join(",")).join("L") + "Z";
+      const path = "M" + top.map((p) => p.join(",")).join("L") + "L" + bottom.reverse().map((p) => p.join(",")).join("L") + "Z";
       root.append(svg("path", { d: path, fill: "var(--band)", stroke: "none" }));
     }
   }
-  values.forEach((v, i) => { if (v !== null) root.append(svg("circle", { cx: x(i), cy: y(v), r: 1.8, fill: "rgba(250,250,250,0.35)" })); });
+  // Dots grow with the room each night gets, so 90 nights are neither a smear
+  // nor a scatter of specks.
+  const r = Math.max(1.5, Math.min(3, (W - L - R) / Math.max(n, 1) / 2.2));
+  values.forEach((v, i) => { if (v !== null) root.append(svg("circle", { cx: x(i), cy: y(v), r, fill: "rgba(250,250,250,0.35)" })); });
   if (smooth) {
     const points = smooth.map((v, i) => (v === null ? null : `${x(i)},${y(v)}`)).filter(Boolean);
     if (points.length > 1) root.append(svg("polyline", { points: points.join(" "), fill: "none", stroke: "var(--accent)", "stroke-width": 2 }));
     const last = [...smooth].reverse().find((v) => v !== null);
     if (last !== undefined) {
-      const label = svg("text", { x: W - R + 4, y: y(last) + 4, fill: "var(--text)", "font-size": 11 });
+      const label = svg("text", { x: W - R + 6, y: Math.min(H - B, Math.max(T + 8, y(last) + 4)), fill: "var(--text)", "font-size": 12 });
       label.textContent = `${num(last)} ${unit}`;
       root.append(label);
     }
   }
-  axisDates(root, days, x, H);
+  axisDates(root, days, x, W, H);
   return root;
 }
 
-function barChart(days, values, format) {
-  const W = 340, H = 130, L = 4, R = 4, T = 14, B = 18;
+function barChart(W, days, values, format) {
+  const H = tall(W);
+  const L = 2, R = 2, T = 16, B = 20;
   const n = days.length;
   const real = values.filter((v) => v !== null);
   const hi = Math.max(...real, 1);
-  const width = Math.max(1, (W - L - R) / n - 1.5);
-  const x = (i) => L + (W - L - R) * (i / n);
-  const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+  const slot = (W - L - R) / Math.max(n, 1);
+  const width = Math.max(1, slot - Math.min(4, Math.max(1, slot * 0.18)));
+  const x = (i) => L + slot * i;
+  const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img" });
   values.forEach((v, i) => {
     if (v === null) return;
     const h = (H - T - B) * (v / hi);
@@ -305,19 +367,23 @@ function barChart(days, values, format) {
   });
   const last = [...values].reverse().find((v) => v !== null);
   if (last !== undefined) {
-    const label = svg("text", { x: W - R, y: 11, fill: "var(--text)", "font-size": 11, "text-anchor": "end" });
+    const label = svg("text", { x: W - R, y: 12, fill: "var(--text)", "font-size": 12, "text-anchor": "end" });
     label.textContent = format(last);
     root.append(label);
   }
-  axisDates(root, days, (i) => x(i) + width / 2, H);
+  axisDates(root, days, (i) => x(i) + width / 2, W, H);
   return root;
 }
 
-function axisDates(root, days, x, H) {
+// Three dates on a phone, five once there is room for them to stay apart.
+function axisDates(root, days, x, W, H) {
   if (!days || days.length < 2) return;
-  for (const i of [0, Math.floor((days.length - 1) / 2), days.length - 1]) {
-    const label = svg("text", { x: x(i), y: H - 4, fill: "var(--muted)", "font-size": 10,
-      "text-anchor": i === 0 ? "start" : i === days.length - 1 ? "end" : "middle" });
+  const last = days.length - 1;
+  const ticks = W >= 520 ? 5 : 3;
+  const at = [...new Set(Array.from({ length: ticks }, (_, k) => Math.round(last * k / (ticks - 1))))];
+  for (const i of at) {
+    const label = svg("text", { x: x(i), y: H - 5, fill: "var(--muted)", "font-size": 11,
+      "text-anchor": i === 0 ? "start" : i === last ? "end" : "middle" });
     label.textContent = new Date(days[i]).toLocaleDateString(state.lang === "pl" ? "pl-PL" : "en-GB", { day: "numeric", month: "short" });
     root.append(label);
   }
@@ -327,8 +393,8 @@ function axisDates(root, days, x, H) {
 
 function chrome() {
   document.documentElement.lang = state.lang;
-  document.getElementById("refresh").textContent = w("refresh");
-  document.getElementById("lang").textContent = state.lang === "pl" ? "EN" : "PL";
+  document.querySelector("#refresh span").textContent = w("refresh");
+  document.querySelector("#lang span").textContent = state.lang === "pl" ? "EN" : "PL";
 }
 
 (function pairFromLink() {
