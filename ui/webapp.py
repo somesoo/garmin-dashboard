@@ -9,7 +9,15 @@ on every run, before sign-in (so the sign-in screen can be installed too):
   ``display: standalone``) is served by the API next to the phone app, at
   ``/api/app/dashboard.webmanifest`` -- same origin through the proxy, no new route;
 - ``apple-mobile-web-app-capable`` + a touch icon for iOS, which reads them from
-  the page when "Add to Home Screen" is tapped.
+  the page when "Add to Home Screen" is tapped;
+- a service worker (``pwa/dashboard-sw.js``) registered for scope ``/``.
+
+**The worker is what buys the window.** Android (Chrome, Samsung Internet) hands
+a home-screen icon its own window only when the manifest's ``start_url`` lies in
+the scope of a worker with a fetch handler; with the manifest alone it quietly
+makes a bookmark instead, and a bookmark always wears the address bar. The file
+is served from ``/api/app/`` like everything else here, and claims the scope
+above itself through the ``Service-Worker-Allowed: /`` header (``api.py``).
 
 Without the API (one person, no ``GARMIN_API_PORT``) the manifest link answers
 404 and nothing changes. The small summary app under ``/api/app/`` (pwa/) is a
@@ -24,6 +32,7 @@ import streamlit as st
 
 MANIFEST = "/api/app/dashboard.webmanifest"
 ICON = "/api/app/icon-192.png"
+WORKER = "/api/app/dashboard-sw.js"
 
 TAGS = [
     ("link", {"rel": "manifest", "href": MANIFEST}),
@@ -49,8 +58,10 @@ SCRIPT = """<script>
     for (const [name, value] of Object.entries(attrs)) el.setAttribute(name, value);
     doc.head.appendChild(el);
   }
+  // Without this the icon is a bookmark with an address bar (module docstring).
+  if (navigator.serviceWorker) navigator.serviceWorker.register(%s, { scope: "/" }).catch(() => {});
 })();
-</script>""" % json.dumps([[tag, attrs] for tag, attrs in TAGS])
+</script>""" % (json.dumps([[tag, attrs] for tag, attrs in TAGS]), json.dumps(WORKER))
 
 
 def head() -> None:

@@ -259,6 +259,8 @@ def build_app():
 
 
 PWA = Path(__file__).resolve().parent / "pwa"
+# Served from pwa/ but registered for the whole site (ui/webapp.py).
+DASHBOARD_WORKER = "dashboard-sw.js"
 # The phone app runs only its own files and talks only to this origin.
 APP_HEADERS = {
     "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -279,7 +281,8 @@ class _AppHeaders:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
-        is_app = "/app" in scope.get("path", "")
+        path = scope.get("path", "")
+        is_app = "/app" in path
 
         async def with_headers(message):
             if message["type"] == "http.response.start":
@@ -287,6 +290,11 @@ class _AppHeaders:
                 names = {k.lower() for k, _ in headers}
                 extra = APP_HEADERS if is_app else {k: v for k, v in APP_HEADERS.items()
                                                     if k in ("X-Content-Type-Options", "Referrer-Policy")}
+                # The dashboard's worker lives here but has to cover "/", where
+                # Streamlit answers; a worker may only claim a scope above its
+                # own folder when the file itself says so.
+                if is_app and path.endswith(DASHBOARD_WORKER):
+                    extra = {**extra, "Service-Worker-Allowed": "/"}
                 for key, value in extra.items():
                     if key.lower().encode() not in names:
                         headers.append((key.lower().encode(), value.encode()))

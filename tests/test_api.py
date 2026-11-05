@@ -100,6 +100,27 @@ class Tokens(unittest.TestCase):
         self.assertIsNone(api.verify(token, "ingest"))
 
 
+class AppFiles(unittest.TestCase):
+    """Files of the two apps, served side by side under /api/app/ (ui/webapp.py)."""
+
+    def setUp(self):
+        self.enterContext(people({"x": {}}))
+        self.app = api.build_app()
+
+    def test_the_dashboard_worker_may_claim_the_whole_site(self):
+        # Without this header the browser refuses a scope above the file's own
+        # folder, the dashboard ends up with no worker, and a home-screen icon
+        # opens as a bookmark with an address bar.
+        status, headers, _ = call(self.app, "GET", f"/api/app/{api.DASHBOARD_WORKER}")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("service-worker-allowed"), "/")
+
+    def test_the_phone_app_worker_claims_nothing_above_itself(self):
+        status, headers, _ = call(self.app, "GET", "/api/app/sw.js")
+        self.assertEqual(status, 200)
+        self.assertNotIn("service-worker-allowed", headers)
+
+
 class Ingest(unittest.TestCase):
     def setUp(self):
         self.enterContext(people({"x": {}, "y": {"source": "apple"}}))

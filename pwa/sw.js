@@ -1,7 +1,7 @@
 // Offline shell: the app's own files from the cache, data never (app.js keeps
 // the last summary itself, behind the person's key). Bump VERSION on change.
 "use strict";
-const VERSION = "gd-shell-2";
+const VERSION = "gd-shell-3";
 const SHELL = ["./", "index.html", "app.js", "app.css", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -9,8 +9,10 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
+  // Only this app's own caches: the dashboard keeps its "gd-dashboard-*" next door.
   event.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((key) => key !== VERSION).map((key) => caches.delete(key))))
+    .then((keys) => Promise.all(keys.filter((key) => key.startsWith("gd-shell") && key !== VERSION)
+      .map((key) => caches.delete(key))))
     .then(() => self.clients.claim()));
 });
 
