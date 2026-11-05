@@ -149,7 +149,14 @@ def _no_plan() -> bool:
 
 
 def next_steps(url_path: str) -> None:
-    """The "Dalej" strip at the bottom of the page."""
+    """The "Dalej" strip at the bottom of the page -- on a wide screen.
+
+    On a phone the whole navigation is the drawer (``ui/drawer.py``): a strip of
+    two or three more links under the page would be the bottom half of the
+    chrome that drawer exists to put away.
+    """
+    if shell.phone():
+        return
     if url_path == "dzis":
         steps = _today_steps()
     else:
@@ -240,10 +247,11 @@ def tour() -> None:
         # names and where the chrome went; each page says the rest itself.
         with bento.panel(title_text, key="tour", caption=caption):
             st.markdown(" · ".join(f"{icon} **{name}**" for icon, name, _body in stops))
-            st.caption(tr(pl="Każdy kafel ma w nagłówku „?” z objaśnieniem, a na dole każdej strony są linki "
-                             "*Dalej*. Zakres czasu, język i pobieranie są pod *Widok* w górnej linii.",
-                          en="Every tile has a “?” in its header with an explanation, and every page ends with "
-                             "*Next* links. The range, the language and the pull are under *View* on the top line."))
+            st.caption(tr(pl="Każdy kafel ma w nagłówku „?” z objaśnieniem, a cała nawigacja — wszystkie strony, "
+                             "zakres czasu, język i pobieranie — jest w szufladzie pod hamburgerem.",
+                          en="Every tile has a “?” in its header with an explanation, and the whole navigation — "
+                             "every page, the range, the language and the pull — is in the drawer behind the "
+                             "hamburger."))
             hide()
         return
 
@@ -268,7 +276,11 @@ def _inline(text: str) -> str:
 
 
 def rail() -> None:
-    """The way back to the tour once it was dismissed (in the lab menu of the top line)."""
+    """The way back to the tour once it was dismissed.
+
+    It stands in the lab menu of the top line on a wide screen and in the drawer
+    on a phone -- never both in one run, which is why one key is enough.
+    """
     if not _done():
         return
     if st.button(i18n.tr(pl="Jak czytać ten dashboard", en="How to read this dashboard"), key="tour_show"):

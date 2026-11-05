@@ -152,8 +152,13 @@ _STYLE = """
   .guide-next-label {font-size: 0.78rem; opacity: 0.6; margin-right: 0.4rem;}
   [data-testid="stMarkdownContainer"]:has(> .guide-next-label) {margin-bottom: 0 !important;}
 
-  /* ---- no sidebar: one centred column, chrome in the top line (story.py) ---- */
+  /* ---- no sidebar: one centred column, chrome in the top line (story.py) ----
+     Streamlit's own page list never shows anywhere: the drawer writes its own
+     (drawer.py). The panel and the hamburger are hidden here and revealed by
+     ``_DRAWER`` below, which ``page_style`` adds only for a visitor who gets the
+     drawer -- so the hamburger exists exactly when there is a drawer behind it. */
   [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"], [data-testid="stExpandSidebarButton"],
+  [data-testid="stSidebarCollapseButton"], [data-testid="stSidebarResizeHandle"],
   [data-testid="stSidebarNav"] {display: none !important;}
   .block-container {max-width: 1320px !important; padding-top: 0.6rem !important; padding-left: 2.75rem !important;
       padding-right: 2.75rem !important; margin: 0 auto;}
@@ -297,10 +302,54 @@ _STYLE = """
         border-radius: 0 !important;}
   }
 
-  /* ---- the loop as a line of stages (story.loop_compact, phones only) ------ */
-  .st-key-loopc {flex-wrap: wrap !important; gap: 0.1rem 1rem !important; margin: 0.1rem 0 0.2rem 0;}
-  .st-key-loopc [data-testid="stPopover"] button p {font-size: 0.8rem;}
-  .lpc-v {font-variant-numeric: tabular-nums;}
+  /* ---- the top line on a phone: the page's title next to the hamburger ----- */
+  .tb-page {font-size: 0.86rem; color: #fff; font-weight: 640;}
+  [data-testid="stMarkdownContainer"]:has(> .tb-page) {margin-bottom: 0 !important;}
+</style>
+"""
+
+# Added by ``page_style`` only when the visitor gets the drawer (drawer.py).
+# Everything here either undoes the blanket hide above or styles the panel, so a
+# wide window never carries it -- and ``?layout=phone`` on a desktop does,
+# which is how the drawer is reviewed without a phone in hand.
+_DRAWER = """
+<style>
+  [data-testid="stSidebar"], [data-testid="stSidebarCollapseButton"],
+  [data-testid="stExpandSidebarButton"] {display: flex !important;}
+  /* Room for the hamburger: the header is 0 high everywhere else, being empty. */
+  [data-testid="stHeader"] {height: 2.7rem !important; min-height: 2.7rem !important;}
+  /* Streamlit's control for a shut sidebar is a double chevron; the ligature
+     "menu" in its place is the hamburger a thumb goes looking for. */
+  [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {font-size: 0 !important;}
+  [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"]::after {
+      content: "menu"; font-family: "Material Symbols Rounded"; font-size: 1.7rem; color: #c3c2b7;}
+  [data-testid="stSidebar"] {width: min(84vw, 320px) !important; min-width: 0 !important; background: #000 !important;}
+  [data-testid="stSidebarContent"], [data-testid="stSidebarUserContent"] {background: #000 !important;}
+  .st-key-drawer {gap: 0 !important;}
+  .dw-who {font-weight: 650; font-size: 1.02rem;}
+  .dw-note {font-size: 0.72rem; color: #5f6570; margin-top: 0.1rem;}
+  .dw-h {font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: #5f6570; font-weight: 700;
+      margin: 1.5rem 0 0.3rem 0;}
+  /* A stage of the loop: its number, what it is about, its number of the day. */
+  .dw-s {display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.8rem; color: #898781; margin: 1rem 0 0.1rem 0;}
+  .dw-s.on .dw-n {color: #fff; font-weight: 640;}
+  .dw-i {font-size: 0.66rem; color: #4a4f59; font-weight: 700;}
+  .dw-n {flex: 1;}
+  .dw-v {color: #c3c2b7; font-weight: 640; font-variant-numeric: tabular-nums;}
+  /* A page is a word on a line of its own, with a thumb's worth of room on it. */
+  .dw-here {font-size: 0.95rem; color: #9ec5f4; padding: 0.55rem 0; font-weight: 620;}
+  .st-key-drawer [data-testid="stPageLink"] a {padding: 0.55rem 0 !important; background: none !important;
+      min-height: 0;}
+  .st-key-drawer [data-testid="stPageLink"] p {font-size: 0.95rem; color: #c3c2b7;}
+  .st-key-drawer [data-testid="stPageLink"] a:hover p {color: #fff;}
+  /* Page links are words here too (as in the top line and the loop): no icons. */
+  .st-key-drawer [data-testid="stPageLink"] a > span:has([data-testid="stIconMaterial"]),
+  .st-key-drawer [data-testid="stPageLink"] [data-testid="stIconMaterial"] {display: none !important;}
+  .st-key-drawer [data-testid="stButtonGroup"] {margin: 0.1rem 0 0.7rem 0;}
+  .st-key-drawer [data-testid="stButton"], .st-key-drawer .st-key-tb_pull {margin-top: 0.9rem;}
+  [data-testid="stMarkdownContainer"]:has(> .dw-who), [data-testid="stMarkdownContainer"]:has(> .dw-note),
+  [data-testid="stMarkdownContainer"]:has(> .dw-h), [data-testid="stMarkdownContainer"]:has(> .dw-s),
+  [data-testid="stMarkdownContainer"]:has(> .dw-here) {margin-bottom: 0 !important;}
 </style>
 """
 
@@ -321,11 +370,17 @@ def _delays() -> str:
 
 
 def page_style(mode: str = "light") -> str:
-    """The app's CSS for the theme the browser renders (``theme.mode()``)."""
+    """The app's CSS for the theme the browser renders (``theme.mode()``).
+
+    The arrangement is keyed on the viewport (the media query in ``_STYLE``).
+    One block is keyed on the visitor instead: the drawer's (``_DRAWER``), because
+    Streamlit's sidebar and its hamburger are chrome only CSS can reach, and they
+    must appear exactly for the visitor whose page renders a drawer in them.
+    """
     canvas, sidebar, widget, line, highlight, shadow, raised = _SURFACES.get(mode, _SURFACES["light"])
     tokens = {"@CANVAS@": canvas, "@SIDEBAR@": sidebar, "@WIDGET@": widget, "@LINE@": line,
               "@HIGHLIGHT@": highlight, "@SHADOW@": shadow, "@RAISED@": raised, "@DELAYS@": _delays()}
-    style = _STYLE
+    style = _STYLE + (_DRAWER if phone() else "")
     for token, value in tokens.items():
         style = style.replace(token, value)
     return style

@@ -41,7 +41,7 @@ def settings_path():
 # glossary.py is bilingual through glossary_en.py (its own parity test).
 BILINGUAL = ["app.py", "core/auth.py",
              *(f"ui/{name}.py" for name in (
-                 "shell", "bento", "routing", "theme", "globe", "guide", "story", "herochart")),
+                 "shell", "bento", "routing", "theme", "globe", "guide", "story", "drawer", "herochart")),
              "analysis/hero.py", "analysis/facts.py",
              *(f"views/{name}.py" for name in (
                  "activities", "atlas", "day", "form", "hubs", "notebook", "physio", "recovery", "reference", "routes",

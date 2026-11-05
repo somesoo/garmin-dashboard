@@ -18,6 +18,10 @@ explains best when the reader is led first and explores after (Segel & Heer's
 
 The top line (``topbar``) carries what the sidebar used to: the everyday pages,
 the lab, the time range, the language and the Garmin pull.
+
+A phone has room for none of it: there the loop, the top line and the "Dalej"
+strip give way to one drawer with every page in it (``ui/drawer.py``), and this
+module's phone branches are what step aside for it.
 """
 
 from __future__ import annotations
@@ -49,7 +53,8 @@ def stage_of(url_path: str) -> str | None:
     return next((key for key, pages in STAGE_PAGES.items() if url_path in pages), None)
 
 
-def _stage_names() -> dict[str, tuple[str, str]]:
+def stage_names() -> dict[str, tuple[str, str]]:
+    """Each stage as (its role, what it is about); the drawer lists the same four."""
     tr = i18n.tr
     return {"load": (tr(pl="Bodziec", en="Stimulus"), tr(pl="Obciążenie", en="Load")),
             "response": (tr(pl="Odpowiedź", en="Response"), tr(pl="Regeneracja i sen", en="Recovery and sleep")),
@@ -73,7 +78,7 @@ def loop(current: str) -> None:
     """The loop as navigation: four stages, their numbers, their pages; the current one lit."""
     here = stage_of(current)
     values = loop_values()
-    names = _stage_names()
+    names = stage_names()
     with st.container(key="loop"):
         for index, (key, pages) in enumerate(STAGE_PAGES.items(), start=1):
             stage, title = names[key]
@@ -94,43 +99,18 @@ def loop(current: str) -> None:
                     unsafe_allow_html=True)
 
 
-def loop_compact(current: str) -> None:
-    """The loop as one line of stages, for a phone.
-
-    The loop is the navigation -- there is no sidebar -- so it cannot simply be
-    dropped on a narrow screen. Stacked under the headline, though, the full
-    loop is four stages with their page links: a wall of twelve words above the
-    hero, and the hero is what the reader came for. Here each stage is one chip
-    carrying its number, and its pages are behind it; the stage you are standing
-    in is the primary one, so it wears the blue rule every chosen thing in this
-    interface wears.
-    """
-    here = stage_of(current)
-    values = loop_values()
-    names = _stage_names()
-    with st.container(horizontal=True, key="loopc", vertical_alignment="center", gap="small"):
-        for key, pages in STAGE_PAGES.items():
-            stage, _title = names[key]
-            value = values.get(key, "—")
-            with st.popover(f"{stage} {value}", type="primary" if key == here else "tertiary"):
-                for url in pages:
-                    page = routing.page(url)
-                    if page is None:
-                        continue
-                    if url == current:
-                        st.markdown(f"<span class='lp-here'>{i18n.page(url)}</span>", unsafe_allow_html=True)
-                    else:
-                        st.page_link(page, label=i18n.page(url))
-
-
 def head(current: str, headline: str, sub: str | None = None) -> None:
-    """The finding on the left, the loop on the right -- or both stacked on a phone."""
+    """The finding on the left, the loop on the right -- the headline alone on a phone.
+
+    The loop is not dropped there, it moves: the drawer (``ui/drawer.py``) lists
+    the four stages with the same numbers of the day. Under a phone headline it
+    was twelve words standing between the finding and the hero.
+    """
     from ui import bento
     bento.HEADED = True
     title = f"<h1 class='story-h'>{headline}</h1>" + (f"<p class='story-sub'>{sub}</p>" if sub else "")
     if shell.phone():
         st.markdown(title, unsafe_allow_html=True)
-        loop_compact(current)
         return
     left, right = st.columns([2.6, 1], gap="large", vertical_alignment="top")
     with left:
@@ -212,21 +192,16 @@ def topbar(current: str) -> None:
 
 
 def _topbar_phone(current: str) -> None:
-    """The top line on a phone: the three everyday pages, then everything else folded.
+    """The top line on a phone: where you are, and nothing else.
 
-    The range, the language and the Garmin pull are settings, consulted once and
-    then left alone; in one line on a 360 px screen they crush the page links,
-    which are the part used on every visit. So they move behind one word, and
-    the line keeps what it is for -- going somewhere.
+    Everything this line carries on a desktop -- the everyday pages, the lab,
+    the range, the language, the pull, the account -- is in the drawer
+    (``ui/drawer.py``) behind the hamburger that sits to the left of this title.
+    Folded into the line itself they were two or three wrapped rows above the
+    headline, and the headline is the page.
     """
     with st.container(horizontal=True, key="topbar", vertical_alignment="center", gap="medium"):
-        _everyday(current)
-        _lab_popover()
-        with st.popover(i18n.tr(pl="Widok", en="View"), type="tertiary"):
-            shell.range_picker()
-            shell.language_picker()
-            _pull()
-        _account_chip(current)
+        st.markdown(f"<span class='tb-page'>{i18n.page(current)}</span>", unsafe_allow_html=True, width="content")
 
 
 def _account_chip(current: str) -> None:

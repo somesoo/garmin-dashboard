@@ -62,6 +62,10 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
       w trzech liniach; `herochart` czyta się palcem (zdarzenia wskaźnika).
       Obejrzane w przeglądarce w ramce 360 i 412 px: zero przewijania w poziomie,
       KPI 2×2, układ na biurko bez zmian. `?layout=phone|wide` wymusza.
+- [x] Nawigacja na telefonie w jednej szufladzie z lewej (`ui/drawer.py`):
+      hamburger, wszystkie strony w kolejności pętli, zakres/język/pobranie/
+      wylogowanie w środku; z górnej linii zostaje tytuł strony, pętla i „Dalej”
+      nie rysują się wcale. Na biurku bez zmian.
   - [ ] Obejrzeć na prawdziwym S23 (ikona z ekranu, bez paska adresu).
   - [ ] Rozróżnić obie ikony na ekranie telefonu: pełny dashboard i widżet spod
         `/api/app/` mają ten sam `short_name` („Dashboard”) i te same pliki ikon,

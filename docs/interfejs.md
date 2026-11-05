@@ -199,12 +199,34 @@ Reguły treści:
   `second`. Na biurku nic się nie zmienia (`render()` w miejscu), na telefonie
   ląduje za „Szczegóły” i **nie jest liczone, dopóki nikt nie naciśnie** —
   dlatego bierze funkcję, a nie blok `with`.
-- Pętla pod nagłówkiem zamienia się w linię „chipów”
-  (`story.loop_compact`): etap + jego liczba, strony w popoverze, bieżący etap
-  jako `type="primary"`, czyli z niebieską linią jak każdy wybrany element.
-  Pełna pętla stacknięta pod nagłówkiem to dwanaście słów nad wykresem.
-- Górna linia zostawia strony codzienne i Laboratorium; zakres, język i
-  pobieranie — ustawienia, do których zagląda się raz — schodzą pod „Widok”.
+- **Nawigacja schodzi do szuflady** (`ui/drawer.py`, 2026-11-05): hamburger
+  w lewym górnym rogu otwiera szynę Streamlita z **wszystkimi** stronami,
+  a z samej strony znika to, co ją obramowywało — linki górnej linii, menu
+  *Laboratorium*, pętla pod nagłówkiem i pasek „Dalej”. Razem były ekranem
+  chrome'u nad i pod tym, po co się wchodzi: pętla stacknięta pod nagłówkiem to
+  dwanaście słów nad wykresem, a linki i ustawienia w jednej linii na 360 px
+  zawijały się na dwa–trzy rzędy. W górnej linii zostaje tytuł strony.
+- **Kolejność w szufladzie to model aplikacji**, nie alfabet: *Na co dzień* →
+  cztery etapy pętli, każdy ze swoją liczbą dnia → *Laboratorium* → *Widok*
+  (zakres, język) → *Twoje dane* (Konto, pobranie, wylogowanie). Każda strona
+  raz — ta z dwóch grup (Sport, Fizjologia) zostaje w pierwszej. Test pilnuje,
+  że żadna strona z menu nie wypadła z listy (`tests/test_phone.py`), bo na
+  telefonie nie ma drugiej drogi.
+- **Szuflada to Python, nie `@media`** (`shell.phone()`), jak reszta treści: tak
+  samo działa `?layout=phone` na biurku, czyli da się ją obejrzeć bez telefonu.
+  Szyna i hamburger to chrome Streamlita, do którego sięga tylko CSS — dlatego
+  reguły, które je odsłaniają, siedzą w osobnym bloku (`shell._DRAWER`)
+  dokładanym przez `page_style` **tylko** wtedy, gdy szuflada faktycznie się
+  rysuje. Hamburgera robi ligatura `menu` w `::after` (natywny przełącznik to
+  podwójny szewron).
+- **Widżet stoi w jednym miejscu, nie w dwóch**: zakres, język, pobieranie
+  i wylogowanie na telefonie rysuje szuflada, a na biurku górna linia — nigdy
+  oba w jednym przebiegu, dlatego wystarcza jeden klucz (dwa widżety na jednym
+  kluczu to wyjątek Streamlita, a kopia z własnym rozjeżdża się ze stanem).
+- Link w szynie **nie zamyka jej sam** (robi to tylko wbudowane menu stron
+  Streamlita, którego tu nie ma): jeden delegowany `click` na dokumencie klika
+  „Collapse sidebar”, gdy dotknięto linku w szufladzie. Zakres i język są z tego
+  wyjęte — ustawienie zmienia się czasem dwa razy pod rząd.
 - Stron z `story.frame_page` (*Regeneracja*, *Sen*, *Prognoza*, *Fizjologia*,
   *Bieganie*, *Plan*) **nie trzeba ruszać**: nagłówek + hero + „Szczegóły” jest
   już krótką stroną. `second` dostały te, które sypały kafle wprost na stronę:

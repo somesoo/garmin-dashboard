@@ -182,6 +182,16 @@ Dwa workery na jednym adresie dzielą magazyn cache, więc każdy sprząta tylko
 swoje (`gd-shell-*` i `gd-dashboard-*`) — „skasuj wszystko poza moim” wyłączyłoby
 sąsiada z trybu offline. Po zmianie któregokolwiek podbij jego `VERSION`.
 
+Z ikony dashboard otwiera się bez paska adresu, więc **cała nawigacja jest
+w szufladzie z lewej** (hamburger w lewym górnym rogu): wszystkie strony
+w kolejności *Na co dzień* → cztery etapy pętli treningu z liczbą dnia →
+*Laboratorium* → *Widok* (zakres czasu, język) → *Twoje dane* (Konto, „Pobierz
+z Garmina”, wylogowanie). Z góry strony zostaje jej tytuł, a pętla przy
+nagłówku i pasek „Dalej” na telefonie się nie rysują — razem były ekranem
+przewijania nad i pod tym, po co się wchodzi. Wybranie strony zamyka szufladę.
+Na biurku i na tablecie poziomo nie zmienia się nic; żeby obejrzeć wersję
+telefonową bez telefonu, dopisz `?layout=phone` do adresu.
+
 ## Alternatywa bez Google: tożsamość z Tailscale
 
 Jeśli wszyscy są w Twojej sieci Tailscale, logowanie może dać sam Tailscale:

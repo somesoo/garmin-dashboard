@@ -5,7 +5,8 @@ Router only: every page lives in ``views/``, every chart is built through
 a header, four KPI tiles, then a mosaic of fixed-height tiles. All chrome
 (the everyday pages, the lab, the single global time filter, the Garmin pull)
 sits in one line on top (``story.topbar``); the pages navigate through the loop
-next to their headline. ``guide.py`` puts the
+next to their headline. A phone gets all of it in one drawer instead
+(``ui/drawer.py``). ``guide.py`` puts the
 page's question above it and the "Dalej" links below it.
 """
 
@@ -20,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 import streamlit as st  # noqa: E402
 
 from core import auth  # noqa: E402
+from ui import drawer  # noqa: E402
 from ui import guide  # noqa: E402
 from core import i18n  # noqa: E402
 from ui import routing  # noqa: E402
@@ -52,7 +54,9 @@ st.set_page_config(
     page_title="Garmin Dashboard",
     page_icon="🏔️",
     layout="wide",
-    initial_sidebar_state="expanded",
+    # The drawer a phone navigates by (ui/drawer.py) starts shut; a wide window
+    # has no sidebar at all (shell.page_style hides it).
+    initial_sidebar_state="collapsed",
 )
 st.markdown(shell.page_style(theme.mode()), unsafe_allow_html=True)
 # Installable from the home screen as a full-screen app, the sign-in screen included.
@@ -127,6 +131,9 @@ if ONBOARDING:
     story.topbar_minimal()
     page.run()
 else:
+    # On a phone every link on the page is in the drawer instead (drawer.py);
+    # on a wide window this renders nothing.
+    drawer.render(routing.name(page))
     story.topbar(routing.name(page))
     guide.eyebrow(routing.name(page))
     page.run()

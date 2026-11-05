@@ -12,10 +12,15 @@ pinned down:
 
 from __future__ import annotations
 
+import re
 import unittest
+from pathlib import Path
 
+from ui import drawer
 from ui import shell
 from ui import story
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 PHONES = [
@@ -83,6 +88,35 @@ class Style(unittest.TestCase):
         narrow = shell.page_style("dark").split("@media (max-width: 760px)", 1)[1]
         self.assertIn('[class*="st-key-kpi_"]', narrow)
         self.assertIn("flex: 1 1 38% !important", narrow)
+
+
+class Drawer(unittest.TestCase):
+    """The drawer is the only navigation a phone has, so nothing may be missing
+    from it: a page left out of every list below cannot be reached at all."""
+
+    @staticmethod
+    def _menu() -> set[str]:
+        """The pages with a menu entry (app.py); detail pages are opened from lists."""
+        source = (ROOT / "app.py").read_text(encoding="utf-8")
+        return {url for url, rest in re.findall(r'_page\([\w.]+, "([^"]+)"(.*)', source)
+                if "hidden" not in rest}
+
+    def _listed(self) -> list[str]:
+        return [*drawer.EVERYDAY, *(url for pages in story.STAGE_PAGES.values() for url in pages),
+                *drawer.LAB, "konto"]
+
+    def test_every_menu_page_is_in_the_drawer(self) -> None:
+        self.assertEqual(self._menu() - set(self._listed()), set())
+
+    def test_the_drawer_lists_nothing_that_is_not_a_page(self) -> None:
+        self.assertEqual(set(self._listed()) - self._menu(), set())
+
+    def test_a_page_is_shown_once(self) -> None:
+        """Sport and Fizjologia belong to two groups; the render dedupes by url."""
+        seen: set[str] = set()
+        shown = [url for url in self._listed() if url not in seen and not seen.add(url)]
+        self.assertEqual(len(shown), len(set(shown)))
+        self.assertEqual(set(shown), set(self._listed()))
 
 
 class Second(unittest.TestCase):

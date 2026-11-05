@@ -195,6 +195,12 @@ Zachowania celowe (nie „naprawiaj”):
   drugi plan do `story.second(label, render, key=...)` — to **funkcja**, bo na
   telefonie treść nie ma się policzyć, dopóki nikt nie naciśnie „Szczegóły”.
   `?layout=phone` / `?layout=wide` wymusza układ do przeglądu.
+- **Na telefonie nawigacja jest jedna: szuflada z lewej** (`ui/drawer.py`) —
+  górna linia, pętla i „Dalej” ustępują jej miejsca. Nowa strona musi trafić
+  do `drawer.EVERYDAY`/`drawer.LAB` albo do etapu pętli (`story.STAGE_PAGES`),
+  inaczej z telefonu nie da się do niej dojść (test pilnuje). Widżet (zakres,
+  język, pobranie, wylogowanie) stoi **albo** w szufladzie, **albo** w górnej
+  linii — nigdy w obu, bo dwa widżety na jednym kluczu to wyjątek Streamlita.
 - Komponenty JS obsługują **zdarzenia wskaźnika, nie myszy**: `onmousemove`
   nigdy nie odpala na telefonie. Żaden handler odczytu nie woła
   `preventDefault` — palec, który zaczął na wykresie, musi przewinąć stronę.
