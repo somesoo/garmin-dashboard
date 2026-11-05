@@ -131,6 +131,57 @@ Ta sama ścieżka `/api` serwuje aplikację: `https://<komputer>.<tailnet>.ts.ne
 Liczy wszystko serwer (`analysis/summary.py`, ~10 KB JSON per język, ETag); aplikacja (`pwa/`)
 tylko rysuje. Odwołany klucz = ekran łączenia. CSP: tylko własne pliki, bez ramek.
 
+### Jeden układ od 280 px do okna na biurku
+
+Nie ma „wersji na telefon” i „wersji na tablet”. Każda miara jest płynna
+(`clamp` w `pwa/app.css`), a każda siatka to `auto-fit`, więc liczba kolumn
+wynika z tego, co się mieści:
+
+| element | wąsko | ~460 px | ~640 px | ~900 px i dalej |
+|---|---|---|---|---|
+| KPI „Dziś” | 2 | 3 | 4 | 4 (sufit — zasada domu) |
+| historie (regeneracja/sen/bieganie) | 1 | 1 | 1 | 2, potem 3 |
+| wykresy, lista treningów | 1 | 1 | 2 | 2, potem 3 |
+
+Dwie pułapki, które ten układ rozbraja:
+
+- **Wykresy rysują się w pikselach CSS**, nie w rozciąganym `viewBox`: `chart()`
+  mierzy swoje pudełko i woła `lineChart(W, …)` / `barChart(W, …)` na tę
+  szerokość. Rozciągany `viewBox` powiększyłby razem z pudełkiem także opisy osi
+  (na 760 px robiło się z 10 px ~21 px — większe niż podpis kafla). Jedna
+  proporcja wysokości dla wszystkich figur, więc dwie obok siebie kończą równo.
+  Przerysowanie idzie przez `ResizeObserver` + `resize`/`orientationchange`,
+  z przebukowaniem klatki (`cancelAnimationFrame`) — flaga „zaplanowane”
+  potrafiła zostać zapalona na zawsze, gdy klatka nigdy nie przyszła.
+- **Żadnych kafli-pudełek**: wartości stoją na czarnym tle pod włoskową linią,
+  pole do wpisania klucza to linia, przycisk to tekst z podkreśleniem. Szare
+  zaokrąglone prostokąty i gradienty są zakazane tak samo jak w dashboardzie
+  (AGENTS.md → „Wykresy”, „Strony i układ”).
+
+Manifest nie przypina już orientacji — na tablecie i rozłożonym składaku
+poziomo jest sensowniejsze niż wymuszony pion.
+
+### Cały dashboard jako aplikacja (bez paska adresu)
+
+To osobna aplikacja od tej spod `/api/app/`: ten sam adres co w przeglądarce,
+pełny dashboard, własna ikona. **Android**: Chrome → menu → *Zainstaluj
+aplikację* (Samsung Internet: *Dodaj stronę do → Ekran startowy*).
+**iPhone**: Safari → *Udostępnij → Do ekranu początkowego*.
+
+Jeśli telefon proponuje tylko „skrót” i ikona otwiera się z paskiem adresu,
+to nie kwestia manifestu — **Android daje własne okno dopiero wtedy, gdy
+`start_url` leży w zasięgu service workera z obsługą `fetch`**. Bez workera
+po cichu robi zwykłą zakładkę, a zakładka pasek ma zawsze. Dlatego
+`ui/webapp.py` rejestruje `pwa/dashboard-sw.js` dla zasięgu `/`; plik stoi pod
+`/api/app/`, a prawo do zasięgu nad własnym katalogiem daje mu nagłówek
+`Service-Worker-Allowed: /` z `api.py`. Worker niczego nie cache'uje poza samą
+skorupą strony — dashboard to żywy WebSocket, a cache'owany pokazywałby
+nieprawdę o dzisiejszych liczbach.
+
+Dwa workery na jednym adresie dzielą magazyn cache, więc każdy sprząta tylko
+swoje (`gd-shell-*` i `gd-dashboard-*`) — „skasuj wszystko poza moim” wyłączyłoby
+sąsiada z trybu offline. Po zmianie któregokolwiek podbij jego `VERSION`.
+
 ## Alternatywa bez Google: tożsamość z Tailscale
 
 Jeśli wszyscy są w Twojej sieci Tailscale, logowanie może dać sam Tailscale:

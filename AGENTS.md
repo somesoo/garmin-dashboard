@@ -212,6 +212,11 @@ Zachowania celowe (nie „naprawiaj”):
   — inaczej `run_sessions` wraca do stref Garmina.
 - Oficjalne API Garmina (Personal) **nie** zastępuje `garminconnect`: nie ma
   VO2max, readiness, statusu ani wysyłki treningów. Plan awaryjny — `docs/platforma.md`.
+- **Ikona na ekranie telefonu bez paska adresu wymaga service workera**
+  obejmującego `start_url` — sam manifest daje zakładkę z paskiem. Dashboard ma
+  `pwa/dashboard-sw.js` (zasięg `/`, nagłówek `Service-Worker-Allowed` z `api.py`),
+  aplikacja telefonowa `pwa/sw.js` (zasięg `/api/app/`). Cache dzielą po adresie,
+  więc każdy kasuje tylko swój prefiks; po zmianie podbij `VERSION`.
 
 ## Pułapki w danych
 

@@ -49,7 +49,11 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
       offline z ostatniej kopii, parowanie kluczem (link z fragmentem), PL/EN, CSP.
       Zamiast sql.js w telefonie — JSON ~10 KB (mniej kodu, bez drugiej implementacji liczb).
       Sprawdzone: renderowanie `app.js` w Node na prawdziwym API (PL/EN, odwołany klucz).
-  - [ ] Obejrzeć na prawdziwym S23 i iPhonie (bez przeglądarki tutaj nie było zrzutów).
+  - [x] Jeden płynny układ 280 px → okno na biurku (kolumny z `auto-fit`, wykresy
+        rysowane w pikselach CSS, kafle bez pudełek, manifest bez pionu);
+        obejrzane w przeglądarce na 280/320/360/412/600/740/768/1024/1280 i w poziomie.
+  - [ ] Obejrzeć na prawdziwym S23 i iPhonie (przeglądarka to nie zegarkowy DPI
+        ani pasek systemowy).
 - [x] 6a. Prawa osoby na stronie Konto: archiwum wszystkich swoich danych (bez
       sekretów: hashy kluczy, tokenów Garmina, cache) i usunięcie wszystkiego po wpisaniu
       nazwy; `python -m core.tenant remove <id> --yes` usuwa też wpis z rejestru.
