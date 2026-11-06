@@ -90,8 +90,8 @@ PAGES = {
         _page(atlas.render, "atlas", "public"),
         # Who I am, where my data comes from, my phone and my keys (views/account.py).
         _page(account.render, "konto", "account_circle"),
-        # No menu entry: opened from the log, the globe and a run's "Mapa trasy".
-        _page(routes.render, "trasy", "route", visibility="hidden"),
+        # Every activity but a run; also opened from the log, the globe and a run's "Mapa trasy".
+        _page(routes.render, "trasy", "route"),
     ],
     i18n.group("running"): [
         _page(run_overview.render, "bieganie", "directions_run"),
@@ -99,8 +99,8 @@ PAGES = {
         _page(run_forecast.render, "prognoza", "timer"),
         _page(run_segments.render, "segmenty", "conversion_path"),
         _page(hubs.load, "obciazenie-biegowe", "stacked_bar_chart"),
-        # No menu entry: one run in detail, opened from every list of runs.
-        _page(run_session.render, "bieg", "insights", visibility="hidden"),
+        # One run in detail with the list of runs at its head; also opened from every list of runs.
+        _page(run_session.render, "bieg", "insights"),
     ],
     i18n.group("body"): [
         _page(recovery.render, "regeneracja", "monitor_heart"),

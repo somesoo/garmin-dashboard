@@ -51,7 +51,9 @@ from ui import shell
 from ui import story
 
 # The everyday pages in menu order (app.py); the lab, minus what the loop holds.
-EVERYDAY = ["dzien", "dzis", "sport", "atlas"]
+# The workout (the list of runs at its head) and the routes (every other
+# activity) have no place in the top line, so the drawer is their way in.
+EVERYDAY = ["dzien", "dzis", "bieg", "trasy", "sport", "atlas"]
 LAB = ["statystyka", "insights", "sql", "slownik", "admin"]
 
 
