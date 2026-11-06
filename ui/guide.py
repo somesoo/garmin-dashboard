@@ -42,7 +42,7 @@ def _questions() -> dict[str, str]:
         "sport": tr(pl="Na jaki trening jestem dziś gotów, także poza bieganiem?",
                     en="What training am I ready for today, running or not?"),
         "atlas": tr(pl="Gdzie i co trenowałem?", en="Where and what have I trained?"),
-        "trasy": tr(pl="Jak wyglądał ten trening na mapie?", en="What did this session look like on the map?"),
+        "trasy": tr(pl="Gdzie byłem poza bieganiem?", en="Where did I go, apart from running?"),
         "bieganie": tr(pl="Ile i jak biegam ostatnio?", en="How much and how have I been running lately?"),
         "plan": tr(pl="Co biegać do następnego startu?", en="What to run until the next race?"),
         "prognoza": tr(pl="Na jaki czas mogę liczyć na zawodach?", en="What time can I count on in a race?"),

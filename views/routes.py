@@ -43,8 +43,10 @@ def render() -> None:
     routes = shell.table("routes")
     activities = shell.table("activities")
 
-    bento.header(i18n.page("trasy"), tr(pl="Jeden ślad GPS naraz. Wszystkie ślady (mapa ciepła) są na globie w Atlasie.",
-                                        en="One GPS track at a time. All tracks (the heat map) are on the Atlas globe."))
+    bento.header(i18n.page("trasy"), tr(
+        pl="Ślady aktywności innych niż bieg — biegi mają mapę w Treningu. Wszystkie ślady naraz są na globie w Atlasie.",
+        en="Tracks of activities other than runs — a run has its map on the Run page. All tracks at once are on "
+           "the Atlas globe."))
     if routes.empty:
         st.caption(tr(
             pl="Brak śladów GPS. `etl/run.py` pobiera je automatycznie — jeden request na aktywność, payload się nie "
@@ -56,8 +58,12 @@ def render() -> None:
 
     catalogue = _catalogue(routes, activities)
     if catalogue.empty:
-        st.caption(tr(pl="Aktywności ze śladem nie mają metadanych — odśwież tabele.",
-                      en="The activities with a track have no metadata — rebuild the tables."))
+        st.caption(tr(pl="Poza biegami nie ma tu aktywności ze śladem GPS. Mapa biegu jest w Treningu, w zakładce "
+                         "„Przegląd”.",
+                      en="Apart from runs there are no activities with a GPS track. A run's map is on the Run page, "
+                         "in the “Overview” tab."))
+        if st.button(i18n.page("bieg"), icon=":material/directions_run:", key="routes_to_runs", type="tertiary"):
+            routing.goto("bieg")
         return
 
     _explorer(routes, catalogue)
@@ -68,6 +74,10 @@ def _catalogue(routes: pd.DataFrame, activities: pd.DataFrame) -> pd.DataFrame:
     frame = activities.copy()
     frame["activity_id"] = pd.to_numeric(frame["activity_id"], errors="coerce")
     frame = frame[frame["activity_id"].isin(ids)].copy()
+    # A run lives on its own page, map included (routing.open_activity sends it there).
+    runs = shell.table("run_sessions")
+    if not runs.empty:
+        frame = frame[~frame["activity_id"].isin(pd.to_numeric(runs["activity_id"], errors="coerce"))]
     if frame.empty:
         return frame
     frame["start_local"] = pd.to_datetime(frame["start_local"])
@@ -87,27 +97,10 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
             st.session_state["routes_activity"] = int(wanted)
 
     tr = i18n.tr
-    choices, units = _colour_choices(), _colour_units()
     with st.container(key="routes_picker"):
         chosen = tables.chooser(
             tables.activity_items(catalogue, catalogue["sport"].map(_sport_label)), options[0],
             key="routes_activity_pick", state="routes_activity")
-    colour, analysis = st.columns([3, 1], vertical_alignment="center")
-    with colour:
-        colour_by = st.segmented_control(
-            tr(pl="Kolor śladu", en="Track colour"),
-            list(choices),
-            default="pace_min_km",
-            format_func=lambda v: choices[v],
-            label_visibility="collapsed",
-        )
-    colour_by = colour_by or "pace_min_km"
-    runs = shell.table("run_sessions")
-    # Runs have a richer page (splits, reps, segments); the button leads there.
-    if not runs.empty and (runs["activity_id"] == chosen).any() and analysis.button(
-            tr(pl="Analiza treningu", en="Workout analysis"), icon=":material/insights:", key="routes_to_run",
-            width="stretch"):
-        routing.open_run(int(chosen))
 
     track = routes[pd.to_numeric(routes["activity_id"], errors="coerce") == chosen].sort_values("seq")
     summary = catalogue[catalogue["activity_id"] == chosen]
@@ -125,26 +118,35 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
 
     left, right = bento.row(2, 2)
     with left:
-        _map(track, chosen, colour_by, units)
-        _splits(track, summary)
+        map_tile(track, chosen)
+        sport = str((summary.get("sport") if summary is not None else "") or "")
+        # Splits per kilometre mean something on foot; a ride would list 60 rows of 2-minute kilometres.
+        if any(word in sport for word in ("walk", "hik", "trail")):
+            splits_tile(track)
     with right:
         _side(track)
     _gpx(chosen)
 
 
-def _map(track: pd.DataFrame, chosen: int, colour_by: str, units: dict[str, str]) -> None:
+def map_tile(track: pd.DataFrame, activity_id: int, *, key: str = "route") -> None:
+    """The GPS track coloured by a measure picked in the tile's header (also the run page's map)."""
     tr = i18n.tr
+    choices, units = _colour_choices(), _colour_units()
     with bento.tile(
-        tr(pl="Ślad", en="Track"), rows=3, key="route_map",
-        caption=tr(pl=f"kolor: {units[colour_by]} · skala przycięta do 5–95%",
-                   en=f"colour: {units[colour_by]} · scale clipped to 5–95%"),
+        tr(pl="Mapa", en="Map"), rows=3, key=f"{key}_map",
         how=tr(pl="Linia pod spodem trzyma kształt trasy, kolor niesie wartość — ślad zostaje czytelny też tam, "
-                  "gdzie zawraca po sobie. Postój na światłach nie zjada zakresu. Tempo ma odwróconą rampę: "
-                  "ciemniej = szybciej.",
+                  "gdzie zawraca po sobie. Skala przycięta do 5–95%: postój na światłach nie zjada zakresu. "
+                  "Tempo ma odwróconą rampę: ciemniej = szybciej.",
                en="The line underneath holds the route's shape, the colour carries the value — the track stays "
-                  "readable even where it doubles back. A stop at the lights does not eat the range. Pace has a "
-                  "reversed ramp: darker = faster."),
+                  "readable even where it doubles back. Scale clipped to 5–95%: a stop at the lights does not eat "
+                  "the range. Pace has a reversed ramp: darker = faster."),
     ) as t:
+        with t.header:
+            colour_by = st.segmented_control(
+                tr(pl="Kolor śladu", en="Track colour"), list(choices), default="pace_min_km",
+                format_func=lambda v: choices[v], label_visibility="collapsed", key=f"{key}_colour")
+        colour_by = colour_by or "pace_min_km"
+        chosen = activity_id
         t.chart(
             tz.route_map(
                 track, color=colour_by, color_title=units[colour_by],
@@ -153,24 +155,21 @@ def _map(track: pd.DataFrame, chosen: int, colour_by: str, units: dict[str, str]
                 uirevision=f"route-{int(chosen)}",
             ),
             empty=tr(pl="Ta aktywność nie ma śladu GPS.", en="This activity has no GPS track."),
-            key=f"route_map_{int(chosen)}",
+            key=f"{key}_map_{int(chosen)}",
             # A phone sees the splits under the map without scrolling past a full-screen map.
             height=380 if shell.phone() else None,
         )
 
 
-def _splits(track: pd.DataFrame, summary: pd.Series | None) -> None:
-    """Kilometre splits right under the map: km, pace, heart rate, climb, cadence."""
-    from running import sessions, units as ru
+def split_table(splits: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+    """Kilometre splits as one readable table, and the sentence under it.
+
+    km, pace, Δ from the average (minus = faster), heart rate, climb, and
+    cadence and stops when there are any.
+    """
+    from running import units as ru
 
     tr = i18n.tr
-    sport = str((summary.get("sport") if summary is not None else "") or "")
-    # Splits per kilometre mean something on foot; a ride would list 60 rows of 2-minute kilometres.
-    if not any(word in sport for word in ("run", "walk", "hik", "trail")):
-        return
-    splits = sessions.km_splits(track)
-    if splits.empty:
-        return
     pace = pd.to_numeric(splits["pace_min_km"], errors="coerce")
     full = splits["length_km"] >= 0.9
     mean = pace[full].mean() if full.any() else pace.mean()
@@ -179,27 +178,41 @@ def _splits(track: pd.DataFrame, summary: pd.Series | None) -> None:
         tr(pl="tempo", en="pace"): pace.map(lambda v: ru.fmt_pace(v, False)),
         "Δ s/km": ((pace - mean) * 60).round().astype("Int64").map(lambda v: "—" if pd.isna(v) else f"{v:+d}"),
         tr(pl="tętno", en="HR"): pd.to_numeric(splits["hr"], errors="coerce").round().astype("Int64"),
-        tr(pl="↑ / ↓ m", en="↑ / ↓ m"): [f"+{u:.0f} / −{d:.0f}" if pd.notna(u) and pd.notna(d) else "—"
-                                       for u, d in zip(splits["elev_gain_m"], splits["elev_loss_m"])],
+        "↑ / ↓ m": [f"+{u:.0f} / −{d:.0f}" if pd.notna(u) and pd.notna(d) else "—"
+                    for u, d in zip(splits["elev_gain_m"], splits["elev_loss_m"])],
     })
     cadence = pd.to_numeric(splits["cadence"], errors="coerce")
     if cadence.notna().any():
         table[tr(pl="kadencja", en="cadence")] = cadence.round().astype("Int64")
-    stops = pd.to_numeric(splits["stop_s"], errors="coerce")
+    stops = pd.to_numeric(splits["stop_s"], errors="coerce") if "stop_s" in splits.columns else pd.Series(dtype=float)
     if (stops >= 5).any():
         table[tr(pl="postój", en="stop")] = stops.map(lambda v: ru.fmt_time(v) if pd.notna(v) and v >= 5 else "")
-    fastest = pace[full].idxmin() if full.any() else None
+    fastest = pace[full].idxmin() if full.any() and pace[full].notna().any() else None
     caption = tr(pl=f"średnio {ru.fmt_pace(mean, False)} /km; Δ = różnica od średniej, minus = szybciej",
                  en=f"average {ru.fmt_pace(mean, False)} /km; Δ = off the average, minus = faster")
     if fastest is not None:
         caption += tr(pl=f" · najszybszy km {splits.at[fastest, 'km']}", en=f" · fastest km {splits.at[fastest, 'km']}")
-    with bento.tile(tr(pl="Splity kilometrowe", en="Kilometre splits"), key="route_splits", caption=caption,
-                    how=tr(pl="Czas stopera, bez autopauzy — postój na światłach jest w tempie (kolumna „postój”). "
-                              "Ze strumienia ~400 próbek, dokładność kilku sekund. Ostatni odcinek może być niepełny "
-                              "(długość w nawiasie).",
-                           en="Stopwatch time, without auto-pause — a stop at the lights is in the pace (the “stop” "
-                              "column). From a stream of ~400 samples, accurate to a few seconds. The last split "
-                              "may be partial (length in brackets).")):
+    return table, caption
+
+
+def split_how() -> str:
+    return i18n.tr(
+        pl="Czas stopera, bez autopauzy — postój na światłach jest w tempie (kolumna „postój”). Ze strumienia "
+           "~400 próbek, dokładność kilku sekund. Ostatni odcinek może być niepełny (długość w nawiasie).",
+        en="Stopwatch time, without auto-pause — a stop at the lights is in the pace (the “stop” column). From "
+           "a stream of ~400 samples, accurate to a few seconds. The last split may be partial (length in brackets).")
+
+
+def splits_tile(track: pd.DataFrame) -> None:
+    """Kilometre splits right under the map (a walk, a hike)."""
+    from running import sessions
+
+    splits = sessions.km_splits(track)
+    if splits.empty:
+        return
+    table, caption = split_table(splits)
+    with bento.tile(i18n.tr(pl="Splity kilometrowe", en="Kilometre splits"), key="route_splits", caption=caption,
+                    how=split_how()):
         tables.show(table)
 
 

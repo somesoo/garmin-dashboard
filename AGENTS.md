@@ -185,6 +185,10 @@ Zachowania celowe (nie „naprawiaj”):
   tekstowego). Wyjątek: Notatnik SQL.
 - **Nic nie wysuwa klawiatury bez pola do pisania**: wybór z listy przez
   `tables.chooser`; `ui/gesture.py` daje selectboxom `inputmode="none"` na dotyku.
+- **Bieg ma jedną stronę** (*Trening*: Przegląd z mapą · Splity · Wykresy ·
+  Porównanie · Segmenty, jak w Stravie/Garmin Connect). *Trasy* pokazują tylko
+  aktywności inne niż bieg; `routing.open_activity` kieruje bieg do *Treningu*.
+  Mapę i tabelę splitów dają `routes.map_tile` / `routes.split_table` — nie kopiuj.
 - **Strona z wieloma pytaniami → zakładki** (`st.tabs`, wzór: *Trening*): nad
   nimi wybór i 4 KPI, w każdej zakładce jedno pytanie; zakładka bez danych nie
   powstaje. Telefon przełącza je przesunięciem palca (`ui/gesture.py`).

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pandas as pd
 import streamlit as st
 
 from core import i18n
@@ -56,7 +57,13 @@ def goto(url_path: str, **state: Any) -> None:
 
 
 def open_activity(activity_id: int) -> None:
-    """Open one activity on the route explorer."""
+    """Open one activity: a run on its own page (the map is there), anything else on the route explorer."""
+    from ui import shell
+
+    runs = shell.table("run_sessions")
+    if not runs.empty and (pd.to_numeric(runs["activity_id"], errors="coerce") == int(activity_id)).any():
+        open_run(activity_id)
+        return
     goto("trasy", routes_activity_request=int(activity_id))
 
 

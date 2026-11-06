@@ -59,51 +59,76 @@ def _is_workout(run: pd.Series) -> bool:
 
 
 def _tabs(frame: pd.DataFrame, run: pd.Series, track: pd.DataFrame) -> None:
-    """One question per tab, swiped left and right on a phone (ui/gesture.py).
+    """The run in the order every training log uses (Strava, Garmin Connect,
+    TrainingPeaks), one tab each, swiped left and right on a phone (ui/gesture.py):
 
-    * Przebieg -- how the run went: the four numbers, the splits, the streams.
-    * Wysiłek -- what it cost: zones, load, cadence, elevation.
-    * Struktura -- the reps and the workouts like it (a workout only).
+    * Przegląd -- the four numbers, the map, what kind of session it was.
+    * Splity -- per kilometre (chart and table); the reps for a workout.
+    * Wykresy -- pace and heart rate along the distance, time in zones.
     * Porównanie -- against itself earlier: similar runs, efficiency, best stretches.
-    * Trasa -- the place: the same route, shared stretches, segments (GPS only).
+    * Segmenty -- the place: the same route, shared stretches, segments (GPS only).
+
+    The route explorer no longer shows runs: this page holds the map too.
     """
+    from views import routes as rt
+
     tr = i18n.tr
-    pages = [("course", tr(pl="Przebieg", en="Course")), ("effort", tr(pl="Wysiłek", en="Effort"))]
-    if _is_workout(run):
-        pages.append(("structure", tr(pl="Struktura", en="Structure")))
-    pages.append(("compare", tr(pl="Porównanie", en="Compare")))
+    pages = [("overview", tr(pl="Przegląd", en="Overview")), ("splits", tr(pl="Splity", en="Splits")),
+             ("charts", tr(pl="Wykresy", en="Charts")), ("compare", tr(pl="Porównanie", en="Compare"))]
     if not track.empty:
-        pages.append(("route", tr(pl="Trasa", en="Route")))
+        pages.append(("segments", tr(pl="Segmenty", en="Segments")))
     for (name, _), tab in zip(pages, st.tabs([label for _, label in pages])):
         with tab:
-            if name == "course":
+            if name == "overview":
                 _summary(run)
+                if track.empty:
+                    _character(run)
+                    continue
+                left, right = bento.row(2, 2)
+                with left:
+                    rt.map_tile(track, int(run["activity_id"]), key="run")
+                with right:
+                    _character(run)
+                    with bento.tile(tr(pl="Profil wysokości", en="Elevation profile"), key="run_profile") as t:
+                        t.chart(tz.profile(track), empty=tr(pl="Brak danych wysokości.", en="No elevation data."))
+            elif name == "splits":
                 left, right = bento.row(2, 2)
                 with left:
                     _splits(run)
                 with right:
-                    _streams(track)
-            elif name == "effort":
+                    _split_table(run)
+                if _is_workout(run):
+                    _structure(run)
+                    _workout(frame, run)
+            elif name == "charts":
                 left, right = bento.row(2, 2)
                 with left:
-                    _zones(run)
+                    _streams(track)
                 with right:
-                    _character(run)
-            elif name == "structure":
-                _structure(run)
-                _workout(frame, run)
+                    _zones(run)
             elif name == "compare":
                 bento.pair(lambda: _similar(frame, run),
                            (lambda: _faster_or_harder(run)) if not track.empty else None)
                 _best_efforts(run)
             else:
-                if st.button(tr(pl="Otwórz mapę trasy", en="Open the route map"), icon=":material/map:",
-                             key="run_to_map", type="tertiary"):
-                    routing.open_activity(int(run["activity_id"]))
                 _same_route(run)
                 _shared(run, track)
                 _segments(run)
                 _new_segment(run, track)
+
+
+def _split_table(run: pd.Series) -> None:
+    """Every kilometre as a row: what a log shows first under the splits chart."""
+    from views import routes as rt
+
+    splits = shell.table("run_splits")
+    mine = splits[splits["activity_id"] == run["activity_id"]].reset_index(drop=True) if not splits.empty else splits
+    if mine.empty:
+        return
+    table, caption = rt.split_table(mine)
+    with bento.tile(i18n.tr(pl="Kilometr po kilometrze", en="Kilometre by kilometre"), key="split_table",
+                    caption=caption, how=rt.split_how()):
+        tables.show(table)
 
 
 def _summary(run: pd.Series) -> None:
@@ -794,14 +819,8 @@ def _splits(run: pd.Series) -> None:
                             for v, s in zip(mine["pace_min_km"], standing.fillna(0))],
                 hovertemplate="km %{x}: %{customdata}<extra></extra>",
                 marker={"symbol": ["circle-open" if s >= 5 else "circle" for s in standing.fillna(0)]})
-        t.chart(figure, table=pd.DataFrame({
-            "km": mine["km"], tr(pl="długość", en="length"): mine["length_km"],
-            tr(pl="czas", en="time"): mine["seconds"].map(units.fmt_time),
-            pace: mine["pace_min_km"].map(lambda v: units.fmt_pace(v, False)), tr(pl="tętno", en="HR"): mine["hr"],
-            tr(pl="w górę m", en="up m"): mine["elev_gain_m"], tr(pl="w dół m", en="down m"): mine["elev_loss_m"],
-            tr(pl="kadencja", en="cadence"): mine["cadence"],
-            tr(pl="postój", en="stop"): mine["stop_s"].map(rc.stop_text) if "stop_s" in mine.columns else "—",
-        }), key=f"splits_{int(run['activity_id'])}")
+        # The table is the tile next to it (_split_table), not a twin behind an icon.
+        t.chart(figure, key=f"splits_{int(run['activity_id'])}")
 
 
 def _streams(track: pd.DataFrame) -> None:
