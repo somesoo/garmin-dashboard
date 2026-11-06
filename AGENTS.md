@@ -218,6 +218,10 @@ Zachowania celowe (nie „naprawiaj”):
   inaczej z telefonu nie da się do niej dojść (test pilnuje). Widżet (zakres,
   język, pobranie, wylogowanie) stoi **albo** w szufladzie, **albo** w górnej
   linii — nigdy w obu, bo dwa widżety na jednym kluczu to wyjątek Streamlita.
+  Na biurku szuflada jest **dodatkowo** obok górnej linii, ale tylko z linkami
+  (widżety zostają w górnej linii). CSS szuflady (`shell.drawer_style`) idzie
+  przez `st.html` z samym `<style>` — w szynie przegrałby z `display: none`
+  z `page_style`, bo szyna stoi w DOM przed stroną.
 - Komponenty JS obsługują **zdarzenia wskaźnika, nie myszy**: `onmousemove`
   nigdy nie odpala na telefonie. Żaden handler odczytu nie woła
   `preventDefault` — palec, który zaczął na wykresie, musi przewinąć stronę.

@@ -215,10 +215,20 @@ Reguły treści:
 - **Szuflada to Python, nie `@media`** (`shell.phone()`), jak reszta treści: tak
   samo działa `?layout=phone` na biurku, czyli da się ją obejrzeć bez telefonu.
   Szyna i hamburger to chrome Streamlita, do którego sięga tylko CSS — dlatego
-  reguły, które je odsłaniają, siedzą w osobnym bloku (`shell._DRAWER`)
-  dokładanym przez `page_style` **tylko** wtedy, gdy szuflada faktycznie się
-  rysuje. Hamburgera robi ligatura `menu` w `::after` (natywny przełącznik to
-  podwójny szewron).
+  reguły, które je odsłaniają, siedzą w osobnym bloku (`shell.drawer_style()`:
+  `_DRAWER` + `_DRAWER_PHONE` albo `_DRAWER_WIDE`), który `drawer.render`
+  wysyła **tylko** wtedy, gdy szuflada faktycznie się rysuje (nie na ekranie
+  logowania ani w onboardingu). Idzie przez `st.html` z samym `<style>`:
+  Streamlit kładzie go do kontenera zdarzeń, poza rzędy strony i **za**
+  `page_style` w DOM — `<style>` w samej szynie przegrałby z ogólnym
+  `display: none`, bo szyna stoi w DOM przed stroną. Hamburgera robi ligatura
+  `menu` w `::after` (natywny przełącznik to podwójny szewron).
+- **Na biurku szuflada jest dodatkowo** (2026-11-06): ta sama lista stron
+  i pętla z liczbami dnia, obok górnej linii, która zostaje bez zmian. Bez
+  widżetów — zakres, język, pobranie i wylogowanie są w górnej linii (patrz
+  niżej). Hamburger stoi na stałe w lewym marginesie, szyna (260 px) odsuwa
+  stronę zamiast ją przykrywać i **nie zamyka się** po kliknięciu linku — na
+  szerokim ekranie jest na nią miejsce. Menu „⋮” Streamlita zostaje.
 - **Widżet stoi w jednym miejscu, nie w dwóch**: zakres, język, pobieranie
   i wylogowanie na telefonie rysuje szuflada, a na biurku górna linia — nigdy
   oba w jednym przebiegu, dlatego wystarcza jeden klucz (dwa widżety na jednym

@@ -370,26 +370,13 @@ _STYLE = """
 </style>
 """
 
-# Added by ``page_style`` only when the visitor gets the drawer (drawer.py).
-# Everything here either undoes the blanket hide above or styles the panel, so a
-# wide window never carries it -- and ``?layout=phone`` on a desktop does,
-# which is how the drawer is reviewed without a phone in hand.
+# Added by ``page_style`` whenever the page renders the drawer (drawer.py): on a
+# phone and on a desktop alike, not during onboarding. Everything here either
+# undoes the blanket hide above or styles the panel.
 _DRAWER = """
 <style>
   [data-testid="stSidebar"], [data-testid="stSidebarCollapseButton"],
   [data-testid="stExpandSidebarButton"] {display: flex !important;}
-  /* A page whose head is a control (guide.OWN_TOP: the run picker) puts it in
-     the hamburger's line, between the hamburger and Streamlit's menu. */
-  /* Measured on an S23: the card's middle on the hamburger's middle. */
-  .st-key-run_top {margin-top: calc(-2.6rem - 19px); padding: 0 0 0 2.6rem; position: relative; z-index: 1000000;
-      pointer-events: none;}
-  /* Streamlit's "⋮" menu: hidden on a phone; "Reload" is at the foot of the drawer. */
-  /* Only the menu: the toolbar itself also holds the hamburger. */
-  [data-testid="stMainMenu"], [data-testid="stToolbarActions"] {display: none !important;}
-  /* The padding lies over the hamburger and the menu: only the card itself takes a tap. */
-  .st-key-run_top iframe {pointer-events: auto;}
-  /* Room for the hamburger: the header is 0 high everywhere else, being empty. */
-  [data-testid="stHeader"] {height: 2.7rem !important; min-height: 2.7rem !important;}
   /* Streamlit's control for a shut sidebar is a double chevron; the ligature
      "menu" in its place is the hamburger a thumb goes looking for. */
   [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {font-size: 0 !important;}
@@ -425,6 +412,37 @@ _DRAWER = """
 </style>
 """
 
+# The phone's half of the drawer (``?layout=phone`` on a desktop too): the run
+# picker in the hamburger's line, no "⋮", a header tall enough for the hamburger.
+# A desktop keeps its header at 0 and its menu; the hamburger stands in the
+# left margin, beside the top line.
+_DRAWER_PHONE = """
+<style>
+  /* A page whose head is a control (guide.OWN_TOP: the run picker) puts it in
+     the hamburger's line, between the hamburger and Streamlit's menu. */
+  /* Measured on an S23: the card's middle on the hamburger's middle. */
+  .st-key-run_top {margin-top: calc(-2.6rem - 19px); padding: 0 0 0 2.6rem; position: relative; z-index: 1000000;
+      pointer-events: none;}
+  /* Streamlit's "⋮" menu: hidden on a phone; "Reload" is at the foot of the drawer. */
+  /* Only the menu: the toolbar itself also holds the hamburger. */
+  [data-testid="stMainMenu"], [data-testid="stToolbarActions"] {display: none !important;}
+  /* The padding lies over the hamburger and the menu: only the card itself takes a tap. */
+  .st-key-run_top iframe {pointer-events: auto;}
+  /* Room for the hamburger: the header is 0 high everywhere else, being empty. */
+  [data-testid="stHeader"] {height: 2.7rem !important; min-height: 2.7rem !important;}
+</style>
+"""
+
+# A desktop: the hamburger in the margin left of the top line, level with it,
+# and the panel a column beside the page rather than over it.
+_DRAWER_WIDE = """
+<style>
+  [data-testid="stExpandSidebarButton"] {position: fixed; top: 0.45rem; left: 0.5rem; z-index: 1000001;}
+  [data-testid="stSidebar"] {width: 260px !important;}
+  [data-testid="stSidebarUserContent"] {padding-top: 0.6rem;}
+</style>
+"""
+
 
 def _delays() -> str:
     # Stagger as CSS variables: the page row sets --row-delay, the column inside
@@ -445,17 +463,25 @@ def page_style(mode: str = "light") -> str:
     """The app's CSS for the theme the browser renders (``theme.mode()``).
 
     The arrangement is keyed on the viewport (the media query in ``_STYLE``).
-    One block is keyed on the visitor instead: the drawer's (``_DRAWER``), because
-    Streamlit's sidebar and its hamburger are chrome only CSS can reach, and they
-    must appear exactly for the visitor whose page renders a drawer in them.
+    The drawer's rules are not in it: they come with the drawer (``drawer_style``).
     """
     canvas, sidebar, widget, line, highlight, shadow, raised = _SURFACES.get(mode, _SURFACES["light"])
     tokens = {"@CANVAS@": canvas, "@SIDEBAR@": sidebar, "@WIDGET@": widget, "@LINE@": line,
               "@HIGHLIGHT@": highlight, "@SHADOW@": shadow, "@RAISED@": raised, "@DELAYS@": _delays()}
-    style = _STYLE + (_DRAWER if phone() else "")
+    style = _STYLE
     for token, value in tokens.items():
         style = style.replace(token, value)
     return style
+
+
+def drawer_style() -> str:
+    """The CSS that reveals Streamlit's sidebar and hamburger, for a page that renders the drawer.
+
+    Keyed on the visitor, not the viewport: the sidebar is chrome only CSS can
+    reach, and it must appear exactly when ``drawer.render`` puts something in
+    it -- not on the sign-in screen, not during onboarding.
+    """
+    return _DRAWER + (_DRAWER_PHONE if phone() else _DRAWER_WIDE)
 
 
 # ---------------------------------------------------------------- which layout

@@ -91,6 +91,27 @@ class Style(unittest.TestCase):
         self.assertIn("flex: 1 1 0 !important", narrow)
 
 
+class DrawerStyle(unittest.TestCase):
+    """The drawer is on a desktop too; only its phone half hides the menu and moves the run picker."""
+
+    def test_page_style_alone_keeps_the_sidebar_hidden(self) -> None:
+        """Sign-in and onboarding render no drawer, so the bare page has no hamburger."""
+        self.assertNotIn('[data-testid="stExpandSidebarButton"] {display: flex', shell.page_style("dark"))
+
+    def test_desktop_drawer_keeps_the_menu(self) -> None:
+        css = shell.drawer_style()  # off a request the layout is wide
+        self.assertIn('[data-testid="stExpandSidebarButton"] {display: flex', css)
+        self.assertNotIn('[data-testid="stMainMenu"]', css)
+        self.assertNotIn("st-key-run_top", css)
+
+    def test_phone_drawer_takes_the_hamburger_line(self) -> None:
+        from unittest import mock
+        with mock.patch.object(shell, "phone", return_value=True):
+            css = shell.drawer_style()
+        self.assertIn('[data-testid="stMainMenu"]', css)
+        self.assertIn("st-key-run_top", css)
+
+
 class Drawer(unittest.TestCase):
     """The drawer is the only navigation a phone has, so nothing may be missing
     from it: a page left out of every list below cannot be reached at all."""

@@ -55,8 +55,7 @@ st.set_page_config(
     page_title="Garmin Dashboard",
     page_icon="🏔️",
     layout="wide",
-    # The drawer a phone navigates by (ui/drawer.py) starts shut; a wide window
-    # has no sidebar at all (shell.page_style hides it).
+    # The drawer (ui/drawer.py) starts shut, on a phone and on a desktop.
     initial_sidebar_state="collapsed",
 )
 st.markdown(shell.page_style(theme.mode()), unsafe_allow_html=True)
@@ -126,16 +125,16 @@ if ONBOARDING:
 
 routing.register(PAGES)
 
-# No sidebar: the loop on every page (story.py) is the navigation, and the top
-# line carries the everyday pages, the lab, the range, the language and the pull.
+# Streamlit's own page list never shows: the top line carries the everyday pages,
+# the lab, the range, the language and the pull; the drawer lists every page.
 page = st.navigation(PAGES, position="hidden")
 
 if ONBOARDING:
     story.topbar_minimal()
     page.run()
 else:
-    # On a phone every link on the page is in the drawer instead (drawer.py);
-    # on a wide window this renders nothing.
+    # Every page in one list behind the hamburger (drawer.py): on a phone the
+    # only navigation, on a desktop one beside the top line.
     drawer.render(routing.name(page))
     story.topbar(routing.name(page))
     guide.eyebrow(routing.name(page))

@@ -1,4 +1,4 @@
-"""The whole app in one list: the drawer a phone navigates by.
+"""The whole app in one list: the drawer a phone navigates by, and a desktop beside its top line.
 
 On a wide screen the navigation is the top line (``story.topbar``) and the loop
 beside the headline (``story.loop``); both fit the window. On a phone neither
@@ -11,12 +11,15 @@ So on a phone there is **one navigation, in a drawer**: the hamburger in the top
 left corner opens Streamlit's sidebar with every page in it, and the top line
 keeps nothing but the page's title.
 
-Which visitor gets it is decided in Python (``shell.phone``), not by the
-viewport -- the same lever the rest of the phone page uses, so ``?layout=phone``
-shows the drawer on a desktop too and it can be reviewed without a phone in
-hand. The sidebar and the hamburger are Streamlit's own chrome, which only CSS
-can reach; ``shell.page_style`` therefore holds back the rules that reveal them
-until this drawer is actually rendered.
+A desktop gets the same drawer **in addition** to its top line: one list with
+every page in the app's order, a click away from anywhere, while the top line
+keeps the everyday pages, the range and the language in view. What differs is
+decided in Python (``shell.phone``), not by the viewport -- the same lever the
+rest of the phone page uses, so ``?layout=phone`` shows the phone's drawer on a
+desktop and it can be reviewed without a phone in hand. The sidebar and the
+hamburger are Streamlit's own chrome, which only CSS can reach; the rules that
+reveal them (``shell.drawer_style``) come with this drawer, so a page without
+one (sign-in, onboarding) has no hamburger either.
 
 The order of the list is the app's model, not the alphabet: the everyday pages,
 the four stages of the loop with their number of the day (stimulus -> response
@@ -24,11 +27,16 @@ the four stages of the loop with their number of the day (stimulus -> response
 **once** -- one that belongs to two groups (Sport, Fizjologia) stays in the
 first.
 
-Because the top line on a phone no longer carries them, the drawer is also where
-the range, the language, the Garmin pull and signing out live. Each of those is
-one widget on one key: exactly one of the two chromes is rendered per run, which
-is what keeps them from colliding (two widgets on one key is a Streamlit
-exception, and a copy with its own key drifts out of step with the state).
+Because the top line on a phone no longer carries them, the phone's drawer is
+also where the range, the language, the Garmin pull and signing out live. Each
+of those is one widget on one key, rendered by exactly one of the two chromes
+per run, which is what keeps them from colliding (two widgets on one key is a
+Streamlit exception, and a copy with its own key drifts out of step with the
+state). On a desktop they stay in the top line, so the desktop's drawer is
+navigation only: pages, the loop, the account page.
+
+A link tapped in the phone's drawer shuts it (it covers the page); on a desktop
+the panel sits beside the page and stays open until it is closed.
 """
 
 from __future__ import annotations
@@ -47,19 +55,27 @@ LAB = ["statystyka", "insights", "sql", "slownik", "admin"]
 
 
 def render(current: str) -> None:
-    """The drawer, on a phone only: who is looking, every page, the view, the account."""
-    if not shell.phone():
-        return
+    """The drawer: who is looking, every page, and on a phone the view and the account too."""
+    phone = shell.phone()
     seen: set[str] = set()
+    # Style-only st.html goes to Streamlit's event container: no row in the page,
+    # and after page_style in the document, which its blanket hide needs (the
+    # sidebar comes first in the DOM, so a <style> inside it would lose).
+    st.html(shell.drawer_style())
     with st.sidebar, st.container(key="drawer"):
         _who()
         _section(i18n.group("everyday"), EVERYDAY, current, seen)
         _loop(current, seen)
         _section(i18n.group("lab"), LAB, current, seen)
-        _tour()
-        _view()
-        _account(current, seen)
-    _close_on_tap()
+        if phone:
+            _tour()
+            _view()
+            _account(current, seen)
+        else:
+            # The range, the language, the pull and signing out are in the top line.
+            _section(i18n.tr(pl="Twoje dane", en="Your data"), ["konto"], current, seen)
+    if phone:
+        _close_on_tap()
 
 
 def _who() -> None:
