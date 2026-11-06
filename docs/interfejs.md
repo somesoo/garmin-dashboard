@@ -228,7 +228,10 @@ Reguły treści:
   widżetów — zakres, język, pobranie i wylogowanie są w górnej linii (patrz
   niżej). Hamburger stoi na stałe w lewym marginesie, szyna (260 px) odsuwa
   stronę zamiast ją przykrywać i **nie zamyka się** po kliknięciu linku — na
-  szerokim ekranie jest na nią miejsce. Menu „⋮” Streamlita zostaje.
+  szerokim ekranie jest na nią miejsce; zamyka ją kliknięcie **poza** nią
+  (`drawer._CLOSE_OUTSIDE`, liczy się tylko przy otwartej szynie, więc klik
+  w hamburgera jej nie zamyka). Kliki wewnątrz ramek komponentów (wykres
+  główny, glob) nie dochodzą do dokumentu i jej nie zamykają. Menu „⋮” Streamlita zostaje.
 - **Widżet stoi w jednym miejscu, nie w dwóch**: zakres, język, pobieranie
   i wylogowanie na telefonie rysuje szuflada, a na biurku górna linia — nigdy
   oba w jednym przebiegu, dlatego wystarcza jeden klucz (dwa widżety na jednym

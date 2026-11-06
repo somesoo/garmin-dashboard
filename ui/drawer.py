@@ -36,7 +36,8 @@ state). On a desktop they stay in the top line, so the desktop's drawer is
 navigation only: pages, the loop, the account page.
 
 A link tapped in the phone's drawer shuts it (it covers the page); on a desktop
-the panel sits beside the page and stays open until it is closed.
+the panel sits beside the page, stays open through its links and shuts on a
+click outside it.
 """
 
 from __future__ import annotations
@@ -76,6 +77,8 @@ def render(current: str) -> None:
             _section(i18n.tr(pl="Twoje dane", en="Your data"), ["konto"], current, seen)
     if phone:
         _close_on_tap()
+    else:
+        _close_outside()
 
 
 def _who() -> None:
@@ -190,12 +193,46 @@ _CLOSE = """<script>
 </script>"""
 
 
+# On a desktop the panel sits beside the page, so a link inside it keeps it open
+# (one may walk through several pages); a click anywhere outside it -- the page,
+# the top line -- shuts it, the way a menu behaves. On a phone Streamlit's own
+# overlay already shuts it on a tap beside it. Only the panel open counts: the
+# collapse button exists then and only then, so the click on the hamburger that
+# opens it is not taken for a click outside.
+_CLOSE_OUTSIDE = """<script>
+(() => {
+  let doc = document;
+  try { if (window.frameElement && window.parent.document) doc = window.parent.document; } catch (e) {}
+  if (doc.__gdDrawerOutside) return;
+  doc.__gdDrawerOutside = true;
+  const view = doc.defaultView || window;
+  doc.addEventListener("click", (event) => {
+    if (!(event.target instanceof view.Element)) return;
+    const panel = doc.querySelector('[data-testid="stSidebar"]');
+    if (!panel || panel.contains(event.target)) return;
+    if (event.target.closest('[data-testid="stExpandSidebarButton"]')) return;
+    const shut = doc.querySelector('[data-testid="stSidebarCollapseButton"] button')
+              || doc.querySelector('[data-testid="stSidebarCollapseButton"]');
+    if (shut && shut.getClientRects().length) shut.click();
+  }, true);
+})();
+</script>"""
+
+
 def _close_on_tap() -> None:
+    _script(_CLOSE)
+
+
+def _close_outside() -> None:
+    _script(_CLOSE_OUTSIDE)
+
+
+def _script(code: str) -> None:
     # The same pattern as ui/webapp.py: in a recent Streamlit the script goes
     # into the page itself, in an older one into a same-origin component frame.
     try:
-        st.html(_CLOSE, unsafe_allow_javascript=True)
+        st.html(code, unsafe_allow_javascript=True)
     except TypeError:
         import streamlit.components.v1 as components
 
-        components.html(_CLOSE, height=0)
+        components.html(code, height=0)

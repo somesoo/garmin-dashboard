@@ -190,8 +190,7 @@ z Garmina”, wylogowanie). Z góry strony zostaje jej tytuł, a pętla przy
 nagłówku i pasek „Dalej” na telefonie się nie rysują — razem były ekranem
 przewijania nad i pod tym, po co się wchodzi. Wybranie strony zamyka szufladę.
 Na biurku i na tablecie poziomo górna linia zostaje, a ta sama lista stron jest
-dodatkowo pod hamburgerem w lewym górnym rogu (otwarta zostaje, dopóki jej nie
-zamkniesz; zakres, język i pobieranie są w górnej linii); żeby obejrzeć wersję
+dodatkowo pod hamburgerem w lewym górnym rogu (zamyka się kliknięciem poza nią; zakres, język i pobieranie są w górnej linii); żeby obejrzeć wersję
 telefonową bez telefonu, dopisz `?layout=phone` do adresu.
 
 ## Alternatywa bez Google: tożsamość z Tailscale
