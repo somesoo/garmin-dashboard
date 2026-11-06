@@ -208,6 +208,9 @@ Zachowania celowe (nie „naprawiaj”):
   `page_style`), treść — Python po nagłówku żądania (`shell.phone()`).
   Zawijaj **tylko rzędy kolumn** (`:has(> [data-testid="stColumn"])`) — kontener
   poziomy musi zostać w linii. Pasek KPI na telefonie to jeden rząd czterech (bez notki i „?”).
+  Rząd samych `st.metric` w kaflu (kolumny bez innych elementów poza podpisem)
+  dostaje ten sam pasek z CSS po kształcie, do 4 w linii — nowy kafel nie
+  potrzebuje klucza; rząd z wykresem/kaflem/formularzem dalej układa się w pion.
   Nowa strona, która sypie kafle wprost (nie przez `story.frame_page`), oddaje
   drugi plan do `story.second(label, render, key=...)` — to **funkcja**, bo na
   telefonie treść nie ma się policzyć, dopóki nikt nie naciśnie „Szczegóły”.
