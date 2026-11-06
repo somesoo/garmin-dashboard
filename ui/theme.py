@@ -1320,8 +1320,13 @@ def _map_layout(
     zoom_pad: float = 0.12,
     uirevision: str | None = None,
     robust: bool = False,
+    width: float = 900.0,
 ) -> go.Figure:
     """Centre and zoom a map on its own track, with a neutral basemap.
+
+    ``width``/``height`` must be the size the map is drawn at: the zoom that
+    frames the track is computed for them, and a guess (900 px wide on a
+    330 px phone) zooms in so far that the track runs off the edges.
 
     The basemap follows the theme (positron / dark matter): a light raster in a
     dark widget reads as a pasted-in screenshot. ``route_map`` picks the ramp to
@@ -1348,7 +1353,7 @@ def _map_layout(
 
     lat_span = max(float(lat_high - lat_low), 1e-4)
     lon_span = max(float(lon_high - lon_low), 1e-4)
-    viewport_width, viewport_height = 900.0, max(height, 240)
+    viewport_width, viewport_height = float(width), max(height, 240)
     import math
 
     # MapLibre (what plotly's map traces render with) uses 512px tiles, so the
@@ -1409,8 +1414,12 @@ def route_map(
     uirevision: str | None = None,
     pace: bool = False,
     highlight: str | None = None,
+    width: int | None = None,
 ) -> go.Figure | None:
     """One GPS track as a line whose colour carries the measure.
+
+    ``height`` and ``width`` are the drawn size (``width``: about half the
+    canvas on a desktop, the screen on a phone) -- the zoom is fitted to them.
 
     ``pace`` writes the colour scale and the hover as ``m:ss`` per km.
     ``highlight`` (a boolean column, instead of ``color``) draws the run muted
@@ -1598,7 +1607,11 @@ def route_map(
                 showlegend=False,
             )
         )
-    return _map_layout(fig, track, height, uirevision=uirevision)
+    if width is None:
+        from ui import shell  # shell imports theme; asked only when drawing
+
+        width = 330 if shell.phone() else 620
+    return _map_layout(fig, track, height, uirevision=uirevision, width=width, zoom_pad=0.25)
 
 
 def profile(

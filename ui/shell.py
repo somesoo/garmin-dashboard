@@ -285,6 +285,7 @@ _STYLE = """
   [data-testid="stTabs"] [role="tablist"] {gap: 1.4rem; border-bottom: 1px solid #1f2126;
       overflow-x: auto; scrollbar-width: none; scroll-margin-top: 3.5rem;}
   [data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar {display: none;}
+  [data-testid="stTabsScrollLeft"], [data-testid="stTabsScrollRight"] {display: none !important;}
   [data-testid="stTabs"] [role="tab"] {padding: 0.55rem 0 0.6rem; min-height: 44px; flex: 0 0 auto;}
   [data-testid="stTabs"] [role="tab"] p {font-size: 0.98rem; font-weight: 600; color: #6b707a;}
   [data-testid="stTabs"] [role="tab"][aria-selected="true"] p {color: #fafafa;}
@@ -320,8 +321,24 @@ _STYLE = """
     [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]) {flex-wrap: wrap !important;}
     [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]) > [data-testid="stColumn"] {
         flex: 1 1 100% !important; width: 100% !important; min-width: 0 !important;}
+    /* KPIs: one strip of four, not two rows of two -- half a screen of numbers
+       before anything else was the first thing a phone saw. Small label, the
+       value under it (it may wrap rather than be cut), no note, no "?" icon. */
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [class*="st-key-kpi_"]) {
+        flex-wrap: nowrap !important; gap: 0.45rem !important;}
     [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] [class*="st-key-kpi_"])
-        > [data-testid="stColumn"] {flex: 1 1 38% !important; width: auto !important;}
+        > [data-testid="stColumn"] {flex: 1 1 0 !important; width: auto !important; min-width: 0 !important;}
+    [class*="st-key-kpi_"] {padding: 0.45rem 0 0.35rem 0 !important;}
+    [class*="st-key-kpi_"] [data-testid="stMetricLabel"] p {font-size: 0.7rem !important; line-height: 1.15;}
+    [class*="st-key-kpi_"] [data-testid="stMetricLabel"] [data-testid="stTooltipIcon"],
+    [class*="st-key-kpi_"] .tile-caption, [class*="st-key-kpi_"] [data-testid="stMetricDelta"] svg {display: none !important;}
+    [class*="st-key-kpi_"] [data-testid="stMetricValue"] > div {white-space: normal !important; overflow: visible !important;
+        line-height: 1.12;}
+    [class*="st-key-kpi_"] [data-testid="stMetricDelta"] {font-size: 0.68rem !important;}
+
+    /* Tabs: all of them on the screen, no scroll arrow standing over the last one. */
+    [data-testid="stTabs"] [role="tablist"] {gap: 0.4rem !important; justify-content: space-between;}
+    [data-testid="stTabs"] [role="tab"] p {font-size: 0.86rem !important;}
     /* Stacked, the column stagger would run down the page twice (once per row,
        once per column) and the last tile would wait 0.6 s. One axis is enough. */
     [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {--col-delay: 0ms;}
@@ -330,7 +347,7 @@ _STYLE = """
     h2 {font-size: 1rem !important; margin-top: 1.5rem !important;}
     .story-h {font-size: 1.5rem !important; line-height: 1.16 !important; max-width: none;}
     .story-sub {max-width: none;}
-    [class*="st-key-kpi_"] [data-testid="stMetricValue"] {font-size: 1.3rem;}
+    [class*="st-key-kpi_"] [data-testid="stMetricValue"] {font-size: 0.98rem !important;}
     [class*="st-key-wgt_"], [class*="st-key-kpi_"], [class*="st-key-pnl_"] {padding-left: 0; padding-right: 0;}
 
     .st-key-topbar {flex-wrap: wrap !important; gap: 0.1rem 0.9rem !important;}
@@ -363,7 +380,8 @@ _DRAWER = """
   [data-testid="stExpandSidebarButton"] {display: flex !important;}
   /* A page whose head is a control (guide.OWN_TOP: the run picker) puts it in
      the hamburger's line, between the hamburger and Streamlit's menu. */
-  .st-key-run_top {margin-top: -2.6rem; padding: 0 0 0 2.6rem; position: relative; z-index: 1000000;
+  /* Measured on an S23: the card's middle on the hamburger's middle. */
+  .st-key-run_top {margin-top: calc(-2.6rem - 19px); padding: 0 0 0 2.6rem; position: relative; z-index: 1000000;
       pointer-events: none;}
   /* Streamlit's "⋮" menu: hidden on a phone; "Reload" is at the foot of the drawer. */
   /* Only the menu: the toolbar itself also holds the hamburger. */

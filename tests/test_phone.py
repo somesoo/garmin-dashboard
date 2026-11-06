@@ -83,11 +83,12 @@ class Style(unittest.TestCase):
             if "flex-wrap: wrap" in line and "stHorizontalBlock" in line:
                 self.assertIn(":has(> [data-testid=\"stColumn\"])", line)
 
-    def test_kpis_go_two_by_two(self) -> None:
-        """Four full-width numbers would be a screen of scrolling for four numbers."""
+    def test_kpis_stay_one_strip_of_four(self) -> None:
+        """Four numbers are one strip on a phone: wrapped, they took half the screen."""
         narrow = shell.page_style("dark").split("@media (max-width: 760px)", 1)[1]
         self.assertIn('[class*="st-key-kpi_"]', narrow)
-        self.assertIn("flex: 1 1 38% !important", narrow)
+        self.assertIn("flex-wrap: nowrap !important", narrow)
+        self.assertIn("flex: 1 1 0 !important", narrow)
 
 
 class Drawer(unittest.TestCase):

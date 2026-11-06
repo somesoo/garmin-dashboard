@@ -207,7 +207,7 @@ Zachowania celowe (nie „naprawiaj”):
   Układ robi CSS po szerokości okna (`@media (max-width: 760px)` w
   `page_style`), treść — Python po nagłówku żądania (`shell.phone()`).
   Zawijaj **tylko rzędy kolumn** (`:has(> [data-testid="stColumn"])`) — kontener
-  poziomy musi zostać w linii. Pasek KPI na telefonie idzie po dwa.
+  poziomy musi zostać w linii. Pasek KPI na telefonie to jeden rząd czterech (bez notki i „?”).
   Nowa strona, która sypie kafle wprost (nie przez `story.frame_page`), oddaje
   drugi plan do `story.second(label, render, key=...)` — to **funkcja**, bo na
   telefonie treść nie ma się policzyć, dopóki nikt nie naciśnie „Szczegóły”.

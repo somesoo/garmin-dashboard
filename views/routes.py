@@ -147,17 +147,20 @@ def map_tile(track: pd.DataFrame, activity_id: int, *, key: str = "route") -> No
                 format_func=lambda v: choices[v], label_visibility="collapsed", key=f"{key}_colour")
         colour_by = colour_by or "pace_min_km"
         chosen = activity_id
+        # The zoom is fitted to the drawn size, so the size is decided here, once.
+        phone = shell.phone()
+        height, width = (340, 330) if phone else (bento.chart_height(3), 620)
         t.chart(
             tz.route_map(
                 track, color=colour_by, color_title=units[colour_by],
                 reverse_scale=(colour_by == "pace_min_km"), pace=(colour_by == "pace_min_km"),
+                height=height, width=width,
                 # Tied to the activity, not the metric: recolouring keeps the view.
                 uirevision=f"route-{int(chosen)}",
             ),
             empty=tr(pl="Ta aktywność nie ma śladu GPS.", en="This activity has no GPS track."),
             key=f"{key}_map_{int(chosen)}",
-            # A phone sees the splits under the map without scrolling past a full-screen map.
-            height=380 if shell.phone() else None,
+            height=height,
         )
 
 
