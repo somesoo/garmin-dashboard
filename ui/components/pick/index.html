@@ -92,6 +92,35 @@ function layered(it, on) {
     `<div class="t">${esc(it.title)}</div>` + (it.meta ? `<div class="m">${esc(it.meta)}</div>` : "") + "</div>";
 }
 
+/* The open list is a layer over the page, not a block that pushes it down:
+   the frame is taken out of the flow and its box keeps only the card's height
+   (the frame is served from the app's origin, so the parent page can be styled). */
+function pin(card) {
+  try {
+    const frame = window.frameElement, box = frame.parentElement;
+    box.style.position = "relative";
+    box.style.zIndex = "1000";
+    box.style.height = card.offsetHeight + 2 + "px";
+    Object.assign(frame.style, { position: "absolute", top: "0", left: "0", width: "100%" });
+  } catch (e) { /* not same-origin: the list pushes the page down instead */ }
+}
+
+// Room for the list: from under the card to the bottom of the window.
+function room() {
+  try {
+    const top = window.frameElement.getBoundingClientRect().top;
+    return Math.max(220, Math.min(560, window.parent.innerHeight - top - 70));
+  } catch (e) { return 420; }
+}
+
+// A tap anywhere on the page (outside this frame) shuts the list.
+try {
+  window.parent.document.addEventListener("click", () => {
+    const card = root.querySelector(".card.open");
+    if (card) card.click();
+  }, true);
+} catch (e) { /* not same-origin */ }
+
 function list(args) {
   const items = args.items || [];
   const sig = JSON.stringify(args.selected);
@@ -102,15 +131,16 @@ function list(args) {
     if (it.group && it.group !== group) { group = it.group; rows += `<div class="g">${esc(group)}</div>`; }
     rows += layered(it, it === current);
   }
-  const room = Math.max(280, Math.min(520, (window.parent.innerHeight || 700) * 0.62));
   const head = args.compact
     ? `<div class="one"><span class="d">${esc(current.day)}</span>${esc(current.short || current.title)}</div>`
     : layered(current, false);
   root.innerHTML = `<div class="card${args.compact ? " compact" : ""}${state.open ? " open" : ""}" role="button" tabindex="0">${head}<span class="chev"></span></div>` +
-    `<div class="list${state.open ? " open" : ""}" style="max-height:${room}px">${rows}</div>`;
+    `<div class="list${state.open ? " open" : ""}" style="max-height:${room()}px">${rows}</div>`;
   const card = root.querySelector(".card"), panel = root.querySelector(".list");
+  pin(card);
   const toggle = () => {
     state.open = !state.open;
+    if (state.open) panel.style.maxHeight = room() + "px";
     card.classList.toggle("open", state.open); panel.classList.toggle("open", state.open);
     if (state.open) { const on = panel.querySelector(".item.on"); if (on) panel.scrollTop = on.offsetTop - panel.clientHeight / 3; }
     height();

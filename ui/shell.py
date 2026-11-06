@@ -366,7 +366,8 @@ _DRAWER = """
   .st-key-run_top {margin-top: -2.6rem; padding: 0 0 0 2.6rem; position: relative; z-index: 1000000;
       pointer-events: none;}
   /* Streamlit's "⋮" menu: hidden on a phone; "Reload" is at the foot of the drawer. */
-  [data-testid="stToolbar"], [data-testid="stMainMenu"] {display: none !important;}
+  /* Only the menu: the toolbar itself also holds the hamburger. */
+  [data-testid="stMainMenu"], [data-testid="stToolbarActions"] {display: none !important;}
   /* The padding lies over the hamburger and the menu: only the card itself takes a tap. */
   .st-key-run_top iframe {pointer-events: auto;}
   /* Room for the hamburger: the header is 0 high everywhere else, being empty. */
