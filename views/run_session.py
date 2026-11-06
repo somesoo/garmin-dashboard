@@ -29,9 +29,8 @@ def _runs_noun(count: int) -> str:
 
 
 def render() -> None:
-    bento.header(i18n.page("bieg"), i18n.tr(
-        pl="Jeden bieg w szczegółach: splity, przebieg, strefy, struktura i porównanie z podobnymi.",
-        en="One run in detail: splits, streams, zones, structure and a comparison with similar runs."))
+    # No title and no intro: the picker is the head of the page (on a phone it
+    # stands in the hamburger's line, guide.OWN_TOP), the tabs come right under.
     frame = rc.guard()
     if frame is None:
         return
@@ -41,19 +40,13 @@ def render() -> None:
     if wanted is not None and int(wanted) in options:
         st.session_state["run_activity"] = int(wanted)
 
-    picker, action = st.columns([5, 1], vertical_alignment="center")
-    with picker:
+    with st.container(key="run_top"):
         chosen = tables.chooser(tables.activity_items(catalogue, catalogue["kind"].map(rc.kind_label)),
                                 options[0], key="run_activity_pick", state="run_activity")
     run = catalogue[catalogue["activity_id"] == chosen].iloc[0]
     routes = shell.table("routes")
     track = routes[pd.to_numeric(routes["activity_id"], errors="coerce") == chosen].sort_values("seq") \
         if not routes.empty else pd.DataFrame()
-    if not track.empty and action.button(i18n.tr(pl="Mapa trasy", en="Route map"), icon=":material/map:",
-                                         key="run_to_map", width="stretch"):
-        routing.open_activity(int(chosen))
-
-    _summary(run)
     _tabs(frame, run, track)
 
 
@@ -67,7 +60,7 @@ def _is_workout(run: pd.Series) -> bool:
 def _tabs(frame: pd.DataFrame, run: pd.Series, track: pd.DataFrame) -> None:
     """One question per tab, swiped left and right on a phone (ui/gesture.py).
 
-    * Przebieg -- how the run went along the way: splits and the streams.
+    * Przebieg -- how the run went: the four numbers, the splits, the streams.
     * Wysiłek -- what it cost: zones, load, cadence, elevation.
     * Struktura -- the reps and the workouts like it (a workout only).
     * Porównanie -- against itself earlier: similar runs, efficiency, best stretches.
@@ -83,6 +76,7 @@ def _tabs(frame: pd.DataFrame, run: pd.Series, track: pd.DataFrame) -> None:
     for (name, _), tab in zip(pages, st.tabs([label for _, label in pages])):
         with tab:
             if name == "course":
+                _summary(run)
                 left, right = bento.row(2, 2)
                 with left:
                     _splits(run)
@@ -102,6 +96,9 @@ def _tabs(frame: pd.DataFrame, run: pd.Series, track: pd.DataFrame) -> None:
                            (lambda: _faster_or_harder(run)) if not track.empty else None)
                 _best_efforts(run)
             else:
+                if st.button(tr(pl="Otwórz mapę trasy", en="Open the route map"), icon=":material/map:",
+                             key="run_to_map", type="tertiary"):
+                    routing.open_activity(int(run["activity_id"]))
                 _same_route(run)
                 _shared(run, track)
                 _segments(run)

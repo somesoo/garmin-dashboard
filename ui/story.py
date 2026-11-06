@@ -200,6 +200,10 @@ def _topbar_phone(current: str) -> None:
     Folded into the line itself they were two or three wrapped rows above the
     headline, and the headline is the page.
     """
+    from ui import guide
+
+    if current in guide.OWN_TOP:
+        return
     with st.container(horizontal=True, key="topbar", vertical_alignment="center", gap="medium"):
         st.markdown(f"<span class='tb-page'>{i18n.page(current)}</span>", unsafe_allow_html=True, width="content")
 

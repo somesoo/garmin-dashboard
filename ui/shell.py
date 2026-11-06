@@ -357,6 +357,12 @@ _DRAWER = """
 <style>
   [data-testid="stSidebar"], [data-testid="stSidebarCollapseButton"],
   [data-testid="stExpandSidebarButton"] {display: flex !important;}
+  /* A page whose head is a control (guide.OWN_TOP: the run picker) puts it in
+     the hamburger's line, between the hamburger and Streamlit's menu. */
+  .st-key-run_top {margin-top: -2.55rem; padding: 0 2.2rem 0 2.6rem; position: relative; z-index: 1000000;
+      pointer-events: none;}
+  /* The padding lies over the hamburger and the menu: only the card itself takes a tap. */
+  .st-key-run_top iframe {pointer-events: auto;}
   /* Room for the hamburger: the header is 0 high everywhere else, being empty. */
   [data-testid="stHeader"] {height: 2.7rem !important; min-height: 2.7rem !important;}
   /* Streamlit's control for a shut sidebar is a double chevron; the ligature

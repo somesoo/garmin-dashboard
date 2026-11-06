@@ -96,8 +96,15 @@ _VIEW_TITLES = {("plan", "races"): "zawody", ("plan", "plan"): "plan", ("obciaze
                 ("sport", "today"): "sport"}
 
 
+# Pages whose head is their own control (the run picker): no eyebrow above it,
+# and on a phone no title in the hamburger's line -- the control stands there.
+OWN_TOP = {"bieg"}
+
+
 def eyebrow(url_path: str) -> None:
     """The question the page answers, in small type above everything else."""
+    if url_path in OWN_TOP:
+        return
     question = _questions().get(url_path)
     if question:
         st.markdown(f"<div class='page-eyebrow'>{question}</div>", unsafe_allow_html=True)
