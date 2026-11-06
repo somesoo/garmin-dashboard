@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from ui import tables
 from ui import bento
 from core import i18n
 from ui import shell
@@ -97,7 +98,7 @@ def _yours(sessions: pd.DataFrame, now: pd.Timestamp) -> None:
             tr(pl="w roku", en="in a year"): done["sessions_365"],
             "h": done["hours"],
         })
-        st.dataframe(table, width="stretch", hide_index=True, height=bento.table_height(len(table)))
+        tables.show(table)
 
 
 def _discover(sessions: pd.DataFrame, now: pd.Timestamp) -> None:
@@ -128,4 +129,4 @@ def _discover(sessions: pd.DataFrame, now: pd.Timestamp) -> None:
             st.caption(tr(pl="Wszystko z tej rodziny już próbowałeś.", en="You have tried everything in this family."))
             return
         table = pd.DataFrame(rows)
-        st.dataframe(table, width="stretch", hide_index=True, height=bento.table_height(len(table)))
+        tables.show(table)

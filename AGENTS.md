@@ -178,6 +178,16 @@ Zachowania celowe (nie „naprawiaj”):
   `"inverse"` dla RHR/stresu, `"off"` dla zmęczenia i ilorazów.
 - Tabela w kaflu nigdy się nie przewija (`t.table`); formularze, edytory,
   długie tabele i proza → `bento.panel`.
+- **Tabele przez `ui/tables.py`, nie `st.dataframe`** (siatka w ramce, kolumna
+  checkboksów, ucięta kolumna na telefonie): `tables.show` (tylko do czytania),
+  `tables.pick` (dotknięcie wiersza; `sticky=True`, gdy wiersz steruje mapą obok),
+  `tables.chooser` (jedna aktywność z wielu: karta warstwowa + lista, bez pola
+  tekstowego). Wyjątek: Notatnik SQL.
+- **Nic nie wysuwa klawiatury bez pola do pisania**: wybór z listy przez
+  `tables.chooser`; `ui/gesture.py` daje selectboxom `inputmode="none"` na dotyku.
+- **Wykres śpi do pierwszego dotknięcia** (`ui/gesture.py` + `.armed` w
+  `page_style`): przewijanie strony nad wykresem nie zoomuje ani nie przypina
+  podpowiedzi. Nie zdejmuj tego przez `config` Plotly.
 - Kontrolki jednego kafla → `with t.header:` z `label_visibility="collapsed"`;
   opis znaczników wykresu → `how=` w „?”, nie do podpisu.
 - Kafle bez ramek; przyciski bez prostokątów (akcja główna `type="primary"`).

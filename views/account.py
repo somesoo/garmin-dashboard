@@ -23,6 +23,7 @@ import pandas as pd
 import streamlit as st
 
 import api
+from ui import tables
 from ui import bento
 from core import i18n
 from ui import shell
@@ -500,9 +501,8 @@ def _zone_summary(found: dict, measured: dict | None, source: dict[str, str]) ->
     def text(low: int | None, high: int | None) -> str:
         return f"< {high + 1}" if low is None else f"≥ {low}" if high is None else f"{low}–{high}"
 
-    st.dataframe(pd.DataFrame({tr(pl="strefa", en="zone"): names,
-                               "bpm": [text(low, high) for low, high in hrzones.bands(found)]}),
-                 hide_index=True)
+    tables.show(pd.DataFrame({tr(pl="strefa", en="zone"): names,
+                              "bpm": [text(low, high) for low, high in hrzones.bands(found)]}))
 
 
 def _zone_form(manual: dict) -> None:

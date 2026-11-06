@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from ui import tables
 from ui import bento
 from analysis import facts
 from ui import herochart as hc
@@ -181,7 +182,7 @@ def _table(result: dict, history: pd.DataFrame) -> None:
                   "distance with a race entered (Plan and races → Races and goals, the nearest one): after the plan when the plan "
                   "covers the race, otherwise with the current training."),
     ):
-        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", column_config=_columns())
+        tables.show(pd.DataFrame(rows), column_config=_columns())
 
 
 def _columns() -> dict:
@@ -404,7 +405,7 @@ def _preparation(result: dict, item: forecast.DistanceForecast) -> None:
         part, has = tr(pl="składnik", en="component"), tr(pl="jest", en="now")
         need, weight = tr(pl="przyjęte minimum", en="assumed minimum"), tr(pl="waga", en="weight")
         runs = max(2, prep["runs_need"] - 1)
-        st.dataframe(
+        tables.show(
             pd.DataFrame(
                 [
                     {part: tr(pl="najdłuższy bieg (6 tyg.)", en="longest run (6 wk)"), has: f"{prep['long_km']:.1f} km",
@@ -415,7 +416,6 @@ def _preparation(result: dict, item: forecast.DistanceForecast) -> None:
                      has: f"{prep['consistency']:.0%}", need: "100%", weight: "20%"},
                 ]
             ),
-            hide_index=True, width="stretch",
         )
         anchor_km = (perf or {}).get("distance_m", 5000) / 1000
         extra = forecast.MAX_EXTRA_EXPONENT * (1 - prep["score"])
@@ -482,7 +482,7 @@ def _assumptions() -> None:
                          columns={"long_km": tr(pl="długi bieg km", en="long run km"),
                                   "weekly_km": tr(pl="km/tydz.", en="km/week"),
                                   "runs": tr(pl="biegi/tydz.", en="runs/week")})
-        st.dataframe(req, width="stretch")
+        tables.show(req.reset_index())
         extra = forecast.MAX_EXTRA_EXPONENT
         st.markdown(tr(
             pl="- Wydolność to VDOT z krzywych Danielsa i Gilberta (koszt tlenowy biegu × ułamek VO₂max możliwy "

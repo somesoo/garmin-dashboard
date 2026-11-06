@@ -267,7 +267,33 @@ _STYLE = """
      *What* a phone is shown instead is a separate question, decided in Python
      (``shell.phone``, ``story.second``): CSS can only move things, and the
      point on a phone is to render less, not to hide more. */
+  /* ---- tables (ui/tables.py): rows on the ground, not a grid in a box ---- */
+  [data-testid="stHtml"]:has(> .gt-wrap) {margin-bottom: 0.4rem;}
+  .gt-wrap {overflow-x: auto; overscroll-behavior-x: contain;}
+  .gt {border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 0.92rem;}
+  .gt th {font-size: 0.68rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #6b707a;
+      text-align: left; padding: 0.35rem 0.6rem 0.45rem; border-bottom: 1px solid #2c2f36; white-space: nowrap;}
+  .gt td {padding: 0.45rem 0.6rem; border-bottom: 1px solid #1f2126; white-space: nowrap; color: #d5d7dc;}
+  .gt th:first-child, .gt td:first-child {padding-left: 2px; position: sticky; left: 0; background: @CANVAS@;}
+  .gt td:first-child {color: #fafafa;}
+  .gt .n {text-align: right;}
+  .gt th[title] {cursor: help; text-decoration: underline dotted #4a4f59; text-underline-offset: 3px;}
+  [data-testid="stPopoverBody"] .gt th:first-child, [data-testid="stPopoverBody"] .gt td:first-child,
+  [data-testid="stExpander"] .gt th:first-child, [data-testid="stExpander"] .gt td:first-child {background: #1a1c20;}
+
+  /* ---- charts sleep until tapped (ui/gesture.py): a finger that scrolls the
+     page over a chart must not zoom it or pin a tooltip. Touch screens hand
+     the whole plot back to the page; a click arms one chart. */
+  @media (hover: none) {
+    [data-testid="stPlotlyChart"]:not(.armed) .js-plotly-plot,
+    [data-testid="stPlotlyChart"]:not(.armed) .maplibregl-map {pointer-events: none !important;}
+  }
+  [data-testid="stPlotlyChart"] {border-radius: 8px; transition: box-shadow .15s;}
+  [data-testid="stPlotlyChart"].armed {box-shadow: 0 0 0 1px #3987e5;}
+
   @media (max-width: 760px) {
+    .gt {font-size: 0.86rem;}
+    .gt th, .gt td {padding-left: 0.4rem; padding-right: 0.4rem;}
     .block-container {max-width: none !important;
         padding: 0.2rem 0.95rem 2.4rem 0.95rem !important;}
     /* Rows of columns only: a horizontal container (the tile header, the top

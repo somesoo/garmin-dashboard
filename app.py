@@ -22,6 +22,7 @@ import streamlit as st  # noqa: E402
 
 from core import auth  # noqa: E402
 from ui import drawer  # noqa: E402
+from ui import gesture  # noqa: E402
 from ui import guide  # noqa: E402
 from core import i18n  # noqa: E402
 from ui import routing  # noqa: E402
@@ -61,6 +62,8 @@ st.set_page_config(
 st.markdown(shell.page_style(theme.mode()), unsafe_allow_html=True)
 # Installable from the home screen as a full-screen app, the sign-in screen included.
 webapp.head()
+# Charts wait for a tap before they zoom; a list never brings up the keyboard.
+gesture.install()
 
 # Whose data this run reads -- before anything touches the warehouse (auth.py, tenant.py).
 auth.gate()

@@ -832,8 +832,10 @@ def show(
     if note:
         st.caption(note)
     if table is not None and not table.empty:
-        with st.expander("dane"):
-            st.dataframe(readable_paces(table), width="stretch", hide_index=True)
+        from ui import tables
+
+        with st.expander(i18n.tr(pl="dane", en="data")):
+            tables.show(table)
 
 
 def _alpha(color: str, alpha: float) -> str:
@@ -1503,9 +1505,17 @@ def route_map(
                     cmax=high,
                     colorscale=[[i / (len(ramp) - 1), c] for i, c in enumerate(ramp)],
                     showscale=True,
+                    # Under the map, across it: standing on the right it ate a
+                    # sixth of a phone's width and read sideways.
                     colorbar=dict(
-                        title=dict(text=color_title or color, side="right", font=dict(size=11)),
-                        thickness=10,
+                        title=dict(text=color_title or color, side="top", font=dict(size=11, color=t["muted"])),
+                        orientation="h",
+                        x=0.5,
+                        xanchor="center",
+                        y=-0.02,
+                        yanchor="top",
+                        len=1.0,
+                        thickness=8,
                         outlinewidth=0,
                         tickfont=dict(size=10, color=t["muted"]),
                         **(_pace_ticks(low, high) if pace else {}),

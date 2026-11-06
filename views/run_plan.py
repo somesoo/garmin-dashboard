@@ -7,6 +7,7 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
+from ui import tables
 from ui import bento
 from core import i18n
 from ui import routing
@@ -549,8 +550,7 @@ def _calendar(active: dict, matched: pd.DataFrame) -> None:
             line[day] = grid.get(number, {}).get(day, "")
         line["km"] = week.get("planned_km")
         rows.append(line)
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
-                 column_config={"km": st.column_config.NumberColumn("km", format="%.0f")})
+    tables.show(pd.DataFrame(rows), column_config={"km": st.column_config.NumberColumn("km", format="%.0f")})
 
 
 def _week(active: dict, matched: pd.DataFrame) -> None:

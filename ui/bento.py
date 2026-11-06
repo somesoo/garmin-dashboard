@@ -35,6 +35,7 @@ import streamlit as st
 from ui import glossary
 from core import i18n
 from ui import routing
+from ui import tables
 from ui import theme as tz
 
 CHART = 150      # px of a chart in a 1-row widget
@@ -94,12 +95,12 @@ class Tile:
         self.key = key
 
     def chart(self, fig: Any, *, table: pd.DataFrame | None = None, empty: str | None = None,
-              key: str | None = None) -> None:
-        """The widget's figure at the grid's height, table twin in the header."""
+              key: str | None = None, height: int | None = None) -> None:
+        """The widget's figure at the grid's height (or ``height``), table twin in the header."""
         if fig is None:
             st.caption(empty or i18n.tr(pl="Brak danych w tym zakresie.", en="No data in this range."))
             return
-        fig.update_layout(height=chart_height(self.rows))
+        fig.update_layout(height=height or chart_height(self.rows))
         st.plotly_chart(fig, width="stretch", key=key or f"{self.key}_chart", config={"displayModeBar": False})
         self.data(table)
 
@@ -108,7 +109,7 @@ class Tile:
         scroll; when there are more, the whole table is behind the header icon."""
         frame = tz.readable_paces(frame)
         shown = frame.head(table_rows(self.rows))
-        st.dataframe(shown, width="stretch", hide_index=True, height=table_height(len(shown)), **kwargs)
+        tables.show(shown, column_config=kwargs.get("column_config"))
         rest = full if full is not None else frame
         if len(rest) > len(shown):
             note = i18n.tr(pl=f"pierwsze {len(shown)} z {len(rest)} — całość pod ikoną tabeli",
@@ -122,7 +123,7 @@ class Tile:
         with self.header:
             with st.popover("", icon=":material/table_view:", type="tertiary",
                             help=i18n.tr(pl="Dane", en="Data")):
-                st.dataframe(tz.readable_paces(table), width="stretch", hide_index=True)
+                tables.show(table)
 
 
 @contextmanager

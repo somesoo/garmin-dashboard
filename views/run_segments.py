@@ -8,6 +8,7 @@ import streamlit as st
 from ui import bento
 from core import i18n
 from ui import routing
+from ui import tables
 from ui import story
 from ui import theme as tz
 from running import store, units, workouts
@@ -107,10 +108,9 @@ def _details(segment: dict, passes: pd.DataFrame) -> None:
         _manage(segment)
 
 
-def _open_selected(event, shown: pd.DataFrame) -> None:
-    rows = getattr(getattr(event, "selection", None), "rows", None) or []
-    if rows:
-        routing.open_run(int(shown.iloc[rows[0]]["activity_id"]))
+def _open_selected(picked: int | None, shown: pd.DataFrame) -> None:
+    if picked is not None:
+        routing.open_run(int(shown.iloc[picked]["activity_id"]))
 
 
 def _rep_records(rep_list: list[dict], reps: pd.DataFrame) -> None:
@@ -147,12 +147,9 @@ def _rep_records(rep_list: list[dict], reps: pd.DataFrame) -> None:
                 tr(pl="ostatnio", en="latest"): record if last["pace_min_km"] == best["pace_min_km"] else slower,
             })
         shown = pd.DataFrame(rows).reset_index(drop=True)
-        event = st.dataframe(
+        _open_selected(tables.pick(
             shown.drop(columns="activity_id").assign(**{heart: shown[heart].round().astype("Int64")}),
-            hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
-            key="rep_records_table", height=bento.table_height(len(shown)),
-        )
-        _open_selected(event, shown)
+            key="rep_records_table"), shown)
 
 
 def _distance_records() -> None:
@@ -173,7 +170,7 @@ def _distance_records() -> None:
         shown = best.reset_index(drop=True)
         second = efforts.sort_values("seconds").groupby("effort")["seconds"].nth(1)
         second = efforts.loc[second.index].set_index("effort")["seconds"] if len(second) else pd.Series(dtype=float)
-        event = st.dataframe(pd.DataFrame({
+        picked = tables.pick(pd.DataFrame({
             tr(pl="dystans", en="distance"): shown["effort"].map(rc.effort_label),
             tr(pl="rekord", en="record"): shown["seconds"].map(units.fmt_time),
             tr(pl="tempo", en="pace"): shown["pace_min_km"].map(lambda v: units.fmt_pace(v, False)),
@@ -185,9 +182,8 @@ def _distance_records() -> None:
             tr(pl="przewaga nad 2.", en="lead over 2nd"): [
                 ("<1 s" if second[e] - s < 0.5 else f"{second[e] - s:.0f} s") if e in second.index else "—"
                 for e, s in zip(shown["effort"], shown["seconds"])],
-        }), hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
-            key="distance_records_table", height=bento.table_height(len(shown)))
-        _open_selected(event, shown)
+        }), key="distance_records_table")
+        _open_selected(picked, shown)
 
 
 def _kpis(passes: pd.DataFrame, suffix: str) -> None:
@@ -246,7 +242,7 @@ def _ranking(passes: pd.DataFrame, suffix: str) -> None:
     with bento.tile("Ranking", rows=2, key=f"segment_ranking_{suffix}",
                     how=tr(pl="Kliknij wiersz, żeby otworzyć bieg.", en="Click a row to open the run.")):
         shown = passes.sort_values("seconds").head(bento.table_rows(2)).reset_index(drop=True)
-        event = st.dataframe(pd.DataFrame({
+        picked = tables.pick(pd.DataFrame({
             "#": shown["rank"],
             tr(pl="kiedy", en="when"): shown["start_local"].dt.strftime("%d.%m.%Y"),
             tr(pl="typ", en="type"): shown["kind"].map(rc.kind_label),
@@ -255,11 +251,9 @@ def _ranking(passes: pd.DataFrame, suffix: str) -> None:
             tr(pl="tętno", en="HR"): shown["hr"].round().astype("Int64"),
             tr(pl="od km", en="from km"): shown["at_km"],
             tr(pl="postój", en="stop"): shown["stop_s"].map(rc.stop_text) if "stop_s" in shown.columns else "—",
-        }), hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
-            key=f"segment_ranking_table_{suffix}", height=bento.table_height(len(shown)))
-        rows = getattr(getattr(event, "selection", None), "rows", None) or []
-        if rows:
-            routing.open_run(int(shown.iloc[rows[0]]["activity_id"]))
+        }), key=f"segment_ranking_table_{suffix}")
+        if picked is not None:
+            routing.open_run(int(shown.iloc[picked]["activity_id"]))
 
 
 def _manage(segment: dict) -> None:

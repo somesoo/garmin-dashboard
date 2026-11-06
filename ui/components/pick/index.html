@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>pick</title>
+<style>
+  :root { --ink: #fafafa; --ink2: #d5d7dc; --muted: #9aa0aa; --faint: #6b707a; --line: #1f2126; --head: #2c2f36;
+          --card: #0d0e10; --edge: #24272d; --hover: #15171b; --accent: #3987e5; }
+  html, body { margin: 0; padding: 0; background: transparent; color: var(--ink); overflow: hidden;
+               font: 15px/1.4 "Source Sans 3", "Source Sans Pro", -apple-system, system-ui, "Segoe UI", sans-serif;
+               -webkit-tap-highlight-color: transparent; }
+  /* ---- table: the same look as ui/tables.html_table (shell.page_style .gt) */
+  .wrap { overflow-x: auto; overscroll-behavior-x: contain; }
+  .wrap.capped { overflow-y: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint);
+       text-align: left; padding: 6px 10px 7px; border-bottom: 1px solid var(--head); white-space: nowrap;
+       position: sticky; top: 0; background: #000; z-index: 1; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; color: var(--ink2); }
+  th:first-child, td:first-child { padding-left: 2px; position: sticky; left: 0; background: #000; color: var(--ink); }
+  th:first-child { z-index: 2; }
+  .n { text-align: right; }
+  tbody tr { cursor: pointer; }
+  tbody tr td:last-child::after { content: "›"; color: var(--faint); margin-left: 10px; }
+  @media (hover: hover) { tbody tr:hover td { background: var(--hover); } }
+  tbody tr.on td { background: #12233a; }
+  @media (max-width: 520px) { body { font-size: 14px; } td { padding: 8px 7px; } th { padding: 6px 7px 7px; } }
+
+  /* ---- list: the chosen item as a layered card, the rest behind a tap */
+  .item { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; padding: 10px 14px; cursor: pointer; }
+  .item .k { font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted);
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .d { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .item .t { grid-column: 1 / -1; font-size: 17px; font-weight: 600; color: var(--ink); margin-top: 1px;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .m { grid-column: 1 / -1; font-size: 13px; color: var(--ink2); font-variant-numeric: tabular-nums; margin-top: 1px; }
+  .card { background: var(--card); border: 1px solid var(--edge); border-radius: 12px; position: relative; }
+  .card .item { padding-right: 44px; }
+  .card .chev { position: absolute; right: 14px; top: 50%; width: 9px; height: 9px; margin-top: -7px;
+                border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg);
+                transition: transform .15s; }
+  .card.open .chev { transform: rotate(-135deg); margin-top: -2px; }
+  .card.open { border-color: var(--accent); }
+  .list { display: none; margin-top: 6px; background: var(--card); border: 1px solid var(--edge); border-radius: 12px;
+          overflow-y: auto; overscroll-behavior: contain; }
+  .list.open { display: block; }
+  .list .g { font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint);
+             padding: 10px 14px 4px; position: sticky; top: 0; background: var(--card); z-index: 1; }
+  .list .item { border-top: 1px solid var(--line); border-left: 3px solid transparent; padding-left: 11px; }
+  .list .item .t { font-size: 15px; }
+  .list .item.on { border-left-color: var(--accent); background: var(--hover); }
+  @media (hover: hover) { .list .item:hover, .card:hover { background: var(--hover); } }
+  @media (prefers-reduced-motion: reduce) { .card .chev { transition: none; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+/* The Streamlit component protocol by hand, as in ../herochart/. */
+function send(type, data) { window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, "*"); }
+const height = () => send("streamlit:setFrameHeight", { height: Math.ceil(document.getElementById("root").getBoundingClientRect().height) + 2 });
+let taps = 0;
+const emit = (value) => { taps += 1; send("streamlit:setComponentValue", { value: { ...value, n: Date.now() + "-" + taps }, dataType: "json" }); };
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+let state = { picked: null, open: false, sig: null };
+
+function table(args) {
+  const heads = args.heads || [], rows = args.rows || [];
+  const head = heads.map((h) => `<th class="${h.num ? "n" : ""}"${h.help ? ` title="${esc(h.help)}"` : ""}>${esc(h.name)}</th>`).join("");
+  const body = rows.map((r, i) => `<tr data-i="${i}"${i === args.selected ? ' class="on"' : ""}>` + r.map((v, j) => `<td class="${heads[j] && heads[j].num ? "n" : ""}">${esc(v)}</td>`).join("") + "</tr>").join("");
+  const cap = args.max_height ? ` style="max-height:${args.max_height}px"` : "";
+  root.innerHTML = `<div class="wrap${args.max_height ? " capped" : ""}"${cap}><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  root.querySelectorAll("tbody tr").forEach((tr) => tr.addEventListener("click", () => {
+    const again = tr.classList.contains("on");
+    root.querySelectorAll("tr.on").forEach((x) => x.classList.remove("on"));
+    if (!again) tr.classList.add("on");
+    emit({ row: again ? null : Number(tr.dataset.i) });
+  }));
+}
+
+function layered(it, on) {
+  return `<div class="item${on ? " on" : ""}" data-id="${esc(JSON.stringify(it.id))}">` +
+    `<div class="k">${esc(it.kind)}</div><div class="d">${esc(it.date)}</div>` +
+    `<div class="t">${esc(it.title)}</div>` + (it.meta ? `<div class="m">${esc(it.meta)}</div>` : "") + "</div>";
+}
+
+function list(args) {
+  const items = args.items || [];
+  const sig = JSON.stringify(args.selected);
+  if (sig !== state.sig) { state.sig = sig; state.picked = args.selected; }
+  const current = items.find((it) => JSON.stringify(it.id) === JSON.stringify(state.picked)) || items[0];
+  let rows = "", group = null;
+  for (const it of items) {
+    if (it.group && it.group !== group) { group = it.group; rows += `<div class="g">${esc(group)}</div>`; }
+    rows += layered(it, it === current);
+  }
+  const room = Math.max(280, Math.min(520, (window.parent.innerHeight || 700) * 0.62));
+  root.innerHTML = `<div class="card${state.open ? " open" : ""}" role="button" tabindex="0">${layered(current, false)}<span class="chev"></span></div>` +
+    `<div class="list${state.open ? " open" : ""}" style="max-height:${room}px">${rows}</div>`;
+  const card = root.querySelector(".card"), panel = root.querySelector(".list");
+  const toggle = () => {
+    state.open = !state.open;
+    card.classList.toggle("open", state.open); panel.classList.toggle("open", state.open);
+    if (state.open) { const on = panel.querySelector(".item.on"); if (on) panel.scrollTop = on.offsetTop - panel.clientHeight / 3; }
+    height();
+  };
+  card.addEventListener("click", toggle);
+  card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } if (e.key === "Escape" && state.open) toggle(); });
+  panel.querySelectorAll(".item").forEach((el) => el.addEventListener("click", () => {
+    state.picked = JSON.parse(el.dataset.id); state.open = false;
+    list(Object.assign({}, args, { selected: args.selected }));
+    emit({ id: state.picked });
+  }));
+}
+
+const root = document.getElementById("root");
+window.addEventListener("message", (event) => {
+  if (!event.data || event.data.type !== "streamlit:render") return;
+  const args = event.data.args || {};
+  if (args.mode === "list") list(args); else table(args);
+  height();
+});
+new ResizeObserver(height).observe(root);
+send("streamlit:componentReady", { apiVersion: 1 });
+</script>
+</body>
+</html>

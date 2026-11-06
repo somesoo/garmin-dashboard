@@ -7,6 +7,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from ui import tables
 from ui import bento
 from ui import glossary
 from core import i18n
@@ -66,8 +67,8 @@ def weekly(view: pd.DataFrame) -> None:
     with bento.panel(tr(pl="Tydzień po tygodniu", en="Week by week"), key="weekly",
                      caption=tr(pl="Średnie tygodniowe, najnowszy tydzień na górze.",
                                 en="Weekly averages, the latest week on top.")):
-        st.dataframe(
-            table, width="stretch", hide_index=True, height=360,
+        tables.show(
+            table,
             column_config={
                 "iso_week": st.column_config.TextColumn(tr(pl="tydzień", en="week")),
                 "kroki": st.column_config.NumberColumn(tr(pl="kroki", en="steps"), format="%.0f"),

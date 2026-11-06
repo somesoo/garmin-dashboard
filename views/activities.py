@@ -9,6 +9,7 @@ import streamlit as st
 from ui import bento
 from core import i18n
 from ui import routing
+from ui import tables
 from ui import shell
 from ui import theme as tz
 
@@ -23,10 +24,10 @@ def log() -> None:
     tr = i18n.tr
     activities = shell.clip(shell.table("activities"))
     with bento.panel(tr(pl="Dziennik", en="Log"), key="activities_log",
-                     caption=tr(pl="Wszystkie treningi w wybranym zakresie, najnowsze na górze; tabelę można "
-                                   "sortować. Kliknij wiersz, żeby otworzyć trasę.",
-                                en="Every session in the selected range, newest on top; the table can be sorted. "
-                                   "Click a row to open the route.")) as header:
+                     caption=tr(pl="Wszystkie treningi w wybranym zakresie, najnowsze na górze. "
+                                   "Dotknij wiersza, żeby otworzyć trasę.",
+                                en="Every session in the selected range, newest on top. "
+                                   "Tap a row to open the route.")) as header:
         if activities.empty:
             st.caption(tr(pl="Brak aktywności w tym zakresie.", en="No activities in this range."))
             return
@@ -54,12 +55,10 @@ def log() -> None:
                     lambda v: shell.clock(v) if pd.notna(v) else None
                 )
         frame = frame.rename(columns=shell.activity_labels())
-        event = st.dataframe(frame, width="stretch", hide_index=True, height=440,
-                             column_config=shell.activity_columns(), on_select="rerun", selection_mode="single-row",
-                             key="activities_log_table")
-        rows = getattr(getattr(event, "selection", None), "rows", None) or []
-        if rows:
-            _open(ids[rows[0]])
+        picked = tables.pick(frame, key="activities_log_table", column_config=shell.activity_columns(),
+                             max_height=440)
+        if picked is not None:
+            _open(ids[picked])
 
 
 def _open(activity_id: float) -> None:

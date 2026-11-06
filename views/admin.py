@@ -17,6 +17,7 @@ import datetime as dt
 import pandas as pd
 import streamlit as st
 
+from ui import tables
 from ui import bento
 from core import i18n
 from core import monitor
@@ -148,7 +149,7 @@ def _live(folks: list[dict]) -> None:
             "CPU": f"{_dec(p['cpu_pct'])}%" if p.get("cpu_pct") is not None else "—",
             tr(pl="działa od", en="up for"): _duration(p["uptime_s"]),
         } for p in machine["processes"]])
-        st.dataframe(table, hide_index=True)
+        tables.show(table)
     with right, bento.panel(tr(pl="Co wymaga uwagi", en="What needs attention"), key="adm_warnings"):
         found = monitor.warnings(machine, folks, version)
         if not found:
@@ -221,7 +222,7 @@ def _people(folks: list[dict]) -> None:
                                    "`python -m core.tenant admin <id>` w konsoli serwera.",
                                 en=f"{len(folks)} in the registry (data/users.json). Admin is granted with "
                                    "`python -m core.tenant admin <id>` in the server's shell.")):
-        st.dataframe(pd.DataFrame(rows), hide_index=True)
+        tables.show(pd.DataFrame(rows))
 
 
 # ------------------------------------------------------------------ the pulls

@@ -8,6 +8,7 @@ import streamlit as st
 from ui import bento
 from core import i18n
 from ui import routing
+from ui import tables
 from ui import shell
 from ui import theme as tz
 from running import plan as planning, segments, sessions, store, units, workouts
@@ -40,14 +41,10 @@ def render() -> None:
     if wanted is not None and int(wanted) in options:
         st.session_state["run_activity"] = int(wanted)
 
-    def describe(activity_id: int) -> str:
-        row = catalogue[catalogue["activity_id"] == activity_id].iloc[0]
-        return (f"{row['start_local']:%d.%m.%Y} · {rc.kind_label(row['kind'])} · "
-                f"{row['distance_km']:.1f} km · {row['name']}")
-
-    picker, action = st.columns([5, 1], vertical_alignment="bottom")
-    chosen = picker.selectbox(i18n.tr(pl="Bieg", en="Run"), options, format_func=describe, key="run_activity",
-                              label_visibility="collapsed")
+    picker, action = st.columns([5, 1], vertical_alignment="center")
+    with picker:
+        chosen = tables.chooser(tables.activity_items(catalogue, catalogue["kind"].map(rc.kind_label)),
+                                options[0], key="run_activity_pick", state="run_activity")
     run = catalogue[catalogue["activity_id"] == chosen].iloc[0]
     routes = shell.table("routes")
     track = routes[pd.to_numeric(routes["activity_id"], errors="coerce") == chosen].sort_values("seq") \
@@ -326,7 +323,7 @@ def _shared(run: pd.Series, track: pd.DataFrame) -> None:
                   "is in the time and in Δ."),
     ) as t:
         shown = found.head(bento.table_rows(2)).reset_index(drop=True)
-        event = st.dataframe(pd.DataFrame({
+        picked = tables.pick(pd.DataFrame({
             tr(pl="kiedy", en="when"): shown["start_local"].dt.strftime("%d.%m.%Y"),
             tr(pl="typ", en="type"): shown["kind"].map(rc.kind_label),
             tr(pl="km tutaj", en="km here"): [f"{a:.2f}–{b:.2f}" for a, b in zip(shown["km_from"], shown["km_to"])],
@@ -339,13 +336,11 @@ def _shared(run: pd.Series, track: pd.DataFrame) -> None:
             tr(pl="Δ efektywność %", en="Δ efficiency %"): shown["d_eff_pct"].round(1),
             tr(pl="postój tu", en="stop here"): shown["stop_s"].map(rc.stop_text),
             tr(pl="postój wtedy", en="stop then"): shown["stop_s_other"].map(rc.stop_text),
-        }), hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
-            key=f"shared_{activity_id}", height=bento.table_height(len(shown)))
+        }), key=f"shared_{activity_id}", sticky=True)
         if len(found) > len(shown):
             note = tr(pl=f"{len(shown)} najdłuższych z {len(found)}", en=f"the {len(shown)} longest of {len(found)}")
             st.markdown(f"<div class='tile-caption'>{note}</div>", unsafe_allow_html=True)
-        rows = getattr(getattr(event, "selection", None), "rows", None) or []
-        chosen = shown.iloc[rows[0]] if rows else None
+        chosen = shown.iloc[picked] if picked is not None else None
         # Where it was: every shared stretch on this run's track, or just the picked one.
         km = pd.to_numeric(track["distance_km"], errors="coerce")
         km = km - km.min()
@@ -357,8 +352,8 @@ def _shared(run: pd.Series, track: pd.DataFrame) -> None:
             note = tr(pl=f"Na mapie: {span}, wspólne z biegiem z {day}.",
                       en=f"On the map: {span}, shared with the run of {day}.")
         else:
-            note = tr(pl="Na mapie: wszystkie wspólne odcinki z tabeli. Zaznacz wiersz, żeby pokazać jeden.",
-                      en="On the map: every shared stretch in the table. Select a row to show one.")
+            note = tr(pl="Na mapie: wszystkie wspólne odcinki z tabeli. Dotknij wiersza, żeby pokazać jeden.",
+                      en="On the map: every shared stretch in the table. Tap a row to show one.")
         st.markdown(f"<div class='tile-caption'>{note}</div>", unsafe_allow_html=True)
         tz.show(tz.route_map(track.assign(shared=marked), highlight="shared", height=380,
                              uirevision=f"shared-{activity_id}"), key=f"shared_map_{activity_id}")
@@ -550,14 +545,12 @@ def _segments(run: pd.Series) -> None:
                 tr(pl="poprzednio", en="previous"): previous,
             })
         shown = pd.DataFrame(rows)
-        event = st.dataframe(
-            tz.readable_paces(shown.drop(columns="segment_id").assign(
-                **{heart: pd.to_numeric(shown[heart], errors="coerce").round().astype("Int64")})),
-            hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
-            key=f"run_segments_{activity_id}", height=bento.table_height(len(shown)))
-        picked = getattr(getattr(event, "selection", None), "rows", None) or []
-        if picked:
-            routing.goto("segmenty", **{open_key(shown.iloc[picked[0]]["segment_id"]): True})
+        picked = tables.pick(
+            shown.drop(columns="segment_id").assign(
+                **{heart: pd.to_numeric(shown[heart], errors="coerce").round().astype("Int64")}),
+            key=f"run_segments_{activity_id}")
+        if picked is not None:
+            routing.goto("segmenty", **{open_key(shown.iloc[picked]["segment_id"]): True})
 
 
 @st.fragment
@@ -714,7 +707,7 @@ def _workout_peers(peers: pd.DataFrame, run: pd.Series) -> None:
             return
         shown = others.sort_values(["similar", "start_local"], ascending=[False, False]) \
             .head(bento.table_rows(2)).reset_index(drop=True)
-        event = st.dataframe(pd.DataFrame({
+        picked = tables.pick(pd.DataFrame({
             tr(pl="kiedy", en="when"): shown["start_local"].dt.strftime("%d.%m.%Y"),
             tr(pl="odcinki", en="reps"): [f"{r.reps:.0f} × {r.rep_km:.1f} km" + (" ≈" if r.similar else "")
                                           for r in shown.itertuples()],
@@ -724,11 +717,9 @@ def _workout_peers(peers: pd.DataFrame, run: pd.Series) -> None:
             tr(pl="tętno ↑", en="HR ↑"): shown["hr_drift"].round().astype("Int64"),
             tr(pl="przerwa", en="rest"): shown["rest_s"].map(lambda v: units.fmt_time(v) if pd.notna(v) else "—"),
             tr(pl="vs tętno s/km", en="vs HR s/km"): shown["vs_hr_s"].round().astype("Int64"),
-        }), hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
-            key=f"workout_peers_{int(run['activity_id'])}", height=bento.table_height(len(shown)))
-        rows = getattr(getattr(event, "selection", None), "rows", None) or []
-        if rows:
-            routing.open_run(int(shown.iloc[rows[0]]["activity_id"]))
+        }), key=f"workout_peers_{int(run['activity_id'])}")
+        if picked is not None:
+            routing.open_run(int(shown.iloc[picked]["activity_id"]))
 
 
 def _splits(run: pd.Series) -> None:

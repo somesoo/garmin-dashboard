@@ -269,13 +269,11 @@ def pickable_runs(frame: pd.DataFrame, key: str, height: int | None = None, hint
     from ui import routing
 
     shown = frame.sort_values("start_local", ascending=False).reset_index(drop=True)
-    event = st.dataframe(
-        runs_table(shown), hide_index=True, width="stretch", column_config=run_columns(),
-        on_select="rerun", selection_mode="single-row", key=key, height=height or "auto",
-    )
-    rows = getattr(getattr(event, "selection", None), "rows", None) or []
-    if rows:
-        routing.open_run(int(shown.iloc[rows[0]]["activity_id"]))
+    from ui import tables
+
+    picked = tables.pick(runs_table(shown), key=key, column_config=run_columns(), max_height=height)
+    if picked is not None:
+        routing.open_run(int(shown.iloc[picked]["activity_id"]))
     if hint:
         st.caption(i18n.tr(pl="Kliknij wiersz, żeby otworzyć szczegóły treningu.",
                            en="Click a row to open the session details."))
