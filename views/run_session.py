@@ -42,7 +42,8 @@ def render() -> None:
 
     with st.container(key="run_top"):
         chosen = tables.chooser(tables.activity_items(catalogue, catalogue["kind"].map(rc.kind_label)),
-                                options[0], key="run_activity_pick", state="run_activity")
+                                options[0], key="run_activity_pick", state="run_activity",
+                                compact=shell.phone())
     run = catalogue[catalogue["activity_id"] == chosen].iloc[0]
     routes = shell.table("routes")
     track = routes[pd.to_numeric(routes["activity_id"], errors="coerce") == chosen].sort_values("seq") \

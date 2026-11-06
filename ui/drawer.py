@@ -120,6 +120,9 @@ def _account(current: str, seen: set[str]) -> None:
     _section(None, ["konto"], current, seen)
     if tenant.current().source == "garmin":
         st.fragment(run_every=3 if sync.running() else 60)(shell.pull_inline)(sync.running())
+    # Streamlit's "⋮" menu is hidden on a phone (it stood over the run picker);
+    # the one thing from it worth a thumb is reloading the page.
+    st.button(i18n.tr(pl="Odśwież", en="Reload"), key="dw_rerun", type="tertiary", icon=":material/refresh:")
     if auth.can_sign_out():
         st.button(i18n.tr(pl="Wyloguj", en="Sign out"), on_click=st.logout, key="dw_sign_out", type="tertiary")
 

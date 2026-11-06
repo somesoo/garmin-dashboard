@@ -1,11 +1,12 @@
 """Touch and pointer rules for the whole page: nothing reacts by accident.
 
-* **Charts sleep until tapped.** A thumb scrolling the page over a chart used
+* **Charts sleep until double-tapped.** A thumb scrolling the page over a chart used
   to pin a tooltip, and a drag zoomed it. Now a chart is inert until it is
   clicked once: on a touch screen the plot hands every touch back to the page
   (``pointer-events: none`` in ``shell.page_style``, so the tap lands on the
-  chart's box and arms it); with a mouse the hover still reads values, but a
-  drag or the wheel do nothing until the click. Armed, the chart zooms as
+  chart's box); with a mouse the hover still reads values, but a drag or the
+  wheel do nothing. One tap only shows how to wake it; a double tap (double
+  click) arms it, and the chart says so in its corner. Armed, the chart zooms as
   Plotly does (double tap resets); a tap anywhere else puts it back to sleep.
 * **Tabs follow a swipe.** A horizontal swipe over a tab's content (not over
   an armed chart, a map or a table that scrolls sideways) clicks the next or
@@ -30,7 +31,15 @@ SCRIPT = """<script>
   const touch = win.matchMedia("(hover: none)").matches;
   const chart = (el) => el && el.closest && el.closest('[data-testid="stPlotlyChart"]');
   const sleep = (keep) => doc.querySelectorAll('[data-testid="stPlotlyChart"].armed')
-      .forEach((c) => { if (c !== keep) c.classList.remove("armed"); });
+      .forEach((c) => { if (c !== keep) { c.classList.remove("armed"); delete c.dataset.hint; } });
+  // The words come from Python (install), in the page's language.
+  const words = () => win.__garminGestureWords || { arm: "double tap to zoom", armed: "zoom on" };
+  const hint = (c, text, ms) => {
+    c.dataset.hint = text;
+    clearTimeout(c.__hintTimer);
+    if (ms) c.__hintTimer = setTimeout(() => { if (!c.classList.contains("armed")) delete c.dataset.hint; }, ms);
+  };
+  let last = { c: null, at: 0 };
 
   doc.addEventListener("click", (e) => {
     // A tab tapped by hand fades in; only a swipe slides from its side.
@@ -38,7 +47,18 @@ SCRIPT = """<script>
     if (tab) delete tab.closest('[data-testid="stTabs"]').dataset.swipe;
     const c = chart(e.target);
     sleep(c);
-    if (c && !c.classList.contains("armed")) { c.classList.add("armed"); e.stopPropagation(); }
+    if (!c || c.classList.contains("armed")) return;
+    // Asleep: one tap only says how to wake it; two quick taps (or a double click) do.
+    e.stopPropagation();
+    const now = Date.now();
+    if (last.c === c && now - last.at < 450) {
+      c.classList.add("armed");
+      hint(c, words().armed, 0);
+      last = { c: null, at: 0 };
+    } else {
+      last = { c, at: now };
+      hint(c, words().arm, 1800);
+    }
   }, true);
   // A mouse: no drag-zoom and no wheel-zoom on a sleeping chart; the wheel scrolls the page.
   const guard = (e) => { const c = chart(e.target); if (c && !c.classList.contains("armed")) e.stopPropagation(); };
@@ -82,9 +102,19 @@ SCRIPT = """<script>
 
 def install() -> None:
     """Put the script into the page (see the module docstring)."""
+    import json
+
+    from core import i18n
+
+    words = json.dumps({
+        "arm": i18n.tr(pl="dotknij dwa razy, aby przybliżać", en="double tap to zoom"),
+        "armed": i18n.tr(pl="zoom włączony · dotknij obok, aby wyłączyć", en="zoom on · tap outside to stop"),
+    })
+    script = SCRIPT.replace("<script>", f"<script>\n(window.frameElement ? window.parent : window)"
+                                        f".__garminGestureWords = {words};", 1)
     try:
-        st.html(SCRIPT, unsafe_allow_javascript=True)
+        st.html(script, unsafe_allow_javascript=True)
     except TypeError:  # Streamlit without unsafe_allow_javascript
         import streamlit.components.v1 as components
 
-        components.html(SCRIPT, height=0)
+        components.html(script, height=0)

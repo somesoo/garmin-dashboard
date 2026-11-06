@@ -188,9 +188,9 @@ Zachowania celowe (nie „naprawiaj”):
 - **Strona z wieloma pytaniami → zakładki** (`st.tabs`, wzór: *Trening*): nad
   nimi wybór i 4 KPI, w każdej zakładce jedno pytanie; zakładka bez danych nie
   powstaje. Telefon przełącza je przesunięciem palca (`ui/gesture.py`).
-- **Wykres śpi do pierwszego dotknięcia** (`ui/gesture.py` + `.armed` w
-  `page_style`): przewijanie strony nad wykresem nie zoomuje ani nie przypina
-  podpowiedzi. Nie zdejmuj tego przez `config` Plotly.
+- **Wykres śpi do podwójnego dotknięcia / dwukliku** (`ui/gesture.py` + `.armed`
+  w `page_style`): przewijanie ani pojedyncze dotknięcie nie zoomuje i nie
+  przypina podpowiedzi; pojedyncze pokazuje tylko „dotknij dwa razy”. Nie zdejmuj tego przez `config` Plotly.
 - Kontrolki jednego kafla → `with t.header:` z `label_visibility="collapsed"`;
   opis znaczników wykresu → `how=` w „?”, nie do podpisu.
 - Kafle bez ramek; przyciski bez prostokątów (akcja główna `type="primary"`).

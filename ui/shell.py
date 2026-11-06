@@ -303,7 +303,11 @@ _STYLE = """
     [data-testid="stPlotlyChart"]:not(.armed) .js-plotly-plot,
     [data-testid="stPlotlyChart"]:not(.armed) .maplibregl-map {pointer-events: none !important;}
   }
-  [data-testid="stPlotlyChart"] {border-radius: 8px; transition: box-shadow .15s;}
+  [data-testid="stPlotlyChart"] {border-radius: 8px; transition: box-shadow .15s; position: relative;}
+  [data-testid="stPlotlyChart"][data-hint]::after {content: attr(data-hint); position: absolute; top: 6px; right: 8px;
+      z-index: 5; pointer-events: none; font-size: 0.72rem; color: #d5d7dc; background: #1a1c20;
+      border: 1px solid #2c2f36; border-radius: 6px; padding: 0.15rem 0.5rem;}
+  [data-testid="stPlotlyChart"].armed[data-hint]::after {border-color: #3987e5; color: #fafafa;}
   [data-testid="stPlotlyChart"].armed {box-shadow: 0 0 0 1px #3987e5;}
 
   @media (max-width: 760px) {
@@ -359,8 +363,10 @@ _DRAWER = """
   [data-testid="stExpandSidebarButton"] {display: flex !important;}
   /* A page whose head is a control (guide.OWN_TOP: the run picker) puts it in
      the hamburger's line, between the hamburger and Streamlit's menu. */
-  .st-key-run_top {margin-top: -2.55rem; padding: 0 2.2rem 0 2.6rem; position: relative; z-index: 1000000;
+  .st-key-run_top {margin-top: -2.6rem; padding: 0 0 0 2.6rem; position: relative; z-index: 1000000;
       pointer-events: none;}
+  /* Streamlit's "⋮" menu: hidden on a phone; "Reload" is at the foot of the drawer. */
+  [data-testid="stToolbar"], [data-testid="stMainMenu"] {display: none !important;}
   /* The padding lies over the hamburger and the menu: only the card itself takes a tap. */
   .st-key-run_top iframe {pointer-events: auto;}
   /* Room for the hamburger: the header is 0 high everywhere else, being empty. */

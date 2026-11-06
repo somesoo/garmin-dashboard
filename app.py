@@ -62,7 +62,7 @@ st.set_page_config(
 st.markdown(shell.page_style(theme.mode()), unsafe_allow_html=True)
 # Installable from the home screen as a full-screen app, the sign-in screen included.
 webapp.head()
-# Charts wait for a tap before they zoom; a list never brings up the keyboard.
+# Charts wait for a double tap before they zoom; a list never brings up the keyboard.
 gesture.install()
 
 # Whose data this run reads -- before anything touches the warehouse (auth.py, tenant.py).

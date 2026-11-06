@@ -127,8 +127,11 @@ def pick(frame: pd.DataFrame, *, key: str, column_config: dict | None = None,
     return int(hit["row"]) if hit is not None and hit.get("row") is not None else None
 
 
-def chooser(items: list[dict], selected: Any, *, key: str, state: str) -> Any:
-    """One of many as a layered card; ``items`` = ``{id, kind, date, title, meta, group}``.
+def chooser(items: list[dict], selected: Any, *, key: str, state: str, compact: bool = False) -> Any:
+    """One of many as a layered card; ``items`` = ``{id, kind, date, title, meta, group, short}``.
+
+    ``compact`` shrinks the closed card to one line the height of the
+    hamburger (``short``: the day and what the run was); the open list stays layered.
 
     The choice lives in ``st.session_state[state]`` (so another page can set it
     before the rerun); the return value is the current id.
@@ -143,7 +146,7 @@ def chooser(items: list[dict], selected: Any, *, key: str, state: str) -> Any:
     hit = _fresh(st.session_state.get(key), key)
     if hit is not None and hit.get("id") in ids:
         st.session_state[state] = hit["id"]
-    _component(mode="list", items=items, selected=st.session_state[state], key=key, default=None)
+    _component(mode="list", items=items, selected=st.session_state[state], compact=compact, key=key, default=None)
     return st.session_state[state]
 
 
@@ -177,5 +180,9 @@ def activity_items(frame: pd.DataFrame, kinds: pd.Series) -> list[dict]:
             "title": str(name) if isinstance(name, str) and name.strip() else str(kind or ""),
             "meta": " · ".join(meta),
             "group": f"{i18n.month_name(when.month - 1)} {when.year}".capitalize(),
+            # One line for the compact card: what it was and how far, the day before it.
+            "day": f"{when:%d.%m}",
+            "short": " · ".join(x for x in (str(kind or ""), f"{row['distance_km']:.1f} km"
+                                            if pd.notna(row.get("distance_km")) else "") if x),
         })
     return items

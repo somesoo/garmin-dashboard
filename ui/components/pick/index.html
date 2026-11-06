@@ -41,6 +41,13 @@
                 transition: transform .15s; }
   .card.open .chev { transform: rotate(-135deg); margin-top: -2px; }
   .card.open { border-color: var(--accent); }
+  /* compact: one line, the hamburger's height (on a phone it stands in its line) */
+  .card.compact { height: 38px; box-sizing: border-box; display: flex; align-items: center; border-radius: 10px; }
+  .card.compact .one { flex: 1; padding: 0 34px 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                       font-size: 14.5px; font-weight: 600; color: var(--ink); min-width: 0; }
+  .card.compact .one .d { color: var(--muted); font-weight: 400; margin-right: 6px; font-variant-numeric: tabular-nums; }
+  .card.compact .chev { right: 13px; width: 7px; height: 7px; margin-top: -6px; }
+  .card.compact.open .chev { margin-top: -2px; }
   .list { display: none; margin-top: 6px; background: var(--card); border: 1px solid var(--edge); border-radius: 12px;
           overflow-y: auto; overscroll-behavior: contain; }
   .list.open { display: block; }
@@ -96,7 +103,10 @@ function list(args) {
     rows += layered(it, it === current);
   }
   const room = Math.max(280, Math.min(520, (window.parent.innerHeight || 700) * 0.62));
-  root.innerHTML = `<div class="card${state.open ? " open" : ""}" role="button" tabindex="0">${layered(current, false)}<span class="chev"></span></div>` +
+  const head = args.compact
+    ? `<div class="one"><span class="d">${esc(current.day)}</span>${esc(current.short || current.title)}</div>`
+    : layered(current, false);
+  root.innerHTML = `<div class="card${args.compact ? " compact" : ""}${state.open ? " open" : ""}" role="button" tabindex="0">${head}<span class="chev"></span></div>` +
     `<div class="list${state.open ? " open" : ""}" style="max-height:${room}px">${rows}</div>`;
   const card = root.querySelector(".card"), panel = root.querySelector(".list");
   const toggle = () => {
