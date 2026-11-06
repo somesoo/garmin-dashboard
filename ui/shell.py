@@ -281,6 +281,21 @@ _STYLE = """
   [data-testid="stPopoverBody"] .gt th:first-child, [data-testid="stPopoverBody"] .gt td:first-child,
   [data-testid="stExpander"] .gt th:first-child, [data-testid="stExpander"] .gt td:first-child {background: #1a1c20;}
 
+  /* ---- tabs: one question each, swiped on a phone (ui/gesture.py) ------- */
+  [data-testid="stTabs"] [role="tablist"] {gap: 1.4rem; border-bottom: 1px solid #1f2126;
+      overflow-x: auto; scrollbar-width: none; scroll-margin-top: 3.5rem;}
+  [data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar {display: none;}
+  [data-testid="stTabs"] [role="tab"] {padding: 0.55rem 0 0.6rem; min-height: 44px; flex: 0 0 auto;}
+  [data-testid="stTabs"] [role="tab"] p {font-size: 0.98rem; font-weight: 600; color: #6b707a;}
+  [data-testid="stTabs"] [role="tab"][aria-selected="true"] p {color: #fafafa;}
+  [data-testid="stTabs"] [role="tabpanel"]:not([hidden]) {animation: tab-in .22s ease-out both;}
+  [data-testid="stTabs"][data-swipe="left"] [role="tabpanel"]:not([hidden]) {animation-name: tab-from-right;}
+  [data-testid="stTabs"][data-swipe="right"] [role="tabpanel"]:not([hidden]) {animation-name: tab-from-left;}
+  @keyframes tab-in {from {opacity: 0;} to {opacity: 1;}}
+  @keyframes tab-from-right {from {opacity: 0; transform: translateX(24px);} to {opacity: 1; transform: none;}}
+  @keyframes tab-from-left {from {opacity: 0; transform: translateX(-24px);} to {opacity: 1; transform: none;}}
+  @media (prefers-reduced-motion: reduce) {[data-testid="stTabs"] [role="tabpanel"] {animation: none !important;}}
+
   /* ---- charts sleep until tapped (ui/gesture.py): a finger that scrolls the
      page over a chart must not zoom it or pin a tooltip. Touch screens hand
      the whole plot back to the page; a click arms one chart. */

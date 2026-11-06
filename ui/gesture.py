@@ -7,6 +7,9 @@
   chart's box and arms it); with a mouse the hover still reads values, but a
   drag or the wheel do nothing until the click. Armed, the chart zooms as
   Plotly does (double tap resets); a tap anywhere else puts it back to sleep.
+* **Tabs follow a swipe.** A horizontal swipe over a tab's content (not over
+  an armed chart, a map or a table that scrolls sideways) clicks the next or
+  previous tab, and brings the tab bar back into view if it scrolled away.
 * **No keyboard for a list.** A Streamlit select box is a search field, so on a
   phone opening it slid the keyboard over half the screen. On touch screens
   its input gets ``inputmode="none"``: the list opens, the keyboard does not.
@@ -30,6 +33,9 @@ SCRIPT = """<script>
       .forEach((c) => { if (c !== keep) c.classList.remove("armed"); });
 
   doc.addEventListener("click", (e) => {
+    // A tab tapped by hand fades in; only a swipe slides from its side.
+    const tab = e.isTrusted && e.target.closest && e.target.closest('[data-testid="stTabs"] [role="tab"]');
+    if (tab) delete tab.closest('[data-testid="stTabs"]').dataset.swipe;
     const c = chart(e.target);
     sleep(c);
     if (c && !c.classList.contains("armed")) { c.classList.add("armed"); e.stopPropagation(); }
@@ -38,6 +44,30 @@ SCRIPT = """<script>
   const guard = (e) => { const c = chart(e.target); if (c && !c.classList.contains("armed")) e.stopPropagation(); };
   ["mousedown", "wheel", "dblclick"].forEach((type) => doc.addEventListener(type, guard, { capture: true }));
   doc.addEventListener("keydown", (e) => { if (e.key === "Escape") sleep(null); }, true);
+
+  // Swipe between tabs: horizontal, quick, clearly more sideways than down.
+  let start = null;
+  doc.addEventListener("touchstart", (e) => {
+    const t = e.touches[0], panel = e.target.closest && e.target.closest('[data-testid="stTabs"] [role="tabpanel"]');
+    const busy = e.target.closest && e.target.closest('.armed, .gt-wrap, .maplibregl-map, input, textarea, [data-baseweb="slider"]');
+    start = panel && !busy && e.touches.length === 1 ? { x: t.clientX, y: t.clientY, at: Date.now(), panel } : null;
+  }, { capture: true, passive: true });
+  doc.addEventListener("touchend", (e) => {
+    if (!start) return;
+    const t = e.changedTouches[0], dx = t.clientX - start.x, dy = t.clientY - start.y;
+    const tabs = start.panel.closest('[data-testid="stTabs"]'), took = Date.now() - start.at;
+    start = null;
+    if (took > 700 || Math.abs(dx) < 60 || Math.abs(dx) < 1.8 * Math.abs(dy)) return;
+    const list = [...tabs.querySelectorAll('[role="tab"]')];
+    const at = list.findIndex((b) => b.getAttribute("aria-selected") === "true");
+    const next = list[at + (dx < 0 ? 1 : -1)];
+    if (!next) return;
+    tabs.dataset.swipe = dx < 0 ? "left" : "right";
+    next.click();
+    next.scrollIntoView({ block: "nearest", inline: "center" });
+    const bar = tabs.querySelector('[role="tablist"]');
+    if (bar && bar.getBoundingClientRect().top < 0) bar.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, { capture: true, passive: true });
 
   if (touch) {
     const quiet = () => doc.querySelectorAll(

@@ -54,33 +54,58 @@ def render() -> None:
         routing.open_activity(int(chosen))
 
     _summary(run)
-    _workout(frame, run)
-    left, right = bento.row(2, 2)
-    with left:
-        _splits(run)
-        _character(run)
-    with right:
-        _streams(track)
+    _tabs(frame, run, track)
 
-    left, right = bento.row(2, 2)
-    with left:
-        _structure(run)
-        _zones(run)
-    with right:
-        _similar(frame, run)
 
+def _is_workout(run: pd.Series) -> bool:
+    """Reps on the watch or a plan session behind it: only then has the run a structure to show."""
+    laps = shell.table("run_laps")
+    mine = laps[laps["activity_id"] == int(run["activity_id"])] if not laps.empty else laps
+    return bool(not mine.empty and planning.rep_blocks(mine)) or _plan_line(run) is not None
+
+
+def _tabs(frame: pd.DataFrame, run: pd.Series, track: pd.DataFrame) -> None:
+    """One question per tab, swiped left and right on a phone (ui/gesture.py).
+
+    * Przebieg -- how the run went along the way: splits and the streams.
+    * Wysiłek -- what it cost: zones, load, cadence, elevation.
+    * Struktura -- the reps and the workouts like it (a workout only).
+    * Porównanie -- against itself earlier: similar runs, efficiency, best stretches.
+    * Trasa -- the place: the same route, shared stretches, segments (GPS only).
+    """
+    tr = i18n.tr
+    pages = [("course", tr(pl="Przebieg", en="Course")), ("effort", tr(pl="Wysiłek", en="Effort"))]
+    if _is_workout(run):
+        pages.append(("structure", tr(pl="Struktura", en="Structure")))
+    pages.append(("compare", tr(pl="Porównanie", en="Compare")))
     if not track.empty:
-        _same_route(run)
-        _shared(run, track)
-    left, right = bento.row(2, 2)
-    with left:
-        if not track.empty:
-            _faster_or_harder(run)
-    with right:
-        _best_efforts(run)
-    if not track.empty:
-        _segments(run)
-        _new_segment(run, track)
+        pages.append(("route", tr(pl="Trasa", en="Route")))
+    for (name, _), tab in zip(pages, st.tabs([label for _, label in pages])):
+        with tab:
+            if name == "course":
+                left, right = bento.row(2, 2)
+                with left:
+                    _splits(run)
+                with right:
+                    _streams(track)
+            elif name == "effort":
+                left, right = bento.row(2, 2)
+                with left:
+                    _zones(run)
+                with right:
+                    _character(run)
+            elif name == "structure":
+                _structure(run)
+                _workout(frame, run)
+            elif name == "compare":
+                bento.pair(lambda: _similar(frame, run),
+                           (lambda: _faster_or_harder(run)) if not track.empty else None)
+                _best_efforts(run)
+            else:
+                _same_route(run)
+                _shared(run, track)
+                _segments(run)
+                _new_segment(run, track)
 
 
 def _summary(run: pd.Series) -> None:

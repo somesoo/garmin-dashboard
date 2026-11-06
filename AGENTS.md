@@ -185,6 +185,9 @@ Zachowania celowe (nie „naprawiaj”):
   tekstowego). Wyjątek: Notatnik SQL.
 - **Nic nie wysuwa klawiatury bez pola do pisania**: wybór z listy przez
   `tables.chooser`; `ui/gesture.py` daje selectboxom `inputmode="none"` na dotyku.
+- **Strona z wieloma pytaniami → zakładki** (`st.tabs`, wzór: *Trening*): nad
+  nimi wybór i 4 KPI, w każdej zakładce jedno pytanie; zakładka bez danych nie
+  powstaje. Telefon przełącza je przesunięciem palca (`ui/gesture.py`).
 - **Wykres śpi do pierwszego dotknięcia** (`ui/gesture.py` + `.armed` w
   `page_style`): przewijanie strony nad wykresem nie zoomuje ani nie przypina
   podpowiedzi. Nie zdejmuj tego przez `config` Plotly.
