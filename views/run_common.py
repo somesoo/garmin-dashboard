@@ -394,6 +394,17 @@ def week_strip(active: dict[str, Any] | None, frame: pd.DataFrame, today: dt.dat
         week = frame[(frame["day"] >= pd.Timestamp(monday)) & (frame["day"] < pd.Timestamp(monday + dt.timedelta(days=7)))]
         for row in week.itertuples(index=False):
             cells.setdefault(row.day.date(), []).append(f"✓ {kind_label(row.kind)}  \n{row.distance_km:.1f} km")
+    if shell.phone():
+        # Seven columns stack into fourteen lines (day, then "—") on a phone:
+        # one line per day instead, the session after the day's name.
+        lines = []
+        for offset in range(7):
+            day = monday + dt.timedelta(days=offset)
+            name = f"{i18n.weekdays()[offset]} {day:%d.%m}"
+            entry = " · ".join(c.replace("  \n", " · ") for c in cells.get(day, [])) or "—"
+            lines.append(f"<b>{name}</b> · {entry}" if day == today else f"{name} · {entry}")
+        st.markdown(f"<div class='week-lines'>{'<br>'.join(lines)}</div>", unsafe_allow_html=True)
+        return
     for offset, column in enumerate(st.columns(7)):
         day = monday + dt.timedelta(days=offset)
         name = f"{i18n.weekdays()[offset]} {day:%d.%m}"

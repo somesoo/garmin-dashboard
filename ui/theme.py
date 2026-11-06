@@ -559,7 +559,7 @@ def scatter(
 
     fig.update_layout(**base_layout(legend=legend, height=height, hover="closest"))
     fig.update_xaxes(title_text=x_title if x_title is not None else x)
-    fig.update_yaxes(title_text=y_title or y, autorange="reversed" if reverse_y else True)
+    fig.update_yaxes(title_text=y_title if y_title is not None else y, autorange="reversed" if reverse_y else True)
     fig = _dates(style_axes(fig), data[x])
     if pace_y:
         for trace in fig.data:

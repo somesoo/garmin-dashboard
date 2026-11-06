@@ -78,7 +78,8 @@ _STYLE = """
 
   /* ---- widget chrome ------------------------------------------------------ */
   [class*="st-key-wgthd_"] {min-height: 30px; flex-wrap: nowrap;}
-  [class*="st-key-wgthd_"] [data-testid="stElementContainer"]:first-child {flex: 1 1 auto; min-width: 0;}
+  /* min-content: a narrow header wraps the title between words, never inside one ("Hipnog/ram"). */
+  [class*="st-key-wgthd_"] [data-testid="stElementContainer"]:first-child {flex: 1 1 auto; min-width: min-content;}
   [class*="st-key-wgthd_"] [data-testid="stMarkdownContainer"] > div,
   [class*="st-key-wgthd_"] [data-testid="stMarkdown"] {margin: 0 !important;}
   [class*="st-key-wgthd_"] button {padding: 0 0.25rem; min-height: 28px; opacity: .38; transition: opacity .2s;}
@@ -335,6 +336,54 @@ _STYLE = """
     [class*="st-key-kpi_"] [data-testid="stMetricValue"] > div {white-space: normal !important; overflow: visible !important;
         line-height: 1.12;}
     [class*="st-key-kpi_"] [data-testid="stMetricDelta"] {font-size: 0.68rem !important;}
+    /* A row of numbers inside a tile (st.columns + st.metric: the run's
+       character, forecasts, records, pace by type...): the same strip, up to
+       four in a line, a fifth wraps. Matched by shape, not by key, so a new
+       tile gets it too: every column holds metrics (and the caption under
+       them), nothing else -- a row of tiles, charts or a form keeps stacking.
+       :has() cannot nest, hence the two :not() instead of "only metrics". */
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] > [data-testid="stVerticalBlock"]
+        > [data-testid="stElementContainer"] > [data-testid="stMetric"]):not(:has(> [data-testid="stColumn"]
+        > [data-testid="stVerticalBlock"] > :not([data-testid="stElementContainer"]))):not(:has(
+        > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]
+        > :not([data-testid="stMetric"], [data-testid="stCaptionContainer"], [data-testid="stMarkdown"]))) {
+        gap: 0.5rem 0.45rem !important;}
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] > [data-testid="stVerticalBlock"]
+        > [data-testid="stElementContainer"] > [data-testid="stMetric"]):not(:has(> [data-testid="stColumn"]
+        > [data-testid="stVerticalBlock"] > :not([data-testid="stElementContainer"]))):not(:has(
+        > [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]
+        > :not([data-testid="stMetric"], [data-testid="stCaptionContainer"], [data-testid="stMarkdown"])))
+        > [data-testid="stColumn"] {flex: 1 1 22% !important; width: auto !important; min-width: 0 !important;}
+    [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]
+        > [data-testid="stMetric"] [data-testid="stMetricLabel"] p {font-size: 0.7rem !important; line-height: 1.15;
+        white-space: normal !important; overflow: visible !important; text-overflow: clip !important;}
+    [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]
+        > [data-testid="stMetric"] [data-testid="stMetricLabel"] div {white-space: normal !important;
+        overflow: visible !important;}
+    [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]
+        > [data-testid="stMetric"] [data-testid="stTooltipIcon"] {display: none !important;}
+    [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]
+        > [data-testid="stMetric"] [data-testid="stMetricValue"] {font-size: 0.98rem !important;}
+    [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]
+        > [data-testid="stMetric"] [data-testid="stMetricValue"] > div {white-space: normal !important;
+        overflow: visible !important; line-height: 1.12;}
+    [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]
+        > [data-testid="stMetric"] [data-testid="stMetricDelta"] {font-size: 0.68rem !important;}
+    [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]
+        > [data-testid="stMetric"] [data-testid="stMetricDelta"] svg {display: none !important;}
+    [data-testid="stColumn"] > [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"]
+        > [data-testid="stMetric"]) {gap: 0.15rem !important;}
+    [data-testid="stColumn"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]
+        > [data-testid="stMetric"]) :is([data-testid="stCaptionContainer"], .tile-caption) {
+        font-size: 0.68rem !important; line-height: 1.25;}
+    /* The week as one line per day (run_common.week_strip on a phone). */
+    .week-lines {font-size: 0.86rem; line-height: 1.65; color: #a3a8b3;}
+    .week-lines b {color: #fafafa;}
+    /* A picker in a tile header gives way before the title and the icons do
+       (a fixed width=170 pushed the table icon off the edge). */
+    [class*="st-key-wgthd_"] [data-testid="stElementContainer"]:has([data-testid="stSelectbox"]) {
+        flex: 0 1 auto !important; min-width: 6.5rem !important;}
+    [class*="st-key-wgthd_"] [data-testid="stSelectbox"] {width: 100% !important; min-width: 0 !important;}
 
     /* Tabs: all of them on the screen, no scroll arrow standing over the last one. */
     [data-testid="stTabs"] [role="tablist"] {gap: 0.4rem !important; justify-content: space-between;}
