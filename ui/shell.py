@@ -134,6 +134,13 @@ _STYLE = """
   h3 {font-size: 0.9rem !important; font-weight: 600; margin: 1.1rem 0 0 0 !important;}
   [data-testid="stMetricValue"] {font-size: 1.45rem; font-weight: 600;}
   [data-testid="stMetricLabel"] {opacity: 0.68; font-size: 0.78rem;}
+  /* The change under a number is a value, not a badge: no tinted pill, the
+     same bare text as the buttons (variant C) and the loop's values. The
+     colour (good / bad / off, from delta_color) stays -- it is the meaning. */
+  [data-testid="stMetricDelta"] {background: none !important; border-radius: 0 !important;
+      padding: 0 !important; width: auto !important; font-size: 0.8rem; font-weight: 620;
+      font-variant-numeric: tabular-nums; gap: 0.1rem;}
+  [data-testid="stMetricDelta"] [data-testid^="stMetricDeltaIcon"] {font-size: 0.9em !important; margin: 0 !important;}
   [data-testid="stCaptionContainer"] {max-width: 72ch; line-height: 1.55; opacity: 0.85;}
   [data-testid="stSidebarNav"] {padding-top: 0.5rem;}
   div[data-testid="stExpander"] details summary p {font-size: 0.8rem; opacity: 0.65;}
