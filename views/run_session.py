@@ -791,34 +791,50 @@ def _splits(run: pd.Series) -> None:
     if not stood.empty:
         where = ", ".join(f"km {int(k)}: {units.fmt_time(v)}" for k, v in zip(stood["km"], stood["stop_s"]))
         caption += tr(pl=f" · postoje {where}", en=f" · stops {where}")
-    with bento.tile(tr(pl="Splity kilometrowe", en="Kilometre splits"), key="splits", caption=caption,
-                    terms=["stops"],
+    with bento.tile(tr(pl="Splity kilometrowe", en="Kilometre splits"), rows=2, key="splits",
+                    caption=caption, terms=["stops"],
                     how=tr(pl="Czas stopera, bez autopauzy. Ostatni odcinek może być niepełny. Wyżej = szybciej. "
-                              "Pusty punkt = na tym kilometrze stałeś co najmniej 5 s ze stoperem w ruchu (światła) "
-                              "— ten czas jest w tempie, kolumna „postój” mówi ile.",
+                              "Pod spodem średnie tętno tego samego kilometra. Pusty punkt = na tym kilometrze "
+                              "stałeś co najmniej 5 s ze stoperem w ruchu (światła) — ten czas jest w tempie, kolumna „postój” mówi ile.",
                            en="Stopwatch time, without auto-pause. The last split may be partial. Higher = "
-                              "faster. A hollow point = on that kilometre you stood for at least 5 s with the "
-                              "timer running (traffic lights) — that time is in the pace, the “stop” column says "
+                              "faster. Under it, the average heart rate of the same kilometre. A hollow point = "
+                              "on that kilometre you stood for at least 5 s with the timer running (traffic lights) — that time is in the pace, the “stop” column says "
                               "how much.")) as t:
         if mine.empty:
             st.caption(tr(pl="Ten bieg nie ma strumienia próbek (np. bieżnia albo brak GPS).",
                           en="This run has no sample stream (e.g. a treadmill or no GPS)."))
             return
-        pace = tr(pl="tempo", en="pace")
-        # Points and a line, not bars: on a reversed pace axis a bar hangs from the
-        # top and the slowest kilometre would get the longest bar.
-        figure = tz.timeseries(mine, "km", {pace: "pace_min_km"}, markers=True)
+        pace, pulse = tr(pl="tempo", en="pace"), tr(pl="tętno", en="HR")
+        mine = mine.reset_index(drop=True)
+        # Two panels on one kilometre axis (no second y axis): pace on top, the
+        # average heart rate of the same kilometre under it, so a slower km can
+        # be read as "eased off" or "same effort, hill". Points and a line, not
+        # bars: on a reversed pace axis a bar hangs from the top and the slowest
+        # kilometre would get the longest bar.
+        panels = [{"title": tr(pl="Średnie tempo (/km)", en="Average pace (/km)"),
+                   "series": {pace: "pace_min_km"}, "pace": True}]
+        if "hr" in mine.columns:
+            panels.append({"title": tr(pl="Średnie tętno (bpm)", en="Average heart rate (bpm)"),
+                           "series": {pulse: "hr"}})
+        figure = tz.stacked_panels(mine, "km", panels, height=420)
         if figure is not None:
-            tz.pace_axis(figure, mine["pace_min_km"], robust=True)
-            figure.update_xaxes(title_text=tr(pl="kilometr", en="kilometre"), dtick=1)
-            standing = pd.to_numeric(mine["stop_s"], errors="coerce") if "stop_s" in mine.columns \
-                else pd.Series(float("nan"), index=mine.index)
+            figure.update_xaxes(dtick=1)
+            figure.update_xaxes(title_text=tr(pl="kilometr", en="kilometre"), row=len(figure.data), col=1)
+            standing = pd.to_numeric(mine["stop_s"], errors="coerce").fillna(0) if "stop_s" in mine.columns \
+                else pd.Series(0.0, index=mine.index)
             label = tr(pl="postój", en="stop")
-            figure.update_traces(
-                customdata=[f"{units.fmt_pace(v)}" + (f" · {label} {units.fmt_time(s)}" if s >= 5 else "")
-                            for v, s in zip(mine["pace_min_km"], standing.fillna(0))],
-                hovertemplate="km %{x}: %{customdata}<extra></extra>",
-                marker={"symbol": ["circle-open" if s >= 5 else "circle" for s in standing.fillna(0)]})
+            for trace in figure.data:
+                # stacked_panels drops empty rows per series: map back by kilometre.
+                rows = mine.set_index("km").loc[list(trace.x)]
+                stops = standing.set_axis(mine["km"]).loc[list(trace.x)]
+                if trace.name == pace:
+                    text = [units.fmt_pace(v) + (f" · {label} {units.fmt_time(s)}" if s >= 5 else "")
+                            for v, s in zip(rows["pace_min_km"], stops)]
+                else:
+                    text = [f"{round(v)} bpm" for v in pd.to_numeric(rows["hr"], errors="coerce")]
+                trace.update(mode="lines+markers", text=None, customdata=text,
+                             hovertemplate="km %{x}: %{customdata}<extra></extra>",
+                             marker={"size": 6, "symbol": ["circle-open" if s >= 5 else "circle" for s in stops]})
         # The table is the tile next to it (_split_table), not a twin behind an icon.
         t.chart(figure, key=f"splits_{int(run['activity_id'])}")
 
