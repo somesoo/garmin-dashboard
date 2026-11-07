@@ -53,7 +53,7 @@ from ui import story
 # The everyday pages in menu order (app.py); the lab, minus what the loop holds.
 # The workout (the list of runs at its head) and the routes (every other
 # activity) have no place in the top line, so the drawer is their way in.
-EVERYDAY = ["dzien", "dzis", "bieg", "trasy", "sport", "atlas"]
+EVERYDAY = ["dzien", "zespol", "dzis", "bieg", "trasy", "sport", "atlas"]
 LAB = ["statystyka", "insights", "sql", "slownik", "admin"]
 
 
@@ -137,9 +137,12 @@ def _account(current: str, seen: set[str]) -> None:
     from core import auth
     from core import sync
 
+    from ui import coaching
+
     _heading(i18n.tr(pl="Twoje dane", en="Your data"))
     _section(None, ["konto"], current, seen)
-    if tenant.current().source == "garmin":
+    # Never while a coach looks at an athlete: pulling is the athlete's (core/team.py).
+    if tenant.current().source == "garmin" and coaching.viewing() is None:
         st.fragment(run_every=3 if sync.running() else 60)(shell.pull_inline)(sync.running())
     # Streamlit's "⋮" menu is hidden on a phone (it stood over the run picker);
     # the one thing from it worth a thumb is reloading the page.

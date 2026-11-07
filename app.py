@@ -21,6 +21,8 @@ sys.path.insert(0, str(ROOT))
 import streamlit as st  # noqa: E402
 
 from core import auth  # noqa: E402
+from core import team  # noqa: E402
+from ui import coaching  # noqa: E402
 from ui import drawer  # noqa: E402
 from ui import gesture  # noqa: E402
 from ui import guide  # noqa: E402
@@ -51,6 +53,7 @@ from views import (  # noqa: E402
     stats,
     today,
 )
+from views import team as team_wall  # noqa: E402
 
 st.set_page_config(
     page_title="Garmin Dashboard",
@@ -69,6 +72,8 @@ gesture.install()
 auth.gate()
 # Explicit consent before anything of theirs is pulled or shown (core/privacy.py; not for the controller).
 consent.gate()
+# A coach looking at an athlete (ui/coaching.py): dropped here unless the athlete's consent still holds.
+coaching.gate()
 
 # No data yet (a friend's first visit, a fresh server): the account page is the
 # whole app until a source is chosen and something has arrived.
@@ -87,7 +92,7 @@ def _page(render, url_path: str, icon: str, **kwargs) -> st.Page:
 PAGES = {
     i18n.group("everyday"): [
         # The start page: the day in facts around a run (analysis/hero.py, ui/components/hero/).
-        _page(day.render, "dzien", "wb_sunny", default=True),
+        _page(day.render, "dzien", "wb_sunny", default=coaching.home() == "dzien"),
         _page(today.render, "dzis", "today"),
         _page(hubs.sports, "sport", "sports_gymnastics"),
         _page(atlas.render, "atlas", "public"),
@@ -97,7 +102,7 @@ PAGES = {
         _page(routes.render, "trasy", "route"),
     ],
     i18n.group("running"): [
-        _page(run_overview.render, "bieganie", "directions_run"),
+        _page(run_overview.render, "bieganie", "directions_run", default=coaching.home() == "bieganie"),
         _page(hubs.plan, "plan", "calendar_month"),
         _page(run_forecast.render, "prognoza", "timer"),
         _page(run_segments.render, "segmenty", "conversion_path"),
@@ -119,8 +124,13 @@ PAGES = {
 }
 # The server's admin only (tenant.User.admin): people, processes, pulls (views/admin.py).
 # Not registered for anyone else, so the address does not exist for them.
-if tenant.current().admin:
+if tenant.viewer().admin:
     PAGES[i18n.group("lab")].append(_page(admin.render, "admin", "monitoring"))
+# A coach's wall of sticky notes, one per athlete (views/team.py) -- only for someone who coaches.
+if team.is_coach(tenant.viewer()):
+    PAGES[i18n.group("everyday")].insert(1, _page(team_wall.render, "zespol", "groups"))
+# Looking at an athlete: only what their consent's scope allows (core/team.py).
+PAGES = coaching.pages(PAGES)
 
 # Views navigate by url_path through this registry (see routing.py).
 if ONBOARDING:
@@ -140,6 +150,7 @@ else:
     # only navigation, on a desktop one beside the top line.
     drawer.render(routing.name(page))
     story.topbar(routing.name(page))
+    coaching.bar()
     guide.eyebrow(routing.name(page))
     page.run()
     guide.next_steps(routing.name(page))

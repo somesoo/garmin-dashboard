@@ -27,6 +27,7 @@ import streamlit as st
 import api
 from core import audit
 from core import privacy
+from core import team
 from ui import tables
 from ui import bento
 from core import i18n
@@ -69,7 +70,8 @@ def _email() -> str | None:
 
 def render() -> None:
     tr = i18n.tr
-    person = tenant.current()
+    # The viewer, always: a coach never reaches an athlete's account (core/team.NEVER), and this says so twice.
+    person = tenant.viewer()
     email = _email() or (person.identities[0] if person.identities else None)
     bento.header(i18n.page("konto"),
                  tr(pl=f"{person.name}{f' · {email}' if email else ''} · dane z: {SOURCE_LABELS[person.source]}. "
@@ -97,6 +99,8 @@ def render() -> None:
         _tokens(person)
         _yours(person)
         _privacy(person)
+        if person.coach_id:
+            _coach(person)
 
 
 def _welcome(person: tenant.User) -> None:
@@ -482,6 +486,7 @@ def _privacy(person: tenant.User) -> None:
                 tables.show(pd.DataFrame([{
                     tr(pl="Kiedy", en="When"): item["at"].replace("T", " "),
                     tr(pl="Co", en="What"): _event_label(item["event"]),
+                    tr(pl="Kto", en="Who"): _who(item),
                     tr(pl="Skąd", en="From"): item.get("ip") or item.get("key") or "—"} for item in seen]))
         if privacy.controller(person) or person.legacy:
             return
@@ -514,7 +519,58 @@ def _event_label(code: str) -> str:
         "garmin_connect": tr(pl="połączenie z Garminem", en="Garmin connected"),
         "garmin_disconnect": tr(pl="odłączenie Garmina", en="Garmin disconnected"),
         "admin": tr(pl="działanie administratora", en="admin action"),
+        "coach_grant": tr(pl="zgoda dla trenera", en="coach let in"),
+        "coach_revoke": tr(pl="cofnięcie zgody dla trenera", en="coach sent away"),
+        "coach_view": tr(pl="trener otworzył dane", en="coach opened the data"),
     }.get(code, code)
+
+
+def _who(item: dict) -> str:
+    """Who did it, when it was not the person themselves (a coach, the admin)."""
+    other = item.get("by") if item.get("event") in ("coach_view", "admin") else None
+    if not other:
+        return "—"
+    try:
+        return tenant.get(other).name
+    except tenant.NoUser:
+        return other
+
+
+def _coach(person: tenant.User) -> None:
+    """The coach: who, how far they see, and the one button that sends them away (core/team.py)."""
+    from views import consent
+
+    tr = i18n.tr
+    try:
+        coach = tenant.get(person.coach_id)
+    except tenant.NoUser:
+        return
+    given = team.valid(person)
+    labels = consent.scope_labels()
+    if given:
+        when = str(given.get("at", ""))[:16].replace("T", " ")
+        by = tr(pl=f" · zgoda rodzica: {given['guardian']}", en=f" · parent's consent: {given['guardian']}") \
+            if given.get("by") == "guardian" and given.get("guardian") else ""
+        caption = tr(pl=f"{coach.name} widzi: {labels[given['scope']].lower()} · od {when}{by}",
+                     en=f"{coach.name} sees: {labels[given['scope']].lower()} · since {when}{by}")
+    else:
+        caption = tr(pl=f"{coach.name} jest przypisany jako trener, ale nic nie widzi — nie było zgody.",
+                     en=f"{coach.name} is assigned as coach but sees nothing — no consent was given.")
+    with bento.panel(tr(pl="Trener", en="Coach"), key="acc_coach", caption=caption):
+        if given:
+            if st.button(tr(pl=f"Cofnij zgodę — {coach.name} traci dostęp od razu",
+                            en=f"Withdraw — {coach.name} loses access at once"), key="acc_coach_revoke"):
+                team.revoke(person, _ip())
+                st.rerun()
+            return
+        agreed_by, guardian = consent.who_agrees("acc_coach")
+        chosen = st.radio(tr(pl="Co trener może widzieć", en="What the coach may see"), list(labels),
+                          format_func=labels.get, key="acc_coach_scope")
+        agreed = st.checkbox(privacy.coach_sentence(coach.name, chosen, agreed_by), key="acc_coach_check")
+        if st.button(tr(pl="Zgadzam się", en="I agree"), type="primary", key="acc_coach_give",
+                     disabled=not agreed or (agreed_by == "guardian" and not guardian)):
+            team.give(person, chosen, agreed_by, guardian, _ip())
+            st.rerun()
 
 
 def _zones(person: tenant.User) -> None:

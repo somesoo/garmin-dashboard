@@ -2,6 +2,19 @@
 
 ## Do zrobienia
 
+### Trener i zespół (2026-11-08, zasady w AGENTS.md → „Wiele osób”, docs/PRYWATNOSC.md)
+
+- [x] Relacja trener → zawodnik w rejestrze (`tenant coach`), osobna zgoda z zakresem
+      (`all` / `training`), zgoda rodzica dla dzieci (< 16 lat), `POLICY_VERSION` 2026-11-08.
+- [x] *Zespół*: karteczka na zawodnika (stan, dziś, regeneracja wobec własnej normy, tydzień,
+      ostatni bieg, start, notatki); podgląd całego dashboardu zawodnika z paskiem
+      „Patrzysz na …”; wpis `coach_view` w dzienniku zawodnika.
+- [x] Notatki trener ↔ zawodnik (*Dziś* i karteczka); edycja sesji planu (typ, km, dzień),
+      odporna na przebudowę (`locked`), „Oddaj automatowi”.
+- [ ] Widok obciążenia bez HRV dla zakresu `training` (dziś całe *Obciążenie* jest poza nim).
+- [ ] Przy ~15 osobach: filtr/grupy na *Zespole* (np. grupa wiekowa), jeśli przewijanie zacznie męczyć.
+- [ ] Obejrzeć z prawdziwym rodzicem ekran zgody i Konto → Trener (czy jasne, co widzi trener).
+
 ### Wiele osób → SaaS (plan 2026-11-02, zasady w AGENTS.md → „Wiele osób”)
 
 Osoba X — Garmin, osoba Y — Apple Watch (iPhone); dane całkowicie osobne.

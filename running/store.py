@@ -181,7 +181,7 @@ def validate_plan(plan: dict[str, Any]) -> list[str]:
 
 # Session text codes (running/text.py writes the sentences from them).
 TEXT_KEYS = ("easy", "recovery", "long", "threshold", "intervals", "tempo", "race", "hills", "race_pace", "strength",
-             "sick", "rest_strength", "adjusted", "softened", "custom")
+             "sick", "rest_strength", "adjusted", "softened", "custom", "rest")
 PROSE = ("title", "warmup", "main", "cooldown", "purpose")
 
 
