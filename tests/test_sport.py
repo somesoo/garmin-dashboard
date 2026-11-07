@@ -51,6 +51,15 @@ class Catalog(unittest.TestCase):
         self.assertEqual(catalog.discipline_of("kiteboarding_v2"), "kite")
         self.assertIsNone(catalog.discipline_of("multi_sport"))
 
+    def test_log_category_keeps_unknown_types(self):
+        # The History log filters by category: treadmill and road runs are one,
+        # an unclaimed Garmin type is its own, and a missing type is none.
+        self.assertEqual(catalog.category_of("treadmill_running"), "run")
+        self.assertEqual(catalog.category_of("running"), "run")
+        self.assertEqual(catalog.category_of("multi_sport"), "multi_sport")
+        self.assertIsNone(catalog.category_of(None))
+        self.assertIsNone(catalog.category_of(float("nan")))
+
     def test_every_discipline_is_consistent(self):
         for key, d in catalog.DISCIPLINES.items():
             self.assertIn(d.family, catalog.FAMILIES, key)

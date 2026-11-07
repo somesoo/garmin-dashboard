@@ -163,6 +163,15 @@ def discipline_of(sport: str | None) -> str | None:
     return _BY_SPORT.get(str(sport)) if sport else None
 
 
+def category_of(sport: str | None) -> str | None:
+    """The category an activity is filed under in the log: its discipline, or the
+    Garmin type itself when no discipline claims it (so nothing falls out of a
+    filter). ``label`` names either."""
+    if sport is None or (isinstance(sport, float) and sport != sport) or str(sport) == "":
+        return None
+    return discipline_of(sport) or str(sport)
+
+
 def get(key: str) -> Discipline:
     return DISCIPLINES[key]
 
