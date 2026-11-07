@@ -15,6 +15,7 @@ import streamlit as st
 
 from ui import bento
 from core import i18n
+from core import level as detail
 from ui import routing
 from ui import shell
 from ui import story
@@ -104,13 +105,19 @@ def render() -> None:
                         caption=_profile_note(result["profile"])) as t:
             _profile(t, result["profile"])
 
+    # Above the basic level (core/level.py): what the number is made of and its trend;
+    # the 28-day profile is for the expert.
+    standard, expert = detail.shows("standard"), detail.shows("expert")
     if shell.phone():
         picks_tile()
+        if not standard:
+            return
 
         def rest() -> None:
             parts_tiles()
             trend_tile()
-            profile_tile()
+            if expert:
+                profile_tile()
             _conditions(available, result["skipped"])
 
         story.second(tr(pl="z czego ta liczba, zmęczenie układów, gotowość w czasie, warunki",
@@ -118,19 +125,10 @@ def render() -> None:
                      rest, key="sport_rest")
         return
 
-    left, right = bento.row(2, 2)
-    with left:
-        picks_tile()
-    with right:
-        parts_tiles()
-
-    left, right = bento.row(2, 2)
-    with left:
-        trend_tile()
-    with right:
-        profile_tile()
-
-    _conditions(available, result["skipped"])
+    bento.pair(picks_tile, parts_tiles if standard else None)
+    bento.pair(trend_tile if standard else None, profile_tile if expert else None)
+    if standard:
+        _conditions(available, result["skipped"])
 
 
 def _kpis(state: dict, sessions: pd.DataFrame, now: pd.Timestamp, trend: pd.DataFrame) -> None:

@@ -26,6 +26,7 @@ import api
 from ui import tables
 from ui import bento
 from core import i18n
+from core import level
 from ui import shell
 from core import sync
 from core import tenant
@@ -80,6 +81,7 @@ def render() -> None:
         _zones(person)
     with right:
         _profile(person, email)
+        _level()
         _app(person)
         _tokens(person)
         _yours(person)
@@ -116,6 +118,21 @@ def _profile(person: tenant.User, email: str | None) -> None:
                 st.rerun()
         if auth.can_sign_out():
             st.button(tr(pl="Wyloguj", en="Sign out"), on_click=st.logout, key="acc_sign_out", type="tertiary")
+
+
+def _level() -> None:
+    """How much of the dashboard to show (core/level.py); pages above it leave the menu, tiles are not drawn."""
+    tr = i18n.tr
+    with bento.panel(tr(pl="Poziom szczegółów", en="Level of detail"), key="acc_level",
+                     caption=tr(pl="Ile stron i wykresów pokazywać. Nic nie jest kasowane — wyższy poziom przywraca resztę.",
+                                en="How many pages and charts to show. Nothing is deleted — a higher level brings the "
+                                   "rest back.")):
+        choice = st.segmented_control(
+            tr(pl="Poziom", en="Level"), list(level.LEVELS), default=level.current(), required=True,
+            key=level.KEY, format_func=level.labels().get, label_visibility="collapsed",
+            on_change=lambda: level.remember(st.session_state.get(level.KEY)),
+        )
+        st.caption(level.descriptions()[choice or level.current()])
 
 
 def _source(person: tenant.User) -> None:

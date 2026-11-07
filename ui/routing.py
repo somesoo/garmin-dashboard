@@ -45,6 +45,15 @@ def page(url_path: str) -> Any | None:
     return _PAGES.get(url_path)
 
 
+def listed(url_path: str) -> Any | None:
+    """The page for a navigation link: None when it is not registered or above the
+    person's level (core/level.py). ``goto`` keeps using ``page``: a hidden page
+    still opens from a link inside another page or from its address."""
+    from core import level
+
+    return page(url_path) if level.lists(url_path) else None
+
+
 def goto(url_path: str, **state: Any) -> None:
     """Switch to a page, leaving values behind for it in the session state."""
     target = page(url_path)

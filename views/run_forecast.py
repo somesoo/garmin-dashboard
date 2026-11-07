@@ -12,12 +12,13 @@ from analysis import facts
 from ui import herochart as hc
 from ui import glossary
 from core import i18n
+from core import level
 from ui import routing
 from ui import shell
 from ui import story
 from ui import theme as tz
 from running import forecast, physio, units
-from views import physio as physio_view, run_common as rc, trends
+from views import run_common as rc, trends
 
 
 def render() -> None:
@@ -89,6 +90,9 @@ def _details() -> None:
     for warning in item.warnings:
         st.warning(warning)
 
+    # Basic level (core/level.py): the four forecasts above are the page.
+    if not level.shows("standard"):
+        return
     left, right = bento.row(2, 2)
     with left:
         _history_chart(history, key)
@@ -96,21 +100,19 @@ def _details() -> None:
         _confidence(result, item)
         _advice(result, frame, key)
 
-    left, right = bento.row(2, 2)
-    with left:
-        _backtest(history)
-    with right:
-        _methods(result, item)
-        _anchor(result)
+    if level.shows("expert"):
+        left, right = bento.row(2, 2)
+        with left:
+            _backtest(history)
+        with right:
+            _methods(result, item)
+            _anchor(result)
 
-    # What Garmin itself estimates, for comparison with the model above.
-    view = shell.clip(shell.daily())
-    left, right = bento.row(2, 2)
-    with left:
-        physio_view.predictions()
-    with right:
-        trends.vo2max(view, rows=2)
+    # Garmin's own race predictions are the dotted line of the history chart.
+    trends.vo2max(shell.clip(shell.daily()), rows=2)
 
+    if not level.shows("expert"):
+        return
     _table(result, history)
     with bento.panel(tr(pl="Przygotowanie i założenia modelu", en="Preparation and the model's assumptions"),
                      key="assumptions",

@@ -1,4 +1,4 @@
-"""Training load: the Banister chart, both ACWR formulations, Foster's strain."""
+"""Training load: the Banister chart, the fitness ramp, Foster's monotony and strain."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import streamlit as st
 from ui import bento
 from ui import glossary
 from core import i18n
+from core import level
 from ui import shell
 from ui import theme as tz
 
@@ -42,7 +43,9 @@ def render() -> None:
     zone = _zone_labels().get(current.get("form_zone"))
     zone_text = tr(pl=f"strefa formy: <b>{zone}</b>", en=f"form zone: <b>{zone}</b>") if zone else None
 
-    left, right = bento.row(2, 2)
+    # Below the expert level (core/level.py) the chart is the page: Foster, the ramp and Banister are models.
+    expert = level.shows("expert")
+    left, right = bento.row(2, 2) if expert else (bento.row(4)[0], None)
     with left, bento.tile(
         "Performance Management Chart", rows=2, key="pmc", terms=["ctl", "atl", "tsb", "training_load"],
         caption=zone_text or tr(pl="Sprawność, zmęczenie i świeżość — podstawa planowania odpoczynku.",
@@ -66,24 +69,13 @@ def render() -> None:
         if figure is not None:
             tz.band(figure, -10, 5, row=2)
         t.chart(figure, table=view[["day", "ctl", "atl", "tsb", "ramp_7d", "load_day"]].tail(40))
+    if not expert:
+        return
     with right:
-        with bento.tile(
-            tr(pl="ACWR: dwa wzory", en="ACWR: two formulas"), key="acwr", terms=["acwr"],
-            caption=tr(pl="Pas 0,8–1,3 to przyrost stopniowy — opis, nie granica bezpieczeństwa.",
-                       en="The 0.8–1.3 band is a gradual increase — a description, not a safety limit."),
-            how=tr(pl="Kroczący (Gabbett) to suma 7 dni przez średnią z 28; wykładniczy (Williams) używa wag CTL/ATL. "
-                      "Tygodnie, w których się rozjeżdżają, to te, gdzie wniosek „przetrenowanie” zależy od wzoru.",
-                   en="Rolling (Gabbett) is the 7-day sum over the 28-day average; exponential (Williams) uses the "
-                      "CTL/ATL weights. Weeks where they diverge are those where an “overtraining” verdict depends "
-                      "on the formula."),
-        ) as t:
-            figure = tz.timeseries(view, "day", {tr(pl="kroczący", en="rolling"): "acwr_rolling",
-                                                 tr(pl="wykładniczy", en="exponential"): "acwr_ewma"},
-                                   y_title=tr(pl="iloraz", en="ratio"))
-            if figure is not None:
-                tz.band(figure, 0.8, 1.3)
-                tz.threshold(figure, 1.5, label="1.5")
-            t.chart(figure, table=view[["day", "acwr_rolling", "acwr_ewma"]].tail(40))
+        _foster(weekly)
+
+    left, right = bento.row(2, 2)
+    with left:
         ramp = current.get("ramp_7d")
         with bento.tile(
             tr(pl="Tempo narastania sprawności", en="Fitness ramp rate"), key="ramp", terms=["ramp", "ctl"],
@@ -95,12 +87,7 @@ def render() -> None:
             if figure is not None:
                 tz.threshold(figure, 5, label="5")
             t.chart(figure, table=view[["day", "ramp_7d"]].tail(40))
-
-    left, right = bento.row(2, 2)
-    with left:
-        _foster(weekly)
     with right:
-        _strain(weekly)
         _banister(models)
 
 
@@ -155,17 +142,6 @@ def _foster(weekly) -> None:
             tz.threshold(figure, 2.0, label=tr(pl="monotonia 2.0", en="monotony 2.0"))
         t.chart(figure, table=frame[["iso_week", "load_sum", "sessions", "monotony", "strain", "hrv", "rhr"]]
                 .sort_values("iso_week", ascending=False).head(20))
-
-
-def _strain(weekly) -> None:
-    with bento.tile(i18n.tr(pl="Strain tygodniowy", en="Weekly strain"), key="strain", terms=["strain"],
-                    caption=i18n.tr(pl="Suma obciążenia × monotonia.", en="Load total × monotony.")) as t:
-        frame = _recent(weekly)
-        if frame.empty:
-            _few_weeks()
-            return
-        weeks = frame.assign(week=pd.to_datetime(frame["iso_week"] + "-1", format="%G-W%V-%u", errors="coerce"))
-        t.chart(tz.bars(weeks, "week", "strain"), table=weeks[["iso_week", "strain"]].tail(20))
 
 
 def _banister(models: dict) -> None:

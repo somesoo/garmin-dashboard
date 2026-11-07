@@ -169,7 +169,7 @@ def next_steps(url_path: str) -> None:
     else:
         steps = [(target, switch, view, None) for target, switch, view in NEXT.get(url_path, [])]
     # Never the page (or the view of a shared page) the visitor is already on.
-    steps = [step for step in steps if routing.page(step[0]) is not None
+    steps = [step for step in steps if routing.listed(step[0]) is not None
              and not (step[0] == url_path and (step[1] is None or st.session_state.get(step[1]) == step[2]))]
     if not steps:
         return

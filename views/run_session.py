@@ -7,6 +7,7 @@ import streamlit as st
 
 from ui import bento
 from core import i18n
+from core import level
 from ui import routing
 from ui import tables
 from ui import shell
@@ -73,10 +74,14 @@ def _tabs(frame: pd.DataFrame, run: pd.Series, track: pd.DataFrame) -> None:
     from views import routes as rt
 
     tr = i18n.tr
-    pages = [("overview", tr(pl="Przegląd", en="Overview")), ("splits", tr(pl="Splity", en="Splits")),
-             ("charts", tr(pl="Wykresy", en="Charts")), ("compare", tr(pl="Porównanie", en="Compare"))]
-    if not track.empty:
-        pages.append(("segments", tr(pl="Segmenty", en="Segments")))
+    pages = [("overview", tr(pl="Przegląd", en="Overview")), ("splits", tr(pl="Splity", en="Splits"))]
+    # Above the basic level (core/level.py): the charts; the comparisons and the place are for the expert.
+    if level.shows("standard"):
+        pages.append(("charts", tr(pl="Wykresy", en="Charts")))
+    if level.shows("expert"):
+        pages.append(("compare", tr(pl="Porównanie", en="Compare")))
+        if not track.empty:
+            pages.append(("segments", tr(pl="Segmenty", en="Segments")))
     for (name, _), tab in zip(pages, st.tabs([label for _, label in pages])):
         with tab:
             if name == "overview":
@@ -272,6 +277,8 @@ def _workout(frame: pd.DataFrame, run: pd.Series) -> None:
         return
     ranked = rc.rep_efforts()
     _reps(table, workouts.summary(table), ranked[ranked["activity_id"] == activity_id] if not ranked.empty else ranked)
+    if not level.shows("expert"):
+        return  # the reps against earlier workouts belong to the Compare tab's level
     history, every = workouts.history(frame, laps)
     peers = workouts.peers(history, activity_id)
     if peers.empty:

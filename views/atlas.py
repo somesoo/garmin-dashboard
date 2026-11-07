@@ -16,6 +16,7 @@ import streamlit as st
 from ui import globe
 from ui import bento
 from core import i18n
+from core import level
 from ui import routing
 from ui import shell
 from ui import story
@@ -57,11 +58,8 @@ def render() -> None:
     _hero(activities)
 
     def rest() -> None:
-        left, right = bento.row(2, 2)
-        with left:
-            _places(activities)
-        with right:
-            _sports()
+        if level.shows("standard"):
+            bento.pair(lambda: _places(activities), _sports)
         log()
 
     story.second(i18n.tr(pl="miejsca, sporty, dziennik aktywności", en="places, sports, the activity log"),

@@ -11,6 +11,7 @@ from ui import bento
 from analysis import facts
 from ui import herochart as hc
 from core import i18n
+from core import level
 from ui import routing
 from ui import shell
 from ui import story
@@ -80,16 +81,20 @@ def _details(frame: pd.DataFrame) -> None:
     end = frame["day"].max()
     _volume_strip(frame, end)
 
-    left, right = bento.row(2, 2)
-    with left:
+    if level.shows("standard"):
+        left, right = bento.row(2, 2)
+        with left:
+            _weekly(frame)
+        with right:
+            _observations(frame)
+            _forecast_strip()
+    else:
         _weekly(frame)
-    with right:
-        _observations(frame)
-        _forecast_strip()
 
     left, right = bento.row(2, 2)
     with left:
-        _pace_by_kind(frame)
+        if level.shows("standard"):
+            _pace_by_kind(frame)
         _records()
     with right, bento.tile(i18n.tr(pl="Ostatnie treningi", en="Recent sessions"), rows=2, key="recent_runs",
                            terms=["run_kind", "training_load"],
@@ -98,7 +103,8 @@ def _details(frame: pd.DataFrame) -> None:
         recent = frame.sort_values("start_local").tail(bento.table_rows(2))
         rc.pickable_runs(recent, key="overview_runs", height=bento.table_height(len(recent)), hint=False)
 
-    activities.run_charts(shell.clip(shell.table("activities")))
+    if level.shows("expert"):
+        activities.run_charts(shell.clip(shell.table("activities")))
 
 
 def _volume_strip(frame: pd.DataFrame, end: pd.Timestamp) -> None:

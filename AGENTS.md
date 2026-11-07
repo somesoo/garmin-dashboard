@@ -172,6 +172,13 @@ Zachowania celowe (nie „naprawiaj”):
 - Strona = nagłówek-wniosek (`facts.py`: tylko to, co się wydarzyło, wobec
   własnej normy; **nic nie radzi**) + pętla + jeden wykres główny + „Szczegóły”.
   Co zrobić, mówi wyłącznie *Dziś* (`coach.next_session`).
+- **Poziom szczegółów** (`core/level.py`, wybór na *Koncie*): `basic` / `standard` /
+  `expert`. Nowy kafel albo strona dostaje poziom od razu: kafel przez
+  `if level.shows(...)` przy wywołaniu (pół rzędu → `bento.pair` z `None`), strona
+  przez `level.PAGES`. Strona ponad poziomem znika tylko z nawigacji
+  (`routing.listed`), adres i `goto` dalej działają. Kontrolki (przebudowa planu,
+  warunki sportu) nie idą na `expert` — to nie wykresy. Brak wyboru = `expert`
+  (nikomu nic nie znika); `tenant add` zapisuje nowej osobie `basic`.
 - Siatka bento: 4 kolumny, `bento.row(...)` sumuje się do 4; kafel bez stałej
   wysokości; **oś czasu ≥ 2 kolumny**; dwa panele `stacked_panels` wymagają `rows=2`.
 - **KPI zawsze po 4** (`bento.kpis` / `stat` / `empty_stat`); `delta_color`

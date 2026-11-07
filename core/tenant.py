@@ -350,6 +350,8 @@ def add(args: argparse.Namespace) -> int:
     payload["users"][args.id] = entry
     _write_registry(payload)
     user.root.mkdir(parents=True, exist_ok=True)
+    from core import level
+    level.remember(level.NEW_PERSON, user.ui_settings)  # a newcomer starts with the everyday pages
     print(f"Dodano {args.id} ({user.source}) -> {user.root}")
     return 0
 

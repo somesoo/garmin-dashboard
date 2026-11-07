@@ -14,6 +14,7 @@ from analysis import facts
 from ui import herochart as hc
 from ui import glossary
 from core import i18n
+from core import level
 from ui import shell
 from ui import story
 from ui import theme as tz
@@ -73,12 +74,17 @@ def _hero(daily: pd.DataFrame, circadian: pd.DataFrame, told: dict) -> None:
 def _details() -> None:
     _headline()
 
-    left, right = bento.row(2, 2)
-    with left:
+    # Basic level (core/level.py): the window, the length and the score, one night's hypnogram.
+    if level.shows("standard"):
+        left, right = bento.row(2, 2)
+        with left:
+            _window()
+        with right:
+            if level.shows("expert"):
+                _regularity()
+            _thirds()
+    else:
         _window()
-    with right:
-        _regularity()
-        _thirds()
 
     view = shell.clip(shell.daily())
     # Garmin's sleep score has no Apple twin: without it the length takes the row.
@@ -86,6 +92,8 @@ def _details() -> None:
 
     _night()
 
+    if not level.shows("expert"):
+        return
     # The day map is Garmin's 3-minute stress and Body Battery: no such series from an Apple Watch.
     bento.pair(_profile, _daymap if not shell.table("intraday").empty else None)
 
@@ -216,7 +224,8 @@ def _night() -> None:
     if chosen not in available:
         chosen = available[0]
 
-    left, right = bento.row(2, 2)
+    full = level.shows("standard")
+    left, right = bento.row(2, 2) if full else (bento.row(4)[0], None)
     with left:
         with bento.tile(i18n.tr(pl="Hipnogram", en="Hypnogram"), key="hypnogram", terms=["sleep_stages"],
                         caption=_night_caption(chosen)) as t:
@@ -227,7 +236,10 @@ def _night() -> None:
             night = frame[frame["day"].dt.date == chosen].copy()
             figure, summary = _hypnogram(night)
             t.chart(figure, table=summary, key=f"hypno_{chosen}")
-        _stage_share(frame)
+        if full:
+            _stage_share(frame)
+    if right is None:
+        return
     with right:
         with bento.tile(i18n.tr(pl="Przebieg nocy", en="The night as it went"), rows=2, key="night_series",
                         caption=i18n.tr(pl="Każda metryka na własnym panelu, wspólna oś czasu.",
