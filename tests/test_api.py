@@ -19,7 +19,7 @@ import api
 from core import sync
 from core import tenant
 from etl import apple, apple_push
-from tests.helpers import people
+from tests.helpers import consent, people
 
 
 def call(app, method: str, path: str, token: str | None = None, body: bytes = b"", headers: dict | None = None):
@@ -124,6 +124,7 @@ class AppFiles(unittest.TestCase):
 class Ingest(unittest.TestCase):
     def setUp(self):
         self.enterContext(people({"x": {}, "y": {"source": "apple"}}))
+        consent("x", "y")
         self.app = api.build_app()
         self.token = api.create_token(tenant.get("y"), "iPhone", "ingest")
         self.start = self.enterContext(mock.patch.object(sync, "start", return_value=True))

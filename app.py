@@ -35,6 +35,7 @@ from views import (  # noqa: E402
     account,
     admin,
     atlas,
+    consent,
     day,
     hubs,
     notebook,
@@ -66,6 +67,8 @@ gesture.install()
 
 # Whose data this run reads -- before anything touches the warehouse (auth.py, tenant.py).
 auth.gate()
+# Explicit consent before anything of theirs is pulled or shown (core/privacy.py; not for the controller).
+consent.gate()
 
 # No data yet (a friend's first visit, a fresh server): the account page is the
 # whole app until a source is chosen and something has arrived.

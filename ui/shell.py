@@ -188,6 +188,10 @@ _STYLE = """
   .signin-title {font-size: 1.9rem !important; font-weight: 680 !important; margin: 0 !important; padding: 0 !important;}
   .signin-sub {color: #9aa0a6; margin: 0.2rem 0 0.6rem; font-size: 0.98rem;}
   .signin-note {color: #8a9099; font-size: 0.82rem; line-height: 1.45; margin-top: 0.4rem;}
+  /* Consent (views/consent.py): the same card, left-aligned prose, the policy at reading size. */
+  .st-key-consent_card {margin-top: 6vh; gap: 0.8rem;}
+  .st-key-consent_card [data-testid="stMarkdownContainer"] p,
+  .st-key-consent_card [data-testid="stMarkdownContainer"] li {font-size: 0.9rem; line-height: 1.5; color: #c4c7cc;}
 
   /* ---- the headline and the loop next to it ------------------------------- */
   .story-h {font-size: 2.15rem !important; line-height: 1.12 !important; letter-spacing: -0.03em; font-weight: 700 !important;

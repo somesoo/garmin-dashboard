@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import re
 import shutil
 import time
 from pathlib import Path
@@ -329,8 +330,25 @@ def warnings(machine: dict[str, Any], folks: list[dict[str, Any]], version: dict
     return sorted(out, key=lambda w: order.index(w["code"]))
 
 
+# Lines of a pull log that say something about the person rather than the pull:
+# their Garmin name, the fitted training-response model. The admin page shows
+# the rest (dates, counts, errors) -- never health data (AGENTS.md, docs/PRYWATNOSC.md).
+_PRIVATE = re.compile(r"model Banistera|tau_fitness|R2=|zalogowany jako|logged in as", re.IGNORECASE)
+
+
+def redact(text: str) -> str:
+    kept = []
+    for line in text.splitlines():
+        if _PRIVATE.search(line):
+            stamp = line[:10] if line.startswith("[") else ""
+            kept.append(f"{stamp} (…)".strip())
+        else:
+            kept.append(line)
+    return "\n".join(kept)
+
+
 def logs(user: tenant.User, lines: int = LOG_LINES) -> str:
-    return tail(user.fetch_log, lines)
+    return redact(tail(user.fetch_log, lines))
 
 
 def server_log(lines: int = LOG_LINES) -> str:

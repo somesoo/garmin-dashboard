@@ -76,7 +76,7 @@ SOURCES = ("garmin", "apple")
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 # What belongs to one person in the old layout -- moved by ``migrate``.
 OWNED = ("raw", "tables", "coach", "state.json", "excluded_nights.json", "sport.json", "ui.json",
-         "fetch.json", "fetch.log", "zones.json")
+         "fetch.json", "fetch.log", "zones.json", "consent.json", "seen.json")
 
 _current: contextvars.ContextVar[str | None] = contextvars.ContextVar("tenant", default=None)
 
@@ -132,6 +132,16 @@ class User:
     def zone_settings(self) -> Path:
         # Heart-rate anchors typed in from a test (hrzones.py); like coach/, not rebuildable from raw/.
         return self.root / "zones.json"
+
+    @property
+    def consent_file(self) -> Path:
+        # The consent this person gave (core/privacy.py): which policy version, when, in which language.
+        return self.root / "consent.json"
+
+    @property
+    def seen_file(self) -> Path:
+        # The last day this person used the app -- the inactivity rule of core/privacy.py reads it.
+        return self.root / "seen.json"
 
     @property
     def fetch_lock(self) -> Path:
@@ -432,6 +442,13 @@ def archive(person: User) -> bytes:
             if person.legacy and relative.parts[0] not in OWNED:
                 continue  # the old layout's data/ also holds other people and the server's files
             out.write(path, str(relative))
+        # Who opened this person's data and when (core/audit.py) is theirs to see too (RODO art. 15).
+        from core import audit
+
+        lines = audit.events(person.id, limit=1_000_000)
+        if lines:
+            out.writestr("access_log.jsonl", "".join(json.dumps(item, ensure_ascii=False) + "\n"
+                                                     for item in reversed(lines)))
     return buffer.getvalue()
 
 

@@ -73,8 +73,17 @@ Bez App Store: iPhone przez PWA, dane z Apple Health wypychane na serwer.
 - [x] 6a. Prawa osoby na stronie Konto: archiwum wszystkich swoich danych (bez
       sekretów: hashy kluczy, tokenów Garmina, cache) i usunięcie wszystkiego po wpisaniu
       nazwy; `python -m core.tenant remove <id> --yes` usuwa też wpis z rejestru.
-- [ ] 6. SaaS: zgoda i polityka (dane zdrowotne = art. 9 RODO), eksport/usunięcie
-      konta, szyfrowanie, kopie per osoba, hosting (nie eve302).
+- [x] 6b. RODO w kodzie (`docs/PRYWATNOSC.md`): ekran zgody z wersją zasad przed
+      czymkolwiek (`views/consent.py`, `core/privacy.py`), polityka PL/EN na logowaniu,
+      zgodzie i Koncie, wycofanie = usunięcie; bez zgody API 403 i timer stoi; tokeny
+      Garmina zaszyfrowane kluczem spoza `data/` (`core/secretbox.py`); dziennik dostępu
+      92 dni (`core/audit.py`) na Koncie i w Adminie; retencja kont nieużywanych
+      (`python -m core.privacy retention`); szyfrowane, rotowane kopie (`tools/backup.py`);
+      log pobierania bez danych o osobie na stronie Admin.
+- [ ] 6. SaaS — to, czego kod nie zrobi (`docs/PRYWATNOSC.md` → „Lista dla Ciebie”):
+      `core.privacy setup`, umowa powierzenia z hostingiem, szyfrowanie dysku (nie na
+      mikr.us/LXC — hosting docelowy nie eve302), cron kopii i retencji, Google OAuth
+      w trybie produkcyjnym, przegląd polityki przez kogoś od RODO.
       **Ryzyko**: `garminconnect` to nieoficjalny login — dla obcych użytkowników
       trzeba oficjalnego Garmin Developer Program.
 

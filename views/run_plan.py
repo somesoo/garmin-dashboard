@@ -695,9 +695,9 @@ def _actions_body(active: dict, frame: pd.DataFrame, result: dict) -> None:
 def _garmin(active: dict) -> None:
     """Push the next week to the Garmin calendar. Local only: it needs the
     tokens etl/fetch.py uses, which a server without them does not have."""
-    from pathlib import Path
+    from etl import garmin_auth
 
-    if not (Path(config.tokenstore()).expanduser() / "garmin_tokens.json").exists():
+    if not garmin_auth.connected(config.tokenstore()):
         return
     today = dt.date.today()
     actions = gw.sync_actions(active, today, 7)

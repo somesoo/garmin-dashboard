@@ -12,3 +12,4 @@ co działa i dlaczego.
 | [bieganie.md](bieganie.md) | strefy tętna, moduł biegowy (prognoza, plan, segmenty, zegarek), moduł sportowy |
 | [DEPLOY.md](DEPLOY.md) | wdrożenie na VPS: systemd / pm2 / mikr.us, nginx / Caddy, rozmiar serwera |
 | [DOSTEP.md](DOSTEP.md) | dostęp dla znajomych: osoby, logowanie Google / Tailscale, Apple Watch, PWA |
+| [PRYWATNOSC.md](PRYWATNOSC.md) | RODO: zgoda, polityka, szyfrowanie, dziennik dostępu, retencja, kopie, naruszenia, lista dla administratora |

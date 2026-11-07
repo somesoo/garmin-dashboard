@@ -32,9 +32,10 @@ def log(msg: str) -> None:
 
 
 def connect() -> Garmin:
-    api = Garmin()
-    api.login(config.tokenstore())
-    return api
+    # Sealed tokens, opened in memory only (garmin_auth.py, core/secretbox.py).
+    from etl import garmin_auth
+
+    return garmin_auth.connect(config.tokenstore())
 
 
 def write_json(path: Path, payload: Any) -> None:

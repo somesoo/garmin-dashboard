@@ -205,14 +205,37 @@ sudo -u garmin tail -n 50 /opt/garmin-dashboard/data/users/<id>/fetch.log   # os
   (`GARMIN_AUTO_FETCH_H` w unicie), plus przycisk „Pobierz z Garmina” w górnej linii.
   Wygasły token = kod 2 w `fetch.json` osoby i komunikat w aplikacji; naprawa:
   Konto → Garmin Connect.
-- **Kopia zapasowa**: `coach/` (plany, zawody, segmenty), rejestr osób, klucze
-  telefonów i pushe z iPhone'a **nie dają się odtworzyć** z Garmina. Z Maca, np. raz w tygodniu:
+- **Kopia zapasowa — zawsze zaszyfrowana** (`tools/backup.py`, `docs/PRYWATNOSC.md`):
+  `coach/` (plany, zawody, segmenty), rejestr osób, klucze telefonów i pushe z iPhone'a
+  **nie dają się odtworzyć** z Garmina, a to dane zdrowotne kilku osób — gołe
+  `rsync data/` na laptopa zostawia je tam jawnie. Raz, na Macu:
 
   ```bash
-  rsync -a --delete root@<IP>:/opt/garmin-dashboard/data/ ~/garmin-backup/data/
+  .venv/bin/python tools/backup.py keygen ~/.config/garmin-dashboard/backup.key
+  # wypisze klucz publiczny gdpub1…; prywatny zostaje na Macu (i w menedżerze haseł)
   ```
 
-  (albo kopie zapasowe całego serwera w panelu dostawcy — u Hetznera +20% ceny).
+  Na serwerze (`crontab -e -u garmin`): co noc kopia, raz w tygodniu retencja kont.
+
+  ```cron
+  15 3 * * *  cd /opt/garmin-dashboard && .venv/bin/python tools/backup.py create --to gdpub1… --out /home/garmin/backups
+  30 3 * * 1  cd /opt/garmin-dashboard && .venv/bin/python -m core.privacy retention --apply
+  ```
+
+  Kopie starsze niż `backup_days` (30, `data/privacy.json`) znikają same — tyle obiecuje
+  polityka na usunięcie danych z kopii. Na Macu ściągasz same zaszyfrowane pliki:
+
+  ```bash
+  rsync -a --delete root@<IP>:/home/garmin/backups/ ~/garmin-backup/
+  .venv/bin/python tools/backup.py list ~/garmin-backup/garmin-….gdbk --identity ~/.config/garmin-dashboard/backup.key
+  ```
+
+  Kopia zawiera też klucz tokenów Garmina (`_keys/data.key`). Kopie całego serwera
+  w panelu dostawcy (u Hetznera +20% ceny) są nieszyfrowane po Twojej stronie — tylko
+  z umową powierzenia i szyfrowaniem dysku.
+- **Klucz tokenów Garmina**: `~/.config/garmin-dashboard/data.key` użytkownika serwisu
+  (`GARMIN_KEY_FILE` zmienia ścieżkę). Leży poza `data/`, więc `scp data/` go nie zabiera:
+  przenosząc dane między komputerami skopiuj go osobno albo połącz Garmina na nowo.
 - **Aktualizacje systemu**: `apt install unattended-upgrades` (Ubuntu ma je zwykle włączone).
 
 ## 8b. Wariant z pm2 (zamiast systemd)

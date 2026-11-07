@@ -9,7 +9,9 @@ Everything here acts on the signed-in person only (tenant.current()):
   make a key for the daily push from the iPhone (api.py, etl/apple_push.py);
 - phone -- a read key for the app (PWA), keys listed and revocable (shown once,
   only the hash kept);
-- your data -- an archive of everything, or deleting everything.
+- your data -- an archive of everything, or deleting everything;
+- privacy -- the consent given and its withdrawal, the policy, the person's own
+  lines of the access log (core/privacy.py, core/audit.py).
 
 A person with no data yet lands here first (app.py, ONBOARDING).
 """
@@ -23,6 +25,8 @@ import pandas as pd
 import streamlit as st
 
 import api
+from core import audit
+from core import privacy
 from ui import tables
 from ui import bento
 from core import i18n
@@ -46,6 +50,13 @@ def _base_url() -> str:
 
 SOURCE_LABELS = {"garmin": "Garmin Connect", "apple": "Apple Health"}
 PENDING = "garmin_pending_login"
+
+
+def _ip() -> str | None:
+    try:
+        return audit.client_ip(st.context.headers, st.context.ip_address)
+    except Exception:  # noqa: BLE001 - no browser context
+        return None
 
 
 def _email() -> str | None:
@@ -83,6 +94,7 @@ def render() -> None:
         _app(person)
         _tokens(person)
         _yours(person)
+        _privacy(person)
 
 
 def _welcome(person: tenant.User) -> None:
@@ -178,6 +190,7 @@ def _garmin(person: tenant.User) -> None:
                               en="Removes the access to Garmin Connect; the data already pulled stays."))
                 if st.button(tr(pl="Odłącz", en="Disconnect"), key="acc_garmin_off"):
                     garmin_auth.disconnect(store)
+                    audit.record("garmin_disconnect", person.id, ip=_ip())
                     st.rerun()
 
 
@@ -257,6 +270,7 @@ def _garmin_code(person: tenant.User, pending) -> None:
 def _connected(person: tenant.User, name: str | None) -> None:
     """Right after a successful Garmin sign-in: the first pull -- a year of history for a newcomer."""
     first = not shell.has_data()
+    audit.record("garmin_connect", person.id, ip=_ip())
     sync.start(["--backfill", (dt.date.today() - dt.timedelta(days=365)).isoformat()] if first else None)
     st.session_state["acc_connected_as"] = name or ""
     st.rerun()
@@ -401,6 +415,7 @@ def _yours(person: tenant.User) -> None:
                                 en="A copy of everything held about you here, or deleting it.")):
         if st.button(tr(pl="Przygotuj archiwum", en="Prepare an archive"), key="dev_archive"):
             st.session_state["dev_archive_data"] = tenant.archive(person)
+            audit.record("archive", person.id, ip=_ip())
         data = st.session_state.get("dev_archive_data")
         if data:
             st.download_button(tr(pl=f"Pobierz ({len(data) / 1e6:.1f} MB)", en=f"Download ({len(data) / 1e6:.1f} MB)"),
@@ -418,9 +433,71 @@ def _yours(person: tenant.User) -> None:
             if st.button(tr(pl="Usuń na zawsze", en="Delete for good"), key="dev_erase",
                          disabled=typed.strip() != person.name):
                 removed = tenant.erase(person)
+                audit.record("erase", person.id, ip=_ip())
                 st.session_state.pop("dev_archive_data", None)
                 st.cache_data.clear()
                 st.success(tr(pl=f"Usunięto: {', '.join(removed) or 'nic'}.", en=f"Deleted: {', '.join(removed) or 'nothing'}."))
+
+
+def _privacy(person: tenant.User) -> None:
+    """The consent and its withdrawal, the full policy, and who opened this person's data."""
+    tr = i18n.tr
+    given = privacy.consent(person)
+    if privacy.controller(person):
+        caption = tr(pl="Odpowiadasz za dane na tym serwerze — zgoda Cię nie dotyczy.",
+                     en="You answer for the data on this server — no consent applies to you.")
+    elif given:
+        when = str(given.get("accepted_at", ""))[:16].replace("T", " ")
+        caption = tr(pl=f"Zgoda z {when} (zasady {given.get('version')}).",
+                     en=f"Consent given {when} (policy {given.get('version')}).")
+    else:
+        caption = tr(pl="Brak zgody.", en="No consent.")
+    with bento.panel(tr(pl="Prywatność", en="Privacy"), key="acc_privacy", caption=caption):
+        with st.expander(tr(pl="Jak traktujemy Twoje dane", en="How we treat your data")):
+            st.markdown(privacy.policy())
+        seen = audit.events(person.id, limit=30)
+        with st.expander(tr(pl=f"Kto i kiedy otwierał Twoje dane ({len(seen)})",
+                            en=f"Who opened your data and when ({len(seen)})")):
+            st.caption(tr(pl=f"Logowania, odczyty aplikacji na telefonie, wysyłki z iPhone'a, archiwa — ostatnie "
+                             f"{audit.KEEP_DAYS} dni.",
+                          en=f"Sign-ins, phone app reads, iPhone pushes, archives — the last {audit.KEEP_DAYS} days."))
+            if seen:
+                tables.show(pd.DataFrame([{
+                    tr(pl="Kiedy", en="When"): item["at"].replace("T", " "),
+                    tr(pl="Co", en="What"): _event_label(item["event"]),
+                    tr(pl="Skąd", en="From"): item.get("ip") or item.get("key") or "—"} for item in seen]))
+        if privacy.controller(person) or person.legacy:
+            return
+        with st.expander(tr(pl="Wycofaj zgodę", en="Withdraw consent")):
+            st.caption(tr(pl="Bez zgody nie możemy trzymać Twoich danych: wycofanie usuwa wszystko (jak „Usuń wszystkie "
+                             "moje dane”) i odłącza Garmina. Przy następnym wejściu zobaczysz znowu prośbę o zgodę. "
+                             f"Wpisz „{person.name}”, żeby potwierdzić.",
+                          en="Without consent we cannot keep your data: withdrawing deletes everything (like “Delete "
+                             "all my data”) and disconnects Garmin. Next time you come in you will be asked again. "
+                             f"Type “{person.name}” to confirm."))
+            typed = st.text_input(tr(pl="Potwierdzenie", en="Confirmation"), key="acc_withdraw_name",
+                                  label_visibility="collapsed")
+            if st.button(tr(pl="Wycofaj zgodę i usuń dane", en="Withdraw consent and delete the data"),
+                         key="acc_withdraw", disabled=typed.strip() != person.name):
+                privacy.withdraw(person, _ip())
+                st.cache_data.clear()
+                st.rerun()
+
+
+def _event_label(code: str) -> str:
+    tr = i18n.tr
+    return {
+        "signin": tr(pl="logowanie", en="sign-in"),
+        "api_read": tr(pl="odczyt aplikacji na telefonie", en="phone app read"),
+        "api_ingest": tr(pl="wysyłka z iPhone'a", en="iPhone push"),
+        "archive": tr(pl="archiwum danych", en="data archive"),
+        "erase": tr(pl="usunięcie danych", en="data deleted"),
+        "consent": tr(pl="zgoda", en="consent"),
+        "withdraw": tr(pl="wycofanie zgody", en="consent withdrawn"),
+        "garmin_connect": tr(pl="połączenie z Garminem", en="Garmin connected"),
+        "garmin_disconnect": tr(pl="odłączenie Garmina", en="Garmin disconnected"),
+        "admin": tr(pl="działanie administratora", en="admin action"),
+    }.get(code, code)
 
 
 def _zones(person: tenant.User) -> None:
