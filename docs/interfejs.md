@@ -23,8 +23,9 @@ Plan i zawody, prognoza, segmenty, Obciążenie), *Ciało* (Regeneracja, Sen),
   `<klucz>_request`, bo widżetu nie da się nadpisać w tym samym przebiegu).
 - **Strony szczegółów nie mają wpisu** (`visibility="hidden"`): *Trasy*
   i *Trening* (`bieg`) — otwierane z list, globu i linków.
-- **Wchłonięte strony**: Aktywności → Dziennik pod globem na *Historii*
-  (`activities.log`) + dwa wykresy biegowe na przeglądzie biegania
+- **Wchłonięte strony**: Aktywności → „Wszystkie treningi” pod globem na
+  *Historii* (`activities.log`: cała historia bez względu na zakres, filtr
+  pigułkami po kategorii `catalog.category_of`, na telefonie przed „Szczegółami”) + dwa wykresy biegowe na przeglądzie biegania
   (`activities.run_charts`); Trendy → długość snu na *Śnie*, kroki, masa ciała
   i tabela tygodniowa na dole *Regeneracji*, VO2max obok prognoz Garmina na
   *Prognozie* (`trends.*`, `physio.predictions`). Atlas nie ma już kafli HRV

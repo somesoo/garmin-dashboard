@@ -4,8 +4,8 @@ The globe is the hero because this athlete trains across countries -- the one
 fact a table of averages cannot show. It is a custom component (see
 ``globe.py``): it spins in the browser, costs the server nothing while it
 turns, and every marker is a control -- clicking a place asks which training to
-open. Under it: places, hours per discipline and the full activity log. The
-state of the body lives on its own pages (Dziś, Regeneracja), not here.
+open. Under it: the full activity log with a category filter, then places
+and hours per discipline. The state of the body lives on its own pages (Dziś, Regeneracja), not here.
 """
 
 from __future__ import annotations
@@ -55,6 +55,9 @@ def render() -> None:
     story.head("atlas", headline, note)
 
     _hero(activities)
+    # Every session, filtered by category -- what the viewer comes to History
+    # for, so it stays in front on a phone too, not behind "Szczegóły".
+    log()
 
     def rest() -> None:
         left, right = bento.row(2, 2)
@@ -62,10 +65,8 @@ def render() -> None:
             _places(activities)
         with right:
             _sports()
-        log()
 
-    story.second(i18n.tr(pl="miejsca, sporty, dziennik aktywności", en="places, sports, the activity log"),
-                 rest, key="atlas_rest")
+    story.second(i18n.tr(pl="miejsca i sporty", en="places and sports"), rest, key="atlas_rest")
 
 
 def _hero(activities: pd.DataFrame) -> None:
@@ -274,6 +275,6 @@ def _pick_dialog(pick: dict, activities: pd.DataFrame) -> None:
         )
     if len(here) > 12:
         st.caption(tr(
-            pl=f"…i {len(here) - 12} starszych w tym miejscu — przybliż glob albo przewiń do *Dziennika*.",
-            en=f"…and {len(here) - 12} older ones here — zoom the globe in or scroll down to the *Log*.",
+            pl=f"…i {len(here) - 12} starszych w tym miejscu — przybliż glob albo przewiń do *Wszystkich treningów*.",
+            en=f"…and {len(here) - 12} older ones here — zoom the globe in or scroll down to *Every session*.",
         ))

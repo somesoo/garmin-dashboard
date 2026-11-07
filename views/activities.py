@@ -1,5 +1,6 @@
-"""Activity log (on the History page, under the globe) and the two run scatters
-(on the running overview). No page of its own any more."""
+"""Activity log (on the History page, under the globe: every session, filtered
+by category) and the two run scatters (on the running overview). No page of
+its own any more."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from ui import routing
 from ui import tables
 from ui import shell
 from ui import theme as tz
+from sport import catalog
 
 COLUMNS = ["start_local", "sport", "name", "location", "distance_km", "duration_min", "pace_min_km", "avg_hr",
            "max_hr", "training_load", "te_aerobic", "te_anaerobic", "best_1k_s", "best_5k_s", "calories",
@@ -19,32 +21,35 @@ COLUMNS = ["start_local", "sport", "name", "location", "distance_km", "duration_
 
 
 def log() -> None:
-    """The activity log of the selected range: every sport, newest on top, a
-    click opens the route (or the run analysis for a run without GPS)."""
+    """The activity log: every session ever recorded, newest on top, filtered by
+    category (``catalog.category_of``: running, cycling, swimming...). It ignores
+    the global range on purpose -- the History page is where the whole record
+    lives. A tap opens the route (or the run analysis for a run without GPS)."""
     tr = i18n.tr
-    activities = shell.clip(shell.table("activities"))
-    with bento.panel(tr(pl="Dziennik", en="Log"), key="activities_log",
-                     caption=tr(pl="Wszystkie treningi w wybranym zakresie, najnowsze na górze. "
-                                   "Dotknij wiersza, żeby otworzyć trasę.",
-                                en="Every session in the selected range, newest on top. "
-                                   "Tap a row to open the route.")) as header:
+    activities = shell.table("activities")
+    with bento.panel(tr(pl="Wszystkie treningi", en="Every session"), key="activities_log",
+                     caption=tr(pl="Cała historia, najnowsze na górze. Wybierz kategorie, żeby zawęzić; "
+                                   "dotknij wiersza, żeby otworzyć trasę.",
+                                en="The whole history, newest on top. Pick categories to narrow it; "
+                                   "tap a row to open the route.")):
         if activities.empty:
-            st.caption(tr(pl="Brak aktywności w tym zakresie.", en="No activities in this range."))
+            st.caption(tr(pl="Brak aktywności.", en="No activities."))
             return
-        sports = sorted(activities["sport"].dropna().unique())
-        with header:
-            picked = st.multiselect("Sport", sports, default=sports, key="activities_sport",
-                                    label_visibility="collapsed", width=320,
-                                    placeholder=tr(pl="wszystkie sporty", en="all sports"))
-        shown = activities[activities["sport"].isin(picked)] if picked else activities
+        activities = activities.assign(category=activities["sport"].map(catalog.category_of))
+        counts = activities["category"].value_counts()
+        picked = st.pills(tr(pl="Kategoria", en="Category"), counts.index.tolist(), selection_mode="multi",
+                          format_func=lambda key: f"{catalog.label(key)} · {counts.get(key, 0)}",
+                          key="activities_category", label_visibility="collapsed")
+        shown = activities[activities["category"].isin(picked)] if picked else activities
         hours = shown["duration_min"].sum() / 60
-        st.caption(tr(pl=f"**{len(shown)}** · {shown['distance_km'].sum():.0f} km · {hours:.0f} h · "
-                         f"load {shown['training_load'].sum():.0f}",
-                      en=f"**{len(shown)}** · {shown['distance_km'].sum():.0f} km · {hours:.0f} h · "
-                         f"load {shown['training_load'].sum():.0f}"))
+        noun = i18n.plural(len(shown), pl=("trening", "treningi", "treningów"), en=("session", "sessions"))
+        st.caption(tr(pl=f"**{len(shown)}** {noun} · {shown['distance_km'].sum():,.0f} km · {hours:,.0f} h"
+                         .replace(",", " "),
+                      en=f"**{len(shown)}** {noun} · {shown['distance_km'].sum():,.0f} km · {hours:,.0f} h"))
 
         frame = shown.sort_values("start_local", ascending=False)
         ids = pd.to_numeric(frame["activity_id"], errors="coerce").tolist()
+        frame["sport"] = frame["category"].map(lambda key: catalog.label(key) if key else None)
         frame = frame[[c for c in COLUMNS if c in frame.columns]].copy()
         frame["start_local"] = pd.to_datetime(frame["start_local"]).dt.strftime("%d.%m.%Y %H:%M")
         if "pace_min_km" in frame.columns:
@@ -55,10 +60,10 @@ def log() -> None:
                     lambda v: shell.clock(v) if pd.notna(v) else None
                 )
         frame = frame.rename(columns=shell.activity_labels())
-        picked = tables.pick(frame, key="activities_log_table", column_config=shell.activity_columns(),
-                             max_height=440)
-        if picked is not None:
-            _open(ids[picked])
+        row = tables.pick(frame, key="activities_log_table", column_config=shell.activity_columns(),
+                          max_height=520)
+        if row is not None:
+            _open(ids[row])
 
 
 def _open(activity_id: float) -> None:
