@@ -25,27 +25,38 @@ Registry::
   so only the person they were written about sees them.
 - ``admin``: sees the admin page (views/admin.py: people, server, pulls). Set
   with ``python -m core.tenant admin <id>``; the single-user layout's one person is admin.
+- ``coach``: the id of this person's coach (``python -m core.tenant coach <id> <coach>``).
+  The coach sees nothing until the person (or their parent) agrees on their own
+  screen (core/team.py); without that, the entry is only an offer.
 - ``root``: directory relative to ``data/``; ``"."`` is the old single-user layout,
   left in place until ``python -m core.tenant migrate <id>``.
 - ``tokenstore``: Garmin token directory; default ``data/users/<id>/garmin``
   (for ``root: "."``: ``GARMIN_TOKENSTORE`` or ``~/.garminconnect`` as before).
 
-Who is "current" (``current()``), first match wins:
+Who is "current" (``current()``: whose data), first match wins:
 
 1. ``with tenant.use(id):`` -- explicit (the pull timer, tests);
-2. inside a Streamlit run: the person ``auth.gate`` put in the session -- never
-   the environment, so a variable left on the server cannot open anyone's data;
+2. inside a Streamlit run: the athlete a coach is looking at (``VIEW_KEY``,
+   only while the registry says this viewer coaches them -- ui/coaching.py checks
+   the athlete's consent on every run), else the person ``auth.gate`` put in the
+   session -- never the environment, so a variable left on the server cannot open
+   anyone's data;
 3. outside Streamlit: ``GARMIN_USER`` (CLIs, the detached ``etl/run.py``);
 4. the only person in the registry.
 
 More than one person and none of the above is an error, not a default: a page
 that cannot tell whose data to read must not read anyone's.
 
+``viewer()`` is who is looking -- the signed-in person, also while a coach looks
+at an athlete. Their own language, level of detail, account and admin page
+follow the viewer; everything read from a warehouse follows ``current()``.
+
     python -m core.tenant                         list people
     python -m core.tenant init x --name X         start a registry from today's data/ (root ".")
     python -m core.tenant add y --name Y --source apple --identity y@example.com
     python -m core.tenant migrate x               move a root "." person into data/users/x/
     python -m core.tenant remove y --yes          delete a person and everything they own
+    python -m core.tenant coach y x               x coaches y (y still has to agree); --off ends it
 """
 
 from __future__ import annotations
@@ -72,11 +83,13 @@ SECRET = config.DATA / "server.secret"
 USERS = config.DATA / "users"
 LEGACY_ID = "me"
 SESSION_KEY = "tenant_user"
+# The athlete a coach is looking at in this browser session (core/team.py, ui/coaching.py).
+VIEW_KEY = "tenant_view"
 SOURCES = ("garmin", "apple")
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 # What belongs to one person in the old layout -- moved by ``migrate``.
 OWNED = ("raw", "tables", "coach", "state.json", "excluded_nights.json", "sport.json", "ui.json",
-         "fetch.json", "fetch.log", "zones.json", "consent.json", "seen.json")
+         "fetch.json", "fetch.log", "zones.json", "consent.json", "seen.json", "coach.json", "notes.json")
 
 _current: contextvars.ContextVar[str | None] = contextvars.ContextVar("tenant", default=None)
 
@@ -96,6 +109,7 @@ class User:
     insights: bool = False
     legacy: bool = False
     admin: bool = False
+    coach_id: str | None = None
     tokenstore_override: str | None = field(default=None, repr=False)
 
     @property
@@ -137,6 +151,16 @@ class User:
     def consent_file(self) -> Path:
         # The consent this person gave (core/privacy.py): which policy version, when, in which language.
         return self.root / "consent.json"
+
+    @property
+    def coach_grant(self) -> Path:
+        # Whether this person (or their parent) lets their coach in, and how far (core/team.py).
+        return self.root / "coach.json"
+
+    @property
+    def notes_file(self) -> Path:
+        # Notes between this person and their coach (core/team.py); typed in, not rebuildable from raw/.
+        return self.root / "notes.json"
 
     @property
     def seen_file(self) -> Path:
@@ -204,6 +228,9 @@ def _user(user_id: str, entry: dict) -> User:
         root = (config.DATA / root_value).resolve()
         if root != config.DATA.resolve() and config.DATA.resolve() not in root.parents:
             raise RuntimeError(f"{REGISTRY}: {user_id}: katalog poza data/")
+    coach = entry.get("coach")
+    if coach is not None and (not isinstance(coach, str) or not ID_PATTERN.match(coach) or coach == user_id):
+        raise RuntimeError(f"{REGISTRY}: {user_id}: niedozwolony trener {coach!r}")
     return User(
         id=user_id,
         name=str(entry.get("name") or user_id),
@@ -214,6 +241,7 @@ def _user(user_id: str, entry: dict) -> User:
         insights=bool(entry.get("insights", legacy)),
         legacy=legacy,
         admin=bool(entry.get("admin", False)),
+        coach_id=coach,
         tokenstore_override=entry.get("tokenstore"),
     )
 
@@ -272,7 +300,8 @@ def _streamlit_session() -> tuple[bool, str | None]:
     return True, st.session_state.get(SESSION_KEY)
 
 
-def current() -> User:
+def viewer() -> User:
+    """Who is looking: the signed-in person (also while they look at an athlete as their coach)."""
     explicit = _current.get()
     if explicit:
         return get(explicit)
@@ -288,6 +317,38 @@ def current() -> User:
         return next(iter(everyone.values()))
     raise NoUser("kilka osób w rejestrze, a żądanie nie mówi, czyje dane czytać "
                  "(GARMIN_USER=<id> dla CLI)")
+
+
+def coached(viewer_id: str, athlete_id: str | None, everyone: dict[str, User] | None = None) -> User | None:
+    """The athlete, when the registry names ``viewer_id`` as their coach; else None.
+
+    Only the registry half of the rule: the athlete's own consent is checked
+    on every run by ``core.team.allowed`` (ui/coaching.py drops the view without it).
+    """
+    if not athlete_id or athlete_id == viewer_id:
+        return None
+    everyone = everyone if everyone is not None else users()
+    athlete = everyone.get(athlete_id)
+    return athlete if athlete is not None and athlete.coach_id == viewer_id else None
+
+
+def _viewed() -> str | None:
+    """The athlete id this Streamlit session looks at, if any."""
+    import streamlit as st
+
+    return st.session_state.get(VIEW_KEY)
+
+
+def current() -> User:
+    """Whose data this request reads (see the module docstring)."""
+    explicit = _current.get()
+    if explicit:
+        return get(explicit)
+    _, chosen = _streamlit_session()
+    if chosen:
+        athlete = coached(chosen, _viewed())
+        return athlete if athlete is not None else get(chosen)
+    return viewer()
 
 
 @contextlib.contextmanager
@@ -484,6 +545,41 @@ def admin(args: argparse.Namespace) -> int:
     return 0
 
 
+def coach(args: argparse.Namespace) -> int:
+    """Name (or with ``--off`` drop) a person's coach. Only from the server's shell, never from the app.
+
+    Naming a coach opens nothing: the athlete (or their parent) still has to
+    agree on their consent screen or account page (core/team.py)."""
+    payload = _read_registry()
+    if payload is None or args.id not in payload["users"]:
+        print(f"{args.id} nie ma w rejestrze")
+        return 1
+    entry = dict(payload["users"][args.id])
+    if args.off:
+        entry.pop("coach", None)
+    else:
+        if not args.coach or args.coach not in payload["users"]:
+            print(f"{args.coach} nie ma w rejestrze")
+            return 1
+        entry["coach"] = args.coach
+    _user(args.id, entry)  # validate before writing
+    payload["users"][args.id] = entry
+    _write_registry(payload)
+    # A consent names one coach; a new coach (or none) needs a new one.
+    grant = get(args.id).coach_grant
+    try:
+        named = json.loads(grant.read_text(encoding="utf-8")).get("coach")
+    except (OSError, ValueError, AttributeError):
+        named = None
+    if named is not None and named != entry.get("coach"):
+        grant.unlink(missing_ok=True)
+    if args.off:
+        print(f"{args.id}: bez trenera")
+    else:
+        print(f"{args.id}: trener {args.coach} (czeka na zgodę osoby albo rodzica)")
+    return 0
+
+
 def remove(args: argparse.Namespace) -> int:
     payload = _read_registry()
     if payload is None or args.id not in payload["users"]:
@@ -507,6 +603,8 @@ def show(_: argparse.Namespace) -> int:
     for user in users().values():
         flags = [flag for flag, on in (("local", user.local), ("insights", user.insights), ("legacy", user.legacy),
                                        ("admin", user.admin)) if on]
+        if user.coach_id:
+            flags.append(f"coach={user.coach_id}")
         print(f"{user.id:12} {user.source:7} {user.root}  {', '.join(user.identities)}  {' '.join(flags)}")
     return 0
 
@@ -529,8 +627,13 @@ def main(argv: list[str] | None = None) -> int:
     boss = sub.add_parser("admin", help="dostęp do strony Admin (osoby, serwer, synchronizacje)")
     boss.add_argument("id")
     boss.add_argument("--off", action="store_true", help="odbierz dostęp")
+    trainer = sub.add_parser("coach", help="trener osoby (osoba albo rodzic musi się zgodzić)")
+    trainer.add_argument("id")
+    trainer.add_argument("coach", nargs="?")
+    trainer.add_argument("--off", action="store_true", help="osoba bez trenera")
     args = parser.parse_args(argv)
-    handler = {"init": init, "add": add, "migrate": migrate, "remove": remove, "admin": admin}.get(args.command, show)
+    handler = {"init": init, "add": add, "migrate": migrate, "remove": remove, "admin": admin,
+               "coach": coach}.get(args.command, show)
     return handler(args)
 
 

@@ -102,6 +102,40 @@ krótka ocena kosztuje mniej niż jej brak:
 |---|---|---|---|---|---|
 | — | — | — | — | — | — |
 
+## Trener i dzieci (`core/team.py`, zasady `2026-11-08`)
+
+Trener to zwykła osoba z własnymi danymi, wpisana przy zawodnikach w rejestrze
+(`"coach": "<id>"`, `python -m core.tenant coach <zawodnik> <trener>`). Sam wpis nic
+nie otwiera — trener widzi zawodnika dopiero, gdy jednocześnie:
+
+1. rejestr nazywa go trenerem tej osoby,
+2. osoba ma ważną zgodę na dashboard (`privacy.required` = nie),
+3. osoba **osobno** zgodziła się na tego trenera, w tej wersji zasad (`coach.json`:
+   trener, zakres, kto się zgodził, kiedy, wersja).
+
+Sprawdzane przy **każdym** kliknięciu trenera (`ui/coaching.gate`): wycofanie na Koncie
+działa od razu. Zgoda na trenera nigdy nie jest warunkiem zgody na dashboard (art. 7 ust. 4)
+— na ekranie zgody to osobne, niezaznaczone pole.
+
+| | jak |
+|---|---|
+| zakres | `all` (wszystko poza Kontem, SQL, insightami) albo `training` (biegi, plan, prognoza, segmenty, trasy, historia — **bez** stron, które gdziekolwiek czytają sen/HRV/stres: Dzień, Dziś, Regeneracja, Sen, Obciążenie, Sport, Fizjologia, Statystyka). Strona jest w zakresie albo poza nim w całości; na *Planie* powody z liczbami regeneracji (`why: response`) i poranna decyzja są ukryte |
+| co trener robi | ogląda, pisze notatki (wątek w `notes.json` osoby), zmienia plan (przebudowa, korekta, edycja sesji) |
+| czego nie | Konto osoby, pobieranie, Garmin, usuwanie, język i poziom osoby (`ui.json` zostaje trenera — `i18n.settings_path` czyta `tenant.viewer()`) |
+| rozliczalność | pierwsze wejście w sesji przeglądarki → `coach_view` w dzienniku osoby (z `by`); zgoda i jej cofnięcie → `coach_grant` / `coach_revoke`. Osoba widzi to na Koncie w kolumnie „Kto” |
+| dzieci | poniżej `privacy.CHILD_AGE` (16, art. 8 RODO; Polska nie obniżyła progu) zgodę — na dashboard i na trenera — daje rodzic albo opiekun prawny, wpisując imię i nazwisko (`by: "guardian"`, `guardian` w `consent.json` i `coach.json`) |
+| notatki | leżą w katalogu zawodnika: idą z jego archiwum i znikają z jego usunięciem |
+
+**Czego kod nie sprawdzi** (Twoja odpowiedzialność jako administratora):
+
+- czy osoba, która kliknęła „Rodzic lub opiekun prawny”, naprawdę nim jest i czy dziecko
+  ma mniej niż 16 lat — kod tylko zapisuje deklarację. Przy dzieciach z klubu: konto Google
+  zakłada i loguje **rodzic** (jego e-mail w `identities`), nie dziecko;
+- czy trener ma podstawę, żeby w ogóle prowadzić te dzieci (umowa z klubem/rodzicami) —
+  dashboard przetwarza dane dla nich, nie zamiast takiej umowy;
+- jeśli trener i administrator to różne osoby: trener jest **odbiorcą** danych; jeśli
+  prowadzisz grupę jako klub, administratorem może być klub — wtedy `privacy setup` z jego danymi.
+
 ## Zasady dla administratora
 
 - **Nie zaglądasz w cudze dane.** Żadnego `GARMIN_USER=<cudzy id>` w notatniku, `/trener`,

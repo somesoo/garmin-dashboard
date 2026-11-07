@@ -628,6 +628,7 @@ def generate_goals(
     strength_history: int = 0,
     done_as_planned: dict[str, dict[str, Any]] | None = None,
     adapt: dict[str, Any] | None = None,
+    fixed: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build one plan (store.validate_plan-compatible) through every goal ahead.
 
@@ -639,7 +640,9 @@ def generate_goals(
     ``strength_history`` is the number of strength sessions done recently
     (``strength_done``), which decides when heavy work starts;
     ``done_as_planned`` (``outcomes``) decides which past sessions move the
-    ladders up; ``adapt`` (``response``) sets the first block's next week.
+    ladders up; ``adapt`` (``response``) sets the first block's next week;
+    ``fixed`` holds future sessions set by hand (``edit_session``): their days
+    are taken, they stay as they are, and they do not count as done.
     """
     tr = i18n.tr
     if result.get("status") != "ok":
@@ -668,7 +671,7 @@ def generate_goals(
             # Two peaks this close leave the second block a recovery week, one build week and a taper.
             warnings.append({"key": "close_a_races", "first": first.get("name") or first["date"],
                              "second": second.get("name") or second["date"], "weeks": round(gap, 1)})
-    kept_dates = {s["date"] for s in keep or []}
+    kept_dates = {s["date"] for s in [*(keep or []), *(fixed or [])]}
     done = already_run(runs, start)
     progress = _progress(keep or [], strength_history, settings.strength, done_as_planned)
     progress["adapt"] = adapt
@@ -710,7 +713,7 @@ def generate_goals(
         block_start = max(block_start, race_monday + dt.timedelta(days=7))
 
     _cap_spikes(sessions, runs, start, paces, weeks)
-    sessions = sorted((keep or []) + sessions, key=lambda s: (s["date"], s["type"] == "strength"))
+    sessions = sorted((keep or []) + (fixed or []) + sessions, key=lambda s: (s["date"], s["type"] == "strength"))
     first, last = goals[0], goals[-1]
     item = result["distances"].get(first["distance"])
     names = [g.get("name") or f"{text.race_label(g['distance'])} — {g['date']}" for g in goals]
@@ -1625,7 +1628,10 @@ def replan(
         strength=bool(request_data.get("strength", True)),
     )
     keep = [s for s in plan.get("sessions", []) if s["date"] < today.isoformat()]
+    # Sessions a coach (or the runner) set by hand stay where they were put (edit_session).
+    fixed = [s for s in plan.get("sessions", []) if s["date"] >= today.isoformat() and s.get("locked")]
     fresh = generate_goals(settings, plan_goals(plan) if goals is None else goals, runs, result, keep=keep,
+                           fixed=fixed,
                            strength_history=strength_history,
                            done_as_planned=outcomes(plan, runs, today, laps=laps, activities=activities),
                            adapt=response(daily, today - dt.timedelta(days=1), _last_weeks(plan, runs, today),
@@ -1842,6 +1848,75 @@ def _log(plan: dict[str, Any], action: str, session_id: str) -> None:
     plan["history"] = list(plan.get("history", [])) + [
         {"at": dt.datetime.now().isoformat(timespec="seconds"), "action": action, "session": session_id}
     ]
+
+
+EDITABLE_TYPES = ("easy", "recovery", "long", "tempo", "threshold", "intervals", "rest")
+
+
+def edit_session(plan: dict[str, Any], session_id: str, kind: str, km: float | None = None, date: str | None = None,
+                 *, by_id: str, by_name: str | None = None, coach: bool = False,
+                 today: dt.date | None = None) -> dict[str, Any]:
+    """Change one session from today on by hand -- a coach's or the runner's call: type, distance, day.
+
+    The new session is built the way the generator builds one (the plan's own
+    paces and HR zones; a quality session takes its first rung at that week's
+    volume, so ``km`` applies to easy, recovery and long runs only). It keeps
+    its id, note and the Garmin registry entry, and is ``locked``: ``replan``
+    leaves it on its day (``fixed``). ``why`` says who set it (``set_by``).
+    The 30-day rule is not applied to it -- the coach decides; ``coach.spike_check``
+    still says so on the day.
+    """
+    tr = i18n.tr
+    today = today or dt.date.today()
+    if kind not in EDITABLE_TYPES:
+        raise ValueError(tr(pl=f"Typ spoza {EDITABLE_TYPES}", en=f"Type outside {EDITABLE_TYPES}"))
+    sessions = list(plan.get("sessions", []))
+    old = next((s for s in sessions if s["id"] == session_id), None)
+    if old is None:
+        raise ValueError(tr(pl="Nie ma takiej sesji.", en="No such session."))
+    day = dt.date.fromisoformat(date) if date else dt.date.fromisoformat(old["date"])
+    if dt.date.fromisoformat(old["date"]) < today or day < today:
+        raise ValueError(tr(pl="Przeszłych sesji się nie zmienia.", en="Past sessions are not changed."))
+    week = next((w for w in plan.get("weeks", [])
+                 if dt.date.fromisoformat(w["monday"]) <= day < dt.date.fromisoformat(w["monday"]) + dt.timedelta(days=7)),
+                None)
+    if week is None:
+        raise ValueError(tr(pl="Ten dzień jest poza planem.", en="That day is outside the plan."))
+    if kind in ("easy", "recovery", "long") and (km is None or not 0 < float(km) <= 60):
+        raise ValueError(tr(pl="Dystans 0–60 km.", en="Distance 0–60 km."))
+    paces = {name: tuple(band) for name, band in (plan.get("paces") or {}).items()}
+    zones = plan.get("zones") or {}
+    forecast_part = plan.get("forecast") or {}
+    distance = forecast_part.get("distance") or (plan.get("request") or {}).get("distance") or "10k"
+    race_pace = None
+    if forecast_part.get("realistic_s") and distance in units.RACES:
+        race_pace = forecast_part["realistic_s"] / 60 / units.RACES[distance]
+    if kind == "rest":
+        fresh = {"id": old["id"], "date": day.isoformat(), "week": week["week"], "phase": week["phase"], "type": "rest",
+                 "status": "planned", "actual_activity_id": None, "note": "", "text": {"key": "rest"},
+                 "distance_km": 0.0, "duration_min": 0, "pace_lo": None, "pace_hi": None, "hr": None, "steps": []}
+        fresh.update(text.session_text(fresh))
+    else:
+        fresh = _session(kind, day, week, float(km or 0), paces, zones, distance, race_pace)
+    fresh.update(id=old["id"], note=old.get("note", ""), locked=True,
+                 why=[{"key": "set_by", "coach": bool(coach), **({"name": by_name} if by_name else {})}],
+                 set_by=by_id)
+    sessions = [fresh if s["id"] == session_id else s for s in sessions]
+    plan = dict(plan)
+    plan["sessions"] = sorted(sessions, key=lambda s: (s["date"], s["type"] == "strength"))
+    plan["history"] = list(plan.get("history", [])) + [
+        {"at": dt.datetime.now().isoformat(timespec="seconds"), "action": "edit", "by": by_id, "session": old["id"]}]
+    return plan
+
+
+def unlock_session(plan: dict[str, Any], session_id: str) -> dict[str, Any]:
+    """Give a session set by hand back to the generator: the next rebuild may change it."""
+    for session in plan.get("sessions", []):
+        if session["id"] == session_id:
+            session.pop("locked", None)
+            session.pop("set_by", None)
+            session["why"] = [w for w in session.get("why") or [] if w.get("key") != "set_by"]
+    return plan
 
 
 def set_status(plan: dict[str, Any], session_id: str, status: str, note: str | None = None,

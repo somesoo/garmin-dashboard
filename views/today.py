@@ -12,6 +12,8 @@ import html
 import pandas as pd
 import streamlit as st
 
+from core import team
+from core import tenant
 from ui import bento
 from ui import guide
 from core import i18n
@@ -69,6 +71,16 @@ def render() -> None:
                         terms=["today_decision", "run_kind"]):
             _decision(active, suggestion, today)
 
+    def notes_tile() -> None:
+        # The thread with the coach (core/team.py): only with a coach the person let in.
+        athlete = tenant.current()
+        if not athlete.coach_id or team.valid(athlete) is None:
+            return
+        from ui import notes
+
+        with bento.panel(tr(pl="Notatki z trenerem", en="Notes with the coach"), key="today_notes"):
+            notes.thread(athlete, tenant.viewer(), key="today_notes", limit=4, auto_read=True)
+
     def load_tile() -> None:
         with bento.tile(tr(pl="Obciążenie", en="Load"), key="today_load", terms=["run_ratio", "quality_sessions"]) as t:
             _load(t, suggestion)
@@ -100,6 +112,7 @@ def render() -> None:
         # decision, the four numbers say what it was made of, and this tile has
         # the buttons that act on it. Everything below is why, not what.
         decision_tile()
+        notes_tile()
 
         def rest() -> None:
             load_tile()
@@ -114,6 +127,7 @@ def render() -> None:
     left, right = bento.row(2, 2)
     with left:
         decision_tile()
+        notes_tile()
         load_tile()
     with right:
         recovery_tile()

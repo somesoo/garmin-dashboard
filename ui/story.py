@@ -45,7 +45,7 @@ STAGE_PAGES = {
     "adapt": ["prognoza", "fizjologia", "segmenty"],
     "goal": ["plan", "dzis"],
 }
-EVERYDAY = ["dzien", "dzis", "atlas"]
+EVERYDAY = ["dzien", "zespol", "dzis", "atlas"]
 LAB = ["statystyka", "insights", "sql", "slownik"]
 
 
@@ -70,8 +70,13 @@ def _loop_values(build: str, day: str, lang: str, stamp: str) -> dict[str, str]:
 
 
 def loop_values() -> dict[str, str]:
+    from ui import coaching
     from views import run_common as rc
-    return _loop_values(shell.build_id(), dt.date.today().isoformat(), i18n.lang(), rc.store_stamp())
+    values = _loop_values(shell.build_id(), dt.date.today().isoformat(), i18n.lang(), rc.store_stamp())
+    if coaching.scope() == "training":
+        # A coach let in for training only: the recovery stage's number is sleep/HRV -- not theirs to see.
+        values = {key: value for key, value in values.items() if key != "response"}
+    return values
 
 
 def loop(current: str) -> None:
@@ -171,7 +176,9 @@ def _lab_popover() -> None:
 
 
 def _pull() -> None:
-    if tenant.current().source == "garmin":
+    from ui import coaching
+    # Never while a coach looks at an athlete: pulling is the athlete's (core/team.py).
+    if tenant.current().source == "garmin" and coaching.viewing() is None:
         st.fragment(run_every=3 if sync.running() else 60)(shell.pull_inline)(sync.running())
 
 
@@ -212,7 +219,7 @@ def _account_chip(current: str) -> None:
     """The signed-in person at the end of the top line: their name opens the account page."""
     from core import auth
 
-    person = tenant.current()
+    person = tenant.viewer()  # the signed-in person, also while looking at an athlete
     page = routing.page("konto")
     label = person.name if tenant.registered() else i18n.page("konto")
     if page is not None and current != "konto":

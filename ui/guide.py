@@ -59,6 +59,8 @@ def _questions() -> dict[str, str]:
         "insights": tr(pl="Jakie wnioski już wyciągnęliśmy?", en="What conclusions have we drawn so far?"),
         "sql": tr(pl="Własne pytanie do danych.", en="Your own question to the data."),
         "slownik": tr(pl="Co znaczy ten wskaźnik?", en="What does this indicator mean?"),
+        "zespol": tr(pl="Kto z moich zawodników potrzebuje dziś uwagi?",
+                     en="Which of my athletes needs a look today?"),
         "konto": tr(pl="Skąd biorą się moje dane i co ma do nich dostęp?",
                          en="Where does my data come from, and what can reach it?"),
         "admin": tr(pl="Kto korzysta z serwera, ile on zużywa i czy pobierania działają?",
@@ -70,6 +72,7 @@ def _questions() -> dict[str, str]:
 # (views/hubs.py) is opened through its switch.
 NEXT: dict[str, list[tuple[str, str | None, str | None]]] = {
     "dzien": [("dzis", None, None), ("sen", None, None), ("bieganie", None, None)],
+    "zespol": [("dzien", None, None), ("plan", None, None)],
     "sport": [("dzis", None, None), ("regeneracja", None, None), ("sport", hubs.SPORT, "disciplines")],
     "atlas": [("bieganie", None, None), ("sport", hubs.SPORT, "disciplines"), ("dzis", None, None)],
     "trasy": [("atlas", None, None), ("bieganie", None, None)],

@@ -262,6 +262,23 @@ wykresami. Prostokąt scenki jest mierzony w chwili odczytu, nie przy renderze �
 między jednym a drugim strona się przewija, a dymek postawiony według starego
 prostokąta ląduje poza wykresem.
 
+## Zespół: karteczki trenera (`views/team.py`, 2026-11-08)
+
+Strona tylko dla trenera (ktoś jest wpisany przy innych jako `coach`). Jedna
+karteczka na zawodnika, posortowane „kto potrzebuje uwagi” (`analysis/team.py`).
+Kolor papieru to stan (skala porządkowa, jednolite kolory, bez gradientów): koral —
+uwaga (2+ sygnały regeneracji albo 2+ opuszczone sesje w 7 dni), żółty — do
+obserwacji (jedno z tych albo bieg ponad regułę 30 dni), szary — bez danych od 2+
+dni (dzień bez zegarka to nie zła noc), miętowy — w normie; przerywana ramka — brak
+zgody (tylko imię). Na karteczce: dzisiejsza sesja (✎ = ustawiona przez trenera),
+regeneracja wobec **własnej** normy (Δ HRV i tętna spocz. od średniej 7 dni, sen wobec
+mediany 28 dni — nigdy wartości dwóch osób obok siebie), tydzień zrobione/plan,
+ostatni bieg, najbliższy start, powody stanu, ✉ nieprzeczytane notatki.
+„Otwórz” = cały dashboard zawodnika w zakresie jego zgody, z paskiem „Patrzysz na …”
+(`ui/coaching.bar`); „Notatka” = wątek widoczny też u zawodnika na *Dziś*.
+Na telefonie po jednej, prosto (obrót tylko na biurku). Karta liczy się z tabel
+zawodnika w `tenant.use(id)`, cache kluczowany jego `build_id` i plikami planu.
+
 ## System wykresów (`ui/theme.py`)
 
 Każda figura w dashboardzie powstaje przez buildery z `ui/theme.py`. Nie dodawaj

@@ -9,7 +9,8 @@ Events (``EVENTS``): a sign-in (once per browser session), a refused sign-in
 (with the identity that was presented), the phone app reading (at most once an
 hour per key), an iPhone push, an archive, an erase, a consent given or
 withdrawn, a Garmin account connected or forgotten, an admin action on someone
-else's data, a deletion for inactivity.
+else's data, a deletion for inactivity, a coach let in or sent away, and a
+coach's first look at an athlete in a browser session (``coach_view``, with ``by``).
 
 Months older than ``KEEP_DAYS`` are deleted on the next write: the log is for
 spotting misuse and answering "who saw my data", not a history of people.
@@ -34,7 +35,9 @@ from core import config
 DIR = config.DATA / "audit"
 KEEP_DAYS = 92
 EVENTS = ("signin", "refused", "api_read", "api_ingest", "archive", "erase", "consent", "withdraw",
-          "garmin_connect", "garmin_disconnect", "admin", "inactive_erase", "policy")
+          "garmin_connect", "garmin_disconnect", "admin", "inactive_erase", "policy",
+          # A coach (core/team.py): consent given or withdrawn, the first look in a browser session.
+          "coach_grant", "coach_revoke", "coach_view")
 # The phone app polls; one line an hour per key says the same as sixty.
 API_EVERY_S = 3600
 

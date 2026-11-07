@@ -25,28 +25,30 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from core import config
-
 LANGS = {"pl": "Polski", "en": "English"}
 DEFAULT = "pl"
 KEY = "lang"
 
 
 def settings_path():
-    """The current person's ``ui.json`` (tenant.py): language and the tour are one person's choice."""
-    return config._person().ui_settings
+    """The viewer's ``ui.json`` (tenant.py): language, level and the tour are one person's choice --
+    a coach looking at an athlete keeps their own, and never writes to the athlete's."""
+    from core import tenant
+
+    return tenant.viewer().ui_settings
 
 
 # Modules whose user-facing text is fully bilingual; the test keeps them so.
 # glossary.py is bilingual through glossary_en.py (its own parity test).
 BILINGUAL = ["app.py", "core/auth.py", "core/level.py", "core/privacy.py",
              *(f"ui/{name}.py" for name in (
-                 "shell", "bento", "routing", "theme", "globe", "guide", "story", "drawer", "herochart")),
-             "analysis/hero.py", "analysis/facts.py",
+                 "shell", "bento", "routing", "theme", "globe", "guide", "story", "drawer", "herochart", "coaching",
+                 "notes")),
+             "analysis/hero.py", "analysis/facts.py", "analysis/team.py",
              *(f"views/{name}.py" for name in (
                  "activities", "atlas", "day", "form", "hubs", "notebook", "physio", "recovery", "reference", "routes",
                  "account", "admin", "consent", "run_common", "run_forecast", "run_load", "run_overview", "run_plan", "run_races", "run_segments",
-                 "run_session", "sleep", "sport", "sport_disciplines", "stats", "today", "trends")),
+                 "run_session", "sleep", "sport", "sport_disciplines", "stats", "team", "today", "trends")),
              *(f"sport/{name}.py" for name in ("catalog", "readiness", "recommend", "store", "text", "variety")),
              *(f"running/{name}.py" for name in (
                  "coach", "forecast", "garmin_workout", "physio", "pipeline", "plan", "segments", "sessions", "store",
@@ -205,6 +207,7 @@ _GROUPS = {
 _PAGES = {
     "dzien": ("Dzień", "The day"),
     "dzis": ("Dziś", "Today"),
+    "zespol": ("Zespół", "Team"),
     "sport": ("Sport", "Sport"),
     "atlas": ("Historia", "History"),
     "trasy": ("Trasy", "Routes"),

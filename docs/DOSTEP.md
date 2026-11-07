@@ -14,6 +14,10 @@ każdą stroną. Ta instrukcja ustawia to od zera.
 ```
 
 - `--identity` to e-mail konta Google, którym osoba będzie się logować (można kilka).
+- **Trener**: `.venv/bin/python -m core.tenant coach <zawodnik> <trener>` (`--off` kończy). Trener
+  dostaje stronę *Zespół* (karteczka na osobę), ale widzi zawodnika dopiero po jego zgodzie —
+  u dziecka zgody rodzica — na ekranie zgody albo na Koncie → Trener (`docs/PRYWATNOSC.md`).
+  Dziecku zakłada się konto na e-mail rodzica.
 - `--local` = przeglądarka na tym komputerze bez logowania (tylko jedna osoba).
 - Osoba z Garminem: `GARMIN_USER=<id> .venv/bin/python etl/login.py` (tokeny trafiają
   do `data/users/<id>/garmin/`).

@@ -11,6 +11,8 @@ from ui import tables
 from ui import bento
 from core import i18n
 from core import level
+from core import tenant
+from ui import coaching
 from ui import routing
 from ui import shell
 from ui import theme as tz
@@ -291,12 +293,16 @@ def _explain(active: dict, result: dict) -> None:
             en="**Zones estimated from HRmax** (threshold ≈ 93.5% of HRmax across 1411 runners, ±5 bpm) — no continuous near-maximal effort of 18–60 min for a year, so the "
                "threshold heart rate cannot be found. A test: 30 min even and hard on your own; the zones will "
                "update themselves — or type a test result in on the Account page.")
+    # A coach let in for training only sees the decision, not the recovery numbers behind it (core/team.py).
+    private = coaching.scope() == "training"
     state = active.get("response") or {}
     decision = {"grow": tr(pl="rośnie zgodnie z planem", en="grows as planned"),
                 "hold": tr(pl="stoi (bez przyrostu)", en="holds (no step up)"),
                 "lighter": tr(pl="jest lżejszy", en="is lighter")}.get(state.get("decision"))
     signals = "; ".join(text.signal_line(x) for x in state.get("signals") or []) or \
         tr(pl="brak sygnałów przeciw", en="no signals against")
+    if private:
+        signals = tr(pl="sygnały ukryte — zgoda obejmuje tylko trening", en="signals hidden — consent covers training only")
     response_line = tr(
         pl=f"**Najbliższy tydzień {decision}** ({signals}). Przy każdej przebudowie plan patrzy na HRV z 7 dni wobec "
            "Twojej normy z 60 dni (najmniejsza istotna zmiana: 0,5 SD), tętno spoczynkowe (≥ +3 bpm) i to, ile z 2 "
@@ -458,7 +464,15 @@ def _explain(active: dict, result: dict) -> None:
 
 def _next(active: dict, frame: pd.DataFrame, result: dict) -> None:
     tr = i18n.tr
-    suggestion = coach.next_session(active, frame, shell.daily(), result)
+    private = coaching.scope() == "training"
+    days = shell.daily()
+    if private:
+        # A coach let in for training only: the morning decision rests on recovery data, so it is not made here
+        # at all -- the tile shows the planned session alone (a decision without the data would claim "normal").
+        days = days.iloc[0:0]
+    suggestion = coach.next_session(active, frame, days, result)
+    if private:
+        suggestion = {**suggestion, "reasons": [], "flags": [], "today": False}
     session = suggestion.get("session")
     date = dt.date.fromisoformat(session["date"]) if session else None
     caption = None
@@ -593,8 +607,10 @@ def _week(active: dict, matched: pd.DataFrame) -> None:
                 st.caption(tr(pl=f"Tempo {band} · tętno {hr} · ok. {minutes} min",
                               en=f"Pace {band} · HR {hr} · about {minutes} min"))
             st.caption(tr(pl="Po co: ", en="Why: ") + session.get("purpose", "—"))
-            for line in text.why(session):
+            for line in text.why(session, private=coaching.scope() == "training"):
                 st.caption(tr(pl="Dlaczego tu: ", en="Why here: ") + line)
+            if row.date >= today and session.get("type") != "race" and not row.activity_id:
+                _edit(active, session, row.date, today)
             if row.activity_id:
                 kind, auto = rc.kind_label(row.actual_kind), labels.get(row.auto, row.auto)
                 done_km, pace = f"{row.actual_km:.1f} km", units.fmt_pace(row.actual_pace)
@@ -650,6 +666,48 @@ def _week(active: dict, matched: pd.DataFrame) -> None:
         store.save_plan(active)
         st.success(tr(pl="Zapisano.", en="Saved."))
         st.rerun()
+
+
+def _edit(active: dict, session: dict, day: dt.date, today: dt.date) -> None:
+    """One session changed by hand -- by the runner or their coach (running.plan.edit_session).
+
+    The session is then locked: "Przebuduj od jutra" leaves it where it is,
+    until "Oddaj automatowi" gives it back."""
+    tr = i18n.tr
+    viewer, athlete = tenant.viewer(), tenant.current()
+    by_coach = viewer.id != athlete.id
+    sid = session["id"]
+    kinds = list(planning.EDITABLE_TYPES)
+    with st.container(horizontal=True, key=f"plan_edit_{sid}", gap="small"):
+        with st.popover(tr(pl="Zmień sesję", en="Change the session"), type="tertiary", icon=":material/edit:"):
+            kind = st.selectbox(tr(pl="Typ", en="Type"), kinds, format_func=text.kind_label, key=f"pe_kind_{sid}",
+                                index=kinds.index(session["type"]) if session.get("type") in kinds else 0)
+            km = st.number_input("km", min_value=0.5, max_value=60.0, step=0.5, key=f"pe_km_{sid}",
+                                 value=float(min(60.0, max(0.5, session.get("distance_km") or 6.0))),
+                                 disabled=kind not in ("easy", "recovery", "long"),
+                                 help=tr(pl="Akcent bierze dystans z tygodnia planu (pierwszy szczebel drabinki).",
+                                         en="A quality session takes its distance from the plan week (the ladder's "
+                                            "first rung)."))
+            when = st.date_input(tr(pl="Dzień", en="Day"), value=day, min_value=today, key=f"pe_day_{sid}",
+                                 format="DD.MM.YYYY")
+            st.caption(tr(pl="Zmieniona sesja zostaje na swoim dniu przy przebudowie planu.",
+                          en="A changed session stays on its day when the plan is rebuilt."))
+            if st.button(tr(pl="Zapisz", en="Save"), type="primary", key=f"pe_save_{sid}"):
+                try:
+                    fresh = planning.edit_session(active, sid, kind, km, when.isoformat(), by_id=viewer.id,
+                                                  by_name=viewer.name if by_coach else None, coach=by_coach,
+                                                  today=today)
+                    store.save_plan(fresh)
+                except ValueError as error:
+                    st.error(str(error))
+                else:
+                    st.rerun()
+        if session.get("locked") and st.button(
+                tr(pl="Oddaj automatowi", en="Hand back to the plan"), key=f"pe_unlock_{sid}", type="tertiary",
+                help=tr(pl="Następna przebudowa znowu ułoży ten dzień sama.",
+                        en="The next rebuild lays this day out by itself again.")):
+            store.save_plan(planning.unlock_session(active, sid))
+            st.rerun()
 
 
 # --------------------------------------------------------------------------

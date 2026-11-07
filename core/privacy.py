@@ -6,6 +6,13 @@ own before any source is connected (views/consent.py) and recorded per person
 in ``consent.json`` with the policy version. Withdrawing it deletes everything
 the person owns (there is no other basis to keep it).
 
+**A child** does not consent alone: below ``CHILD_AGE`` a parent or legal
+guardian agrees in their name on the same screen (``by: "guardian"`` and the
+guardian's name in ``consent.json``; RODO art. 8 and the Polish age of 16).
+
+**A coach** (core/team.py) sees an athlete only with a second, separate consent
+(``coach.json``) -- never a condition of the first.
+
 **The controller** (``controller(person)``) gives no consent to themselves: the
 server's admin (``admin: true``), the person of the old single-user layout
 (``root: "."``), or the only person in the registry. Everyone else is asked,
@@ -45,9 +52,12 @@ from core import tenant
 
 # A change to what is collected, why, or who receives it = a new version, and
 # every person who is not the controller is asked again.
-POLICY_VERSION = "2026-11-07"
+POLICY_VERSION = "2026-11-08"  # + the coach (core/team.py) and children's consent by a parent
 SETTINGS = config.DATA / "privacy.json"
 DEFAULTS = {"inactive_days": 365, "backup_days": 30}
+AGREED_BY = ("self", "guardian")
+# Below this age a parent or legal guardian consents in the child's name (RODO art. 8; Poland kept 16).
+CHILD_AGE = 16
 UODO = "Prezes Urzędu Ochrony Danych Osobowych, ul. Stawki 2, 00-193 Warszawa, uodo.gov.pl"  # i18n: key
 
 
@@ -115,11 +125,20 @@ def _write(path: Path, payload: dict) -> None:
     tmp.replace(path)
 
 
-def accept(person: tenant.User, lang: str, ip: str | None = None) -> dict:
+def accept(person: tenant.User, lang: str, ip: str | None = None, agreed_by: str = "self",
+           guardian: str | None = None) -> dict:
+    """Record consent: given by the person, or (``agreed_by="guardian"``) by a named parent or guardian."""
+    if agreed_by not in AGREED_BY:
+        raise ValueError(f"kto: {', '.join(AGREED_BY)}")
+    guardian = " ".join(str(guardian or "").split())[:80] or None
+    if agreed_by == "guardian" and not guardian:
+        raise ValueError("zgoda rodzica: brak imienia i nazwiska")
     record = {"version": POLICY_VERSION, "accepted_at": dt.datetime.now().isoformat(timespec="seconds"),
-              "lang": lang}
+              "lang": lang, "by": agreed_by}
+    if agreed_by == "guardian":
+        record["guardian"] = guardian
     _write(person.consent_file, record)
-    audit.record("consent", person.id, version=POLICY_VERSION, ip=ip)
+    audit.record("consent", person.id, version=POLICY_VERSION, by=agreed_by, ip=ip)
     return record
 
 
@@ -184,7 +203,17 @@ def inactive(today: dt.date | None = None) -> list[tuple[tenant.User, dt.date | 
 # ------------------------------------------------------------------ the policy
 
 
-def consent_sentence() -> str:
+def consent_sentence(agreed_by: str = "self") -> str:
+    if agreed_by == "guardian":
+        return i18n.tr(
+            pl="Jako rodzic lub opiekun prawny wyrażam wyraźną zgodę na przetwarzanie danych dotyczących zdrowia "
+               "mojego dziecka (sen, tętno, HRV, stres, aktywność, treningi z trasami GPS) w tym dashboardzie, w celu "
+               "pokazywania ich dziecku i ich analiz, na zasadach opisanych powyżej. Wiem, że mogę ją w każdej "
+               "chwili wycofać na stronie Konto.",
+            en="As a parent or legal guardian I give my explicit consent to the processing of my child's health "
+               "data (sleep, heart rate, HRV, stress, activity, workouts with GPS tracks) in this dashboard, to show "
+               "them and their analysis to my child, as described above. I know I can withdraw it at any time on "
+               "the Account page.")
     return i18n.tr(
         pl="Wyrażam wyraźną zgodę na przetwarzanie moich danych dotyczących zdrowia (sen, tętno, HRV, stres, "
            "aktywność, treningi z trasami GPS) w tym dashboardzie, w celu pokazywania mi ich i ich analiz, "
@@ -192,6 +221,27 @@ def consent_sentence() -> str:
         en="I give my explicit consent to the processing of my health data (sleep, heart rate, HRV, stress, "
            "activity, workouts with GPS tracks) in this dashboard, to show them and their analysis to me, as "
            "described above. I know I can withdraw it at any time on the Account page.")
+
+
+def coach_sentence(coach_name: str, scope: str, agreed_by: str = "self") -> str:
+    """The separate consent to one's coach (core/team.py), in the words of whoever gives it."""
+    tr = i18n.tr
+    if agreed_by == "guardian":
+        what = tr(pl="wszystkie dane mojego dziecka z dashboardu", en="all my child's dashboard data") \
+            if scope == "all" else tr(
+                pl="treningi, plan, starty i trasy mojego dziecka — bez snu, HRV, stresu i regeneracji",
+                en="my child's training, plan, races and routes — no sleep, HRV, stress or recovery")
+        return tr(pl=f"Jako rodzic lub opiekun prawny zgadzam się, żeby trener {coach_name} widział {what}, pisał "
+                     "notatki i zmieniał plan treningowy. Zgodę mogę wycofać w każdej chwili na stronie Konto.",
+                  en=f"As a parent or legal guardian I agree that coach {coach_name} may see {what}, write notes and "
+                     "change the training plan. I can withdraw this at any time on the Account page.")
+    what = tr(pl="wszystkie moje dane z dashboardu", en="all my dashboard data") if scope == "all" else tr(
+        pl="moje treningi, plan, starty i trasy — bez snu, HRV, stresu i regeneracji",
+        en="my training, plan, races and routes — no sleep, HRV, stress or recovery")
+    return tr(pl=f"Zgadzam się, żeby trener {coach_name} widział {what}, pisał mi notatki i zmieniał mój plan "
+                 "treningowy. Zgodę mogę wycofać w każdej chwili na stronie Konto.",
+              en=f"I agree that coach {coach_name} may see {what}, write me notes and change my training plan. I can "
+                 "withdraw this at any time on the Account page.")
 
 
 def policy() -> str:
@@ -224,9 +274,21 @@ propozycje treningów nie są poradą lekarską.
 **Podstawa prawna.** Twoja wyraźna zgoda (art. 9 ust. 2 lit. a i art. 6 ust. 1 lit. a RODO). Dziennik
 dostępu: prawnie uzasadniony interes — bezpieczeństwo Twoich danych (art. 6 ust. 1 lit. f).
 
-**Kto je widzi i gdzie leżą.** Tylko Ty — każda osoba ma osobny katalog i widzi wyłącznie swoje dane.
+**Kto je widzi i gdzie leżą.** Ty — każda osoba ma osobny katalog i widzi wyłącznie swoje dane — oraz
+Twój trener, ale tylko wtedy, gdy masz przypisanego trenera i osobno się na to zgodzisz (niżej).
 Administrator ma techniczny dostęp do serwera, ale strona administracyjna nie pokazuje danych
 zdrowotnych i nie zagląda do nich. Serwer: {host}, lokalizacja: {where}.
+
+**Trener.** Jeśli administrator przypisze Ci trenera, zobaczy on Twoje dane dopiero po Twojej osobnej
+zgodzie — ta zgoda nie jest warunkiem korzystania z dashboardu. Wybierasz zakres: wszystko albo tylko
+trening (biegi, plan, starty, trasy — bez snu, HRV, stresu i regeneracji). Trener ogląda Twoje strony,
+pisze notatki i zmienia plan treningowy; nie widzi Twojego konta, nie pobiera danych, nie łączy Garmina i
+niczego nie usuwa. Każde jego wejście trafia do dziennika dostępu, który widzisz na stronie Konto. Zgodę
+wycofujesz tam jednym przyciskiem — trener traci dostęp od razu.
+
+**Dzieci.** Osoba, która nie skończyła {CHILD_AGE} lat, nie wyraża zgody sama: robi to w jej imieniu
+rodzic lub opiekun prawny, na tym samym ekranie, podając swoje imię i nazwisko (art. 8 RODO). Rodzic ma
+te same prawa co osoba dorosła: kopia danych, usunięcie, wycofanie zgody.
 Odbiorcy: ten dostawca (przechowuje pliki), Google (tylko logowanie — dostaje informację, że się
 logujesz), Garmin (pobieramy z niego dane Twoimi tokenami; plan treningowy wysyłamy do kalendarza
 Garmin tylko po Twoim kliknięciu). Dane zdrowotne nie wychodzą poza Europejski Obszar Gospodarczy.
@@ -264,9 +326,21 @@ analytics services or AI models, or make decisions about you based on it (GDPR a
 **Lawful basis.** Your explicit consent (GDPR art. 9(2)(a) and 6(1)(a)). The access log: legitimate
 interest — the security of your data (art. 6(1)(f)).
 
-**Who sees it and where it lives.** Only you — every person has a separate directory and sees only their
-own data. The controller has technical access to the server, but the admin page shows no health data and
-does not look into it. Server: {host}, location: {where}.
+**Who sees it and where it lives.** You — every person has a separate directory and sees only their own
+data — and your coach, but only if you have one assigned and agree to it separately (below). The
+controller has technical access to the server, but the admin page shows no health data and does not look
+into it. Server: {host}, location: {where}.
+
+**Coach.** If the controller assigns you a coach, they see your data only after your separate consent —
+which is never a condition of using the dashboard. You choose how far: everything, or training only (runs,
+plan, races, routes — no sleep, HRV, stress or recovery). The coach views your pages, writes notes and
+changes your training plan; they do not see your account, pull data, connect Garmin or delete anything.
+Every visit goes to the access log you see on the Account page. You withdraw there with one button — the
+coach loses access at once.
+
+**Children.** A person under {CHILD_AGE} does not consent alone: a parent or legal guardian does so in their
+name, on the same screen, giving their own full name (GDPR art. 8). The parent has the same rights as an
+adult: a copy of the data, deletion, withdrawing consent.
 Recipients: that provider (stores the files), Google (sign-in only — it learns that you sign in), Garmin
 (we pull your data from it with your tokens; the training plan goes to your Garmin calendar only when you
 click). Health data does not leave the European Economic Area.

@@ -12,17 +12,17 @@ a nim nie jest, albo odwrotnie). Jak co działa i dlaczego tak wyszło: `docs/`
 
 ```
 app.py  api.py  serve.py   punkty wejścia: Streamlit (router), HTTP obok dashboardu, launcher
-core/       platforma bez widoków: config, tenant (osoby), auth (kto patrzy), i18n,
+core/       platforma bez widoków: config, tenant (osoby), auth (kto patrzy), team (trener), i18n,
             db (DuckDB), sync (pobieranie w tle), lifecycle (idle-exit), monitor (Admin)
 etl/        API → data/raw → parquet: fetch, load, run, apple, apple_push, schema,
             analytics (tabele pochodne), login, garmin_auth, exclude, push_plan
-analysis/   liczby i zdania dla stron (czyste pandas): facts, hero (strona Dzień),
+analysis/   liczby i zdania dla stron (czyste pandas): facts, hero (strona Dzień), team (karteczki),
             summary (JSON dla telefonu), insights (parser notatek)
 running/    logika biegowa (bez Streamlita): sesje, prognoza, plan, biblioteka,
             segmenty, strefy tętna (hrzones), brief dla asystenta
 sport/      pozostałe dyscypliny (bez Streamlita): katalog, gotowość, ranking
 ui/         wspólne klocki stron: shell (stan, dane, style), bento (siatka), story
-            (nagłówek, pętla, górna linia), theme (wykresy), guide, routing, globe,
+            (nagłówek, pętla, górna linia), theme (wykresy), guide, routing, globe, coaching, notes,
             herochart, webapp, glossary(+_en); components/ — statyczne komponenty JS
 views/      po jednym module na stronę (run_* = grupa „Bieganie”, hubs = dwa widoki pod jednym wpisem)
 pwa/        aplikacja na telefon; tools/ — skrypty pomocnicze; deploy/ — serwer
@@ -98,6 +98,20 @@ to nie regresja.
   zgadywalna nazwa = wyciek i kasowanie cudzych plików przy sprzątaniu.
 - Insighty to proza o liczbach jednej osoby — tylko dla `"insights": true`.
 - Osoba Apple nie ma przycisku „Pobierz”; timer pobierania chodzi tylko po `source: garmin`.
+- **Trener (`core/team.py`, `ui/coaching.py`)**: `tenant.current()` = czyje dane,
+  `tenant.viewer()` = kto patrzy. Trener patrzący na zawodnika: `current()` to zawodnik
+  (klucz `tenant.VIEW_KEY` w sesji), `viewer()` to trener. **Tożsamość, język, poziom,
+  Konto, Admin, zgoda → `viewer()`**; wszystko z hurtowni i plików planu → `current()`.
+  Nowy przycisk, który robi coś za osobę (pobranie, Garmin, usuwanie), chowaj przy
+  `coaching.viewing()`. Dostęp = rejestr (`coach`) + zgoda na dashboard + osobna zgoda na
+  trenera (`coach.json`, wersja zasad), sprawdzane co przebieg (`coaching.gate`).
+- **Zakres `training` wyłącza strony w całości** (`team.TRAINING_PAGES`): strona, która
+  gdziekolwiek czyta sen/HRV/stres/readiness, nie wchodzi. Nowa strona = decyzja, czy
+  należy do `TRAINING_PAGES`; tekst z liczbami regeneracji na stronie dozwolonej →
+  `coaching.scope() == "training"` go chowa (wzór: `text.why(private=...)`, `run_plan._next`).
+- Pole osoby to `User.coach_id` — `User.coach` to od dawna katalog `coach/` (plany, starty).
+- Sesja zmieniona ręcznie (`plan.edit_session`) ma `locked`; `replan` przenosi ją jako
+  `fixed` (dzień zajęty, nie liczy się jako wykonana).
 - **Prywatność (RODO, `docs/PRYWATNOSC.md`)**: osoba inna niż administrator
   (`privacy.controller`) nie dostaje **nic** bez zgody na aktualne `POLICY_VERSION`
   — ekran `views/consent.py` po `auth.gate`, API 403, timer ją pomija. Nowe miejsce,

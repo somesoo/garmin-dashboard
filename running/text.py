@@ -139,6 +139,7 @@ def history_action(code: Any) -> str:
         "postpone": tr(pl="przesunięcie", en="moved"), "fatigue": tr(pl="zmęczenie", en="fatigue"),
         "sick": tr(pl="choroba", en="illness"), "busy": tr(pl="mniej czasu", en="less time"),
         "assistant": tr(pl="asystent", en="assistant"), "goals": tr(pl="zmiana celów", en="goals changed"),
+        "edit": tr(pl="zmiana sesji", en="session changed"),
     }.get(str(code), str(code))
 
 
@@ -293,6 +294,8 @@ def _title(spec: dict[str, Any], km: float) -> str:
         return tr(pl="Start", en="Race")
     if key == "sick":
         return tr(pl="Odpoczynek (choroba)", en="Rest (illness)")
+    if key == "rest":
+        return tr(pl="Wolne", en="Rest day")
     if key == "rest_strength":
         return tr(pl="Bez siłowni (regeneracja)", en="No strength (recovery)")
     if key == "adjusted":
@@ -447,6 +450,11 @@ def session_text(session: dict[str, Any]) -> dict[str, str]:
         out.update(main=tr(pl="bez biegania", en="no running"),
                    purpose=tr(pl="Przy infekcji bieganie wydłuża chorobę i nie buduje formy.",
                               en="With an infection running prolongs the illness and builds no form."))
+    elif key == "rest":
+        out.update(main="—", purpose=tr(pl="Dzień bez treningu: forma rośnie w przerwach między bodźcami, nie w "
+                                           "trakcie nich.",
+                                        en="A day without training: fitness grows in the gaps between stimuli, not "
+                                           "during them."))
     elif key == "rest_strength":
         out.update(main="—", purpose=tr(pl="Przy zmęczeniu siłownia dokłada obciążenie bez zysku; wraca, gdy wróci "
                                            "świeżość.",
@@ -751,9 +759,15 @@ def warning(item: Any) -> str:
     return str(item)
 
 
-def why(session: dict[str, Any]) -> list[str]:
-    """``session["why"]``: why the plan put this session here instead of the usual pattern."""
-    return [why_line(item) for item in session.get("why") or []]
+# ``why`` codes whose sentence quotes recovery numbers (HRV, resting HR) -- hidden from a coach let in
+# for training only (core/team.py).
+RECOVERY_WHY = ("response",)
+
+
+def why(session: dict[str, Any], private: bool = False) -> list[str]:
+    """``session["why"]``: why the plan put this session here instead of the usual pattern.
+    ``private``: without the reasons that quote recovery numbers (``RECOVERY_WHY``)."""
+    return [why_line(item) for item in session.get("why") or [] if not (private and item.get("key") in RECOVERY_WHY)]
 
 
 def why_line(item: dict[str, Any]) -> str:
@@ -766,6 +780,13 @@ def why_line(item: dict[str, Any]) -> str:
                      "niesie jeden akcent plus długi bieg, więc reszta tygodnia jest spokojna.",
                   en=f"This week's quality session is done: {when}{name}. With your running days and volume a week "
                      "carries one quality session plus the long run, so the rest of the week is easy.")
+    if key == "set_by":
+        who = item.get("name") or ""
+        if item.get("coach"):
+            return tr(pl=f"Ustawione przez trenera{f' ({who})' if who else ''} — przebudowa planu tej sesji nie zmienia.",
+                      en=f"Set by the coach{f' ({who})' if who else ''} — a plan rebuild leaves this session alone.")
+        return tr(pl="Ustawione ręcznie — przebudowa planu tej sesji nie zmienia.",
+                  en="Set by hand — a plan rebuild leaves this session alone.")
     if key == "week_long_done":
         return tr(pl=f"Długi bieg tego tygodnia już był: {when}{name}.",
                   en=f"This week's long run is done: {when}{name}.")
