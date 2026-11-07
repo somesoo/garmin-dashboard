@@ -95,7 +95,7 @@ def _who() -> None:
 
 
 def _section(title: str | None, pages: list[str], current: str, seen: set[str]) -> None:
-    links = [url for url in pages if url not in seen and routing.page(url) is not None]
+    links = [url for url in pages if url not in seen and routing.listed(url) is not None]
     if not links:
         return
     if title:
@@ -114,7 +114,7 @@ def _loop(current: str, seen: set[str]) -> None:
         values = {}
     _heading(i18n.tr(pl="Pętla treningu", en="The training loop"))
     for index, (key, pages) in enumerate(story.STAGE_PAGES.items(), start=1):
-        links = [url for url in pages if url not in seen and routing.page(url) is not None]
+        links = [url for url in pages if url not in seen and routing.listed(url) is not None]
         if not links:
             continue
         _, title = names[key]

@@ -7,6 +7,7 @@ import streamlit as st
 
 from ui import bento
 from core import i18n
+from core import level
 from ui import routing
 from ui import shell
 from ui import story
@@ -46,13 +47,17 @@ def render() -> None:
     bento.stat(columns[3], tr(pl="Od ostatniego biegu", en="Since the last run"), days(info["days_since_last"]),
                key="since_last")
 
+    # The breaks and the 7/28-day ratio are for the expert (core/level.py).
+    expert = level.shows("expert")
+
     def rest() -> None:
         if shell.phone():
             _spikes(frame)
             _intensity(weeks)
             _recovery()
-            _breaks(frame, edge)
-            _ratio(frame)
+            if expert:
+                _breaks(frame, edge)
+                _ratio(frame)
             return
         left, right = bento.row(2, 2)
         with left:
@@ -60,10 +65,12 @@ def render() -> None:
             _intensity(weeks)
         with right:
             _recovery()
-            _breaks(frame, edge)
-        (wide,) = bento.row(4)
-        with wide:
-            _ratio(frame)
+            if expert:
+                _breaks(frame, edge)
+        if expert:
+            (wide,) = bento.row(4)
+            with wide:
+                _ratio(frame)
 
     # The page's point is the weekly volume; the ramp, the breaks and the ratio
     # explain it. On a phone the explanation waits to be asked for.
@@ -80,15 +87,12 @@ def render() -> None:
         _spikes(frame)
         _intensity(weeks)
 
-    left, right = bento.row(2, 2)
-    with left:
-        _recovery()
-    with right:
-        _breaks(frame, edge)
+    bento.pair(_recovery, (lambda: _breaks(frame, edge)) if expert else None)
 
-    (wide,) = bento.row(4)
-    with wide:
-        _ratio(frame)
+    if expert:
+        (wide,) = bento.row(4)
+        with wide:
+            _ratio(frame)
 
 
 def _volume(weeks: pd.DataFrame) -> None:

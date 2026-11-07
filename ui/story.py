@@ -87,7 +87,7 @@ def loop(current: str) -> None:
                         f"<span class='lp-v'>{values.get(key, '—')}</span></div>", unsafe_allow_html=True)
             with st.container(horizontal=True, key=f"lp_pages_{index}", gap="small", vertical_alignment="center"):
                 for url in pages:
-                    page = routing.page(url)
+                    page = routing.listed(url)
                     if page is None:
                         continue
                     if url == current:
@@ -149,7 +149,7 @@ def second(label: str, render: Callable[[], None], *, key: str) -> None:
 
 def _everyday(current: str) -> None:
     for url in EVERYDAY:
-        page = routing.page(url)
+        page = routing.listed(url)
         if page is None:
             continue
         if url == current:
@@ -162,7 +162,7 @@ def _lab_popover() -> None:
     with st.popover(i18n.group("lab"), type="tertiary"):
         # "admin" is registered for the server's admin only (app.py); for anyone else it is skipped.
         for url in ["fizjologia", *LAB, "admin"]:
-            page = routing.page(url)
+            page = routing.listed(url)
             if page is not None:
                 st.page_link(page, label=i18n.page(url))
         st.caption(shell.status_lines())

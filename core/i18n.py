@@ -39,7 +39,7 @@ def settings_path():
 
 # Modules whose user-facing text is fully bilingual; the test keeps them so.
 # glossary.py is bilingual through glossary_en.py (its own parity test).
-BILINGUAL = ["app.py", "core/auth.py",
+BILINGUAL = ["app.py", "core/auth.py", "core/level.py",
              *(f"ui/{name}.py" for name in (
                  "shell", "bento", "routing", "theme", "globe", "guide", "story", "drawer", "herochart")),
              "analysis/hero.py", "analysis/facts.py",

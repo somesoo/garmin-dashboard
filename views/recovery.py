@@ -9,6 +9,7 @@ import streamlit as st
 from ui import bento
 from ui import glossary
 from core import i18n
+from core import level
 from ui import shell
 from analysis import facts
 from ui import herochart as hc
@@ -154,39 +155,42 @@ def _details(frame: pd.DataFrame) -> None:
     # HRV is the hero above; the details start with what it does not show.
     bento.pair(rhr_tile if shell.has("rhr") else None, readiness_tile if garmin else None)
 
-    quadrants = shell.clip(shell.table("quadrants"))
-    if shell.has("bb_low", "bb_high", "stress_avg", "sleep_stress"):
-        left, right = bento.row(2, 2)
-    else:  # no Body Battery or stress (an Apple Watch): the quadrants take the row
-        left = right = st.container()
-    with left, bento.tile(
-        tr(pl="Kwadranty regeneracji", en="Recovery quadrants"), rows=2, key="quadrants",
-        terms=["quadrants", "deviation"],
-        caption=tr(pl="Lewy-górny róg (HRV nisko, RHR wysoko) to jedyny układ, który oznacza przeciążenie.",
-                   en="The top-left corner (HRV low, RHR high) is the only pattern that means overload."),
-        how=tr(pl="Szare punkty to historia, niebieska ścieżka — ostatni tydzień, dzień po dniu. Prawy-dolny róg "
-                  "(HRV wyżej, RHR niżej) to dzień zregenerowany.",
-               en="Grey points are history, the blue path — the last week, day by day. The bottom-right corner "
-                  "(HRV higher, RHR lower) is a recovered day."),
-    ) as t:
-        if quadrants.empty:
-            shell.missing("quadrants", tr(pl="Potrzeba ~40 dni z HRV i RHR.", en="Needs ~40 days with HRV and RHR."))
-        else:
-            names = quadrant_labels()
-            shares = (
-                quadrants["quadrant"].map(names).value_counts(normalize=True).mul(100).round(1)
-                .rename_axis(tr(pl="kwadrant", en="quadrant")).reset_index(name=tr(pl="udział %", en="share %"))
-            )
-            t.chart(tz.trail(quadrants, "hrv_z", "rhr_z",
-                             corners={"tl": names["obciazony"], "tr": names["pobudzony"], "bl": names["stlumiony"],
-                                      "br": names["zregenerowany"]},
-                             x_title=tr(pl="HRV względem bazy (σ)", en="HRV vs baseline (σ)"),
-                             y_title=tr(pl="RHR względem bazy (σ)", en="RHR vs baseline (σ)")),
-                    table=shares)
-    with right:
-        _battery_and_stress(view, latest)
+    def quadrants_tile() -> None:
+        quadrants = shell.clip(shell.table("quadrants"))
+        with bento.tile(
+            tr(pl="Kwadranty regeneracji", en="Recovery quadrants"), rows=2, key="quadrants",
+            terms=["quadrants", "deviation"],
+            caption=tr(pl="Lewy-górny róg (HRV nisko, RHR wysoko) to jedyny układ, który oznacza przeciążenie.",
+                       en="The top-left corner (HRV low, RHR high) is the only pattern that means overload."),
+            how=tr(pl="Szare punkty to historia, niebieska ścieżka — ostatni tydzień, dzień po dniu. Prawy-dolny róg "
+                      "(HRV wyżej, RHR niżej) to dzień zregenerowany.",
+                   en="Grey points are history, the blue path — the last week, day by day. The bottom-right corner "
+                      "(HRV higher, RHR lower) is a recovered day."),
+        ) as t:
+            if quadrants.empty:
+                shell.missing("quadrants", tr(pl="Potrzeba ~40 dni z HRV i RHR.", en="Needs ~40 days with HRV and RHR."))
+            else:
+                names = quadrant_labels()
+                shares = (
+                    quadrants["quadrant"].map(names).value_counts(normalize=True).mul(100).round(1)
+                    .rename_axis(tr(pl="kwadrant", en="quadrant")).reset_index(name=tr(pl="udział %", en="share %"))
+                )
+                t.chart(tz.trail(quadrants, "hrv_z", "rhr_z",
+                                 corners={"tl": names["obciazony"], "tr": names["pobudzony"], "bl": names["stlumiony"],
+                                          "br": names["zregenerowany"]},
+                                 x_title=tr(pl="HRV względem bazy (σ)", en="HRV vs baseline (σ)"),
+                                 y_title=tr(pl="RHR względem bazy (σ)", en="RHR vs baseline (σ)")),
+                        table=shares)
+
+    # No Body Battery or stress (an Apple Watch): the quadrants take the row; below the expert
+    # level (core/level.py) the quadrants step aside and the stress takes it.
+    bento.pair(quadrants_tile if level.shows("expert") else None,
+               (lambda: _battery_and_stress(view, latest))
+               if shell.has("bb_low", "bb_high", "stress_avg", "sleep_stress") else None)
 
     # Slow-moving numbers: they change over months, so they close the page.
+    if not level.shows("standard"):
+        return
     bento.pair((lambda: trends.steps(view)) if shell.has("steps") else None,
                (lambda: trends.weight(view)) if shell.has("weight_kg") else None)
     trends.weekly(view)

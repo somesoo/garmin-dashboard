@@ -16,6 +16,7 @@ import streamlit as st
 from ui import globe
 from ui import bento
 from core import i18n
+from core import level
 from ui import routing
 from ui import shell
 from ui import story
@@ -59,14 +60,10 @@ def render() -> None:
     # for, so it stays in front on a phone too, not behind "Szczegóły".
     log()
 
-    def rest() -> None:
-        left, right = bento.row(2, 2)
-        with left:
-            _places(activities)
-        with right:
-            _sports()
-
-    story.second(i18n.tr(pl="miejsca i sporty", en="places and sports"), rest, key="atlas_rest")
+    # Places and sports are above the basic level (core/level.py); below it there is no second plan.
+    if level.shows("standard"):
+        story.second(i18n.tr(pl="miejsca i sporty", en="places and sports"),
+                     lambda: bento.pair(lambda: _places(activities), _sports), key="atlas_rest")
 
 
 def _hero(activities: pd.DataFrame) -> None:

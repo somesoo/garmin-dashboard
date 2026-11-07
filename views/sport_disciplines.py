@@ -8,6 +8,7 @@ import streamlit as st
 from ui import tables
 from ui import bento
 from core import i18n
+from core import level
 from ui import shell
 from ui import theme as tz
 from sport import catalog, text, variety
@@ -41,27 +42,24 @@ def render() -> None:
                          colors=dict(zip(columns, tz.series_colors(len(columns))))) if columns else None
         t.chart(fig, table=mix.rename(columns=labels) if columns else None)
 
-    left, right = bento.row(2, 2)
-    with left, bento.tile(tr(pl="Godziny według dyscypliny", en="Hours by discipline"), rows=2, key="disc_hours",
-                          caption=tr(pl="W wybranym zakresie czasu.", en="In the selected time range.")) as t:
-        hours = (part.groupby("discipline")["minutes"].sum() / 60).round(1).reset_index()
-        hours["discipline"] = hours["discipline"].map(catalog.label)
-        hours = hours.sort_values("minutes", ascending=False).head(12)
-        t.chart(tz.hbars(hours, "discipline", "minutes", unit="h", decimals=1, height=bento.chart_height(2)),
-                table=hours.rename(columns={"minutes": "h"}))
-    with right, bento.tile(tr(pl="Różnorodność, rok", en="Variety, a year"), rows=2, key="disc_diversity",
-                           terms=["sport_variety"], how=tr(
-                               pl="Każdy punkt to 28 dni kończące się w danym tygodniu; linia to średnia z 4 punktów.",
-                               en="Each point is the 28 days ending that week; the line is the mean of 4 points.")) as t:
-        series = variety.diversity(sessions, now, 52)
-        series["smooth"] = series["diversity"].rolling(4, min_periods=2).mean()
-        fig = tz.trend(series, "day", {tr(pl="dyscypliny efektywnie", en="effective disciplines"):
-                                       ("diversity", "smooth")}, decimals=1,
-                       smooth_label=tr(pl="średnia 4 tyg.", en="4-week mean"))
-        t.chart(fig, table=series)
+    # The variety trend and the catalog are for the expert, your disciplines from the standard level
+    # (core/level.py); the weekly hours are for everyone.
+    if level.shows("expert"):
+        with bento.tile(tr(pl="Różnorodność, rok", en="Variety, a year"), rows=2, key="disc_diversity",
+                        terms=["sport_variety"], how=tr(
+                            pl="Każdy punkt to 28 dni kończące się w danym tygodniu; linia to średnia z 4 punktów.",
+                            en="Each point is the 28 days ending that week; the line is the mean of 4 points.")) as t:
+            series = variety.diversity(sessions, now, 52)
+            series["smooth"] = series["diversity"].rolling(4, min_periods=2).mean()
+            fig = tz.trend(series, "day", {tr(pl="dyscypliny efektywnie", en="effective disciplines"):
+                                           ("diversity", "smooth")}, decimals=1,
+                           smooth_label=tr(pl="średnia 4 tyg.", en="4-week mean"))
+            t.chart(fig, table=series)
 
-    _yours(sessions, now)
-    _discover(sessions, now)
+    if level.shows("standard"):
+        _yours(sessions, now)
+    if level.shows("expert"):
+        _discover(sessions, now)
 
 
 def _kpis(part: pd.DataFrame, sessions: pd.DataFrame, now: pd.Timestamp) -> None:

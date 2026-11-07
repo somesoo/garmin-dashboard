@@ -10,6 +10,7 @@ import streamlit as st
 from ui import tables
 from ui import bento
 from core import i18n
+from core import level
 from ui import routing
 from ui import shell
 from ui import theme as tz
@@ -62,13 +63,20 @@ def render() -> None:
 
     matched = planning.match(active, frame, laps=shell.table("run_laps"), activities=shell.table("activities"))
     _header(active, result, matched)
-    _explain(active, result)
+    if level.shows("expert"):
+        _explain(active, result)
     left, right = bento.row(2, 2)
-    with left:
-        _weekly_chart(active, frame)
-    with right:
-        _next(active, frame, result)
-        _actions(active, frame, result)
+    if level.shows("standard"):
+        with left:
+            _weekly_chart(active, frame)
+        with right:
+            _next(active, frame, result)
+            _actions(active, frame, result)
+    else:
+        with left:
+            _next(active, frame, result)
+        with right:
+            _actions(active, frame, result)
     with bento.panel(tr(pl="Kalendarz", en="Calendar"), key="plan_calendar",
                      caption=tr(pl="✓ wykonany · ≈ zmodyfikowany · ✗ pominięty · · zaplanowany · ↓ tydzień odciążenia",
                                 en="✓ done · ≈ modified · ✗ skipped · · planned · ↓ recovery week")):
@@ -78,6 +86,8 @@ def render() -> None:
                                 en="Session details and their status. A status set by hand wins over the automatic "
                                    "one.")):
         _week(active, matched)
+    if not level.shows("expert"):
+        return
     with bento.panel(
         tr(pl="Współpraca z asystentem", en="Working with the assistant"), key="plan_assistant",
         caption=tr(pl="Brief: prognoza z wejściami, biegi z etykietami, obciążenie, regeneracja, plan i luki w danych.",
