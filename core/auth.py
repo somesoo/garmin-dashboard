@@ -37,11 +37,14 @@ import sys
 
 import streamlit as st
 
+from core import audit
 from core import config
 from core import i18n
+from core import privacy
 from core import tenant
 
 HEADER_ENV = "GARMIN_AUTH_HEADER"
+REFUSED_KEY = "auth_refused_logged"
 # Sign-in secrets live with the data, not the code: per server, never in git.
 SECRETS = config.DATA / "secrets.toml"
 GOOGLE_METADATA = "https://accounts.google.com/.well-known/openid-configuration"
@@ -64,6 +67,13 @@ def _header(name: str) -> str | None:
         return None
     value = headers.get(name)
     return value.strip() if value else None
+
+
+def _ip() -> str | None:
+    try:
+        return audit.client_ip(st.context.headers, st.context.ip_address)
+    except Exception:  # noqa: BLE001 - outside a browser session
+        return None
 
 
 def _is_local() -> bool:
@@ -116,14 +126,23 @@ def gate() -> tenant.User:
     person, presented = identify()
     if person is None:
         st.session_state.pop(tenant.SESSION_KEY, None)
+        if presented and st.session_state.get(REFUSED_KEY) != presented:
+            # Once per session and identity: a refused sign-in is what the access log is for.
+            st.session_state[REFUSED_KEY] = presented
+            audit.record("refused", identity=presented, ip=_ip())
         _refused(presented)
         st.stop()
-    if st.session_state.get(tenant.SESSION_KEY) not in (None, person.id):
+    previous = st.session_state.get(tenant.SESSION_KEY)
+    if previous not in (None, person.id):
         # A different person in the same session (a new sign-in): nothing kept
         # in the session from the previous one may leak into this run.
         for key in list(st.session_state.keys()):
             del st.session_state[key]
     st.session_state[tenant.SESSION_KEY] = person.id
+    if previous != person.id:
+        # A new browser session: one line in the access log, and the day for the inactivity rule.
+        audit.record("signin", person.id, ip=_ip())
+        privacy.seen(person)
     if person.name == person.id and can_sign_out():
         # First sign-in of someone added by id only: greet them by their Google name.
         google_name = str(st.user.get("name") or "").strip()
@@ -169,6 +188,9 @@ def _refused(presented: str | None) -> None:
                 pl="Widzisz wyłącznie swoje dane. Google podaje nam tylko Twój adres e-mail i imię — nic więcej.",
                 en="You see only your own data. Google gives us only your e-mail address and name — nothing else.")
                 + "</p>", unsafe_allow_html=True)
+            # The information notice is readable before anyone signs in (RODO art. 13).
+            with st.expander(tr(pl="Jak traktujemy Twoje dane", en="How we treat your data")):
+                st.markdown(privacy.policy())
             return
     st.warning(tr(
         pl="Nie wiadomo, czyje dane pokazać. Ten serwer ma kilka osób, a połączenie nie niesie tożsamości "

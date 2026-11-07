@@ -98,7 +98,19 @@ to nie regresja.
   zgadywalna nazwa = wyciek i kasowanie cudzych plików przy sprzątaniu.
 - Insighty to proza o liczbach jednej osoby — tylko dla `"insights": true`.
 - Osoba Apple nie ma przycisku „Pobierz”; timer pobierania chodzi tylko po `source: garmin`.
-- Strona Admin: **żadnych danych zdrowotnych**; przeliczenia/pobrania **jedno
+- **Prywatność (RODO, `docs/PRYWATNOSC.md`)**: osoba inna niż administrator
+  (`privacy.controller`) nie dostaje **nic** bez zgody na aktualne `POLICY_VERSION`
+  — ekran `views/consent.py` po `auth.gate`, API 403, timer ją pomija. Nowe miejsce,
+  które przetwarza dane osoby poza stroną (endpoint, proces w tle), sprawdza
+  `privacy.required`. Zmiana tego, co zbieramy, po co albo komu przekazujemy →
+  nowe `POLICY_VERSION` + tekst w `privacy.policy()`.
+- Nowy dostęp do danych osoby spoza jej sesji (API, akcja admina, eksport) →
+  `audit.record(...)`. W dzienniku **nigdy wartości zdrowotnych** — kto, kiedy, co, skąd.
+- Tokeny Garmina tylko przez `garmin_auth.store/load/connect` (zaszyfrowane, klucz
+  poza `data/`) — nigdy `api.login(<ścieżka>)` ani `client.dump`, które piszą jawny JSON.
+- Kopia `data/` poza serwerem tylko przez `tools/backup.py` (szyfrowana, rotowana).
+  Nigdy nie uruchamiaj notatnika, `/trener` ani innego narzędzia na danych cudzej osoby.
+- Strona Admin: **żadnych danych zdrowotnych** (log pobierania przez `monitor.redact`); przeliczenia/pobrania **jedno
   naraz** (serwer ma 1 GB RAM). Dla nie-admina strona nie jest rejestrowana.
 - Dane w kształcie Apple Watcha bez zegarka: `tools/synthetic_watch.py` → osoba
   `demo`. **Nigdy** do katalogu prawdziwej osoby.

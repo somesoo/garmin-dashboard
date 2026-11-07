@@ -20,7 +20,8 @@ Endpoints (``Authorization: Bearer <token>``):
 Tokens: random, shown once, stored only as SHA-256 in ``data/users/<id>/tokens.json``,
 each with a scope. A token opens exactly one person's data. Like Streamlit, the
 API listens on 127.0.0.1 only; ``tailscale serve --set-path /api`` puts it on
-HTTPS next to the dashboard (docs/DOSTEP.md).
+HTTPS next to the dashboard (docs/DOSTEP.md). A key of someone who owes consent
+(core/privacy.py) gets 403; every use of a key lands in the access log (core/audit.py).
 """
 
 from __future__ import annotations
@@ -37,6 +38,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from core import audit
+from core import privacy
 from core import tenant
 
 SCOPES = ("ingest", "read")
@@ -177,13 +180,33 @@ def build_app():
     def refused() -> JSONResponse:
         return JSONResponse({"error": "unauthorized"}, status_code=401, headers={"WWW-Authenticate": "Bearer"})
 
+    def opened(request: Request, scope: str) -> tenant.User | JSONResponse:
+        """The token's person, or the answer that stops the request.
+
+        A valid key of someone who has not (or no longer) consented opens nothing:
+        no push is stored and nothing is read (core/privacy.py). Every access goes
+        to the access log (reads at most hourly per key) and counts as a visit."""
+        token = _bearer(request)
+        person = verify(token, scope)
+        if person is None:
+            return refused()
+        if privacy.required(person):
+            return JSONResponse({"error": "consent required"}, status_code=403)
+        ip = request.client.host if request.client else None
+        if scope == "read":
+            audit.api_read(person.id, (token or "")[:10], ip)
+        else:
+            audit.record("api_ingest", person.id, key=(token or "")[:10], ip=ip)
+        privacy.seen(person)
+        return person
+
     async def health(_: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
 
     async def ingest(request: Request) -> JSONResponse:
-        person = verify(_bearer(request), "ingest")
-        if person is None:
-            return refused()
+        person = await run_in_threadpool(opened, request, "ingest")
+        if not isinstance(person, tenant.User):
+            return person
         if person.source != "apple":
             return JSONResponse({"error": f"{person.id} has source {person.source}"}, status_code=409)
         length = int(request.headers.get("content-length") or 0)
@@ -206,9 +229,9 @@ def build_app():
         return JSONResponse({"stored": path.name, "new": new, "rebuild": rebuild, **counts}, status_code=202)
 
     def manifest(request: Request) -> JSONResponse:  # sync: Starlette runs it in a thread (disk work)
-        person = verify(_bearer(request), "read")
-        if person is None:
-            return refused()
+        person = opened(request, "read")
+        if not isinstance(person, tenant.User):
+            return person
         try:
             state = json.loads(person.state_file.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -220,9 +243,9 @@ def build_app():
                              "db": {"etag": exported[1], "bytes": exported[0].stat().st_size} if exported else None})
 
     def database(request: Request) -> Response:
-        person = verify(_bearer(request), "read")
-        if person is None:
-            return refused()
+        person = opened(request, "read")
+        if not isinstance(person, tenant.User):
+            return person
         exported = sqlite_export(person)
         if exported is None:
             return JSONResponse({"error": "no data yet"}, status_code=404)
@@ -237,9 +260,9 @@ def build_app():
         """What the phone app shows (summary.py), per language; ETag/304."""
         from analysis import summary
 
-        person = verify(_bearer(request), "read")
-        if person is None:
-            return refused()
+        person = opened(request, "read")
+        if not isinstance(person, tenant.User):
+            return person
         body, etag = summary.cached(person, request.query_params.get("lang", "pl"))
         quoted = f'"{etag}"'
         if request.headers.get("if-none-match") == quoted:

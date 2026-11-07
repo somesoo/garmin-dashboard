@@ -4,10 +4,11 @@ import os
 import unittest
 from unittest import mock
 
+from core import privacy
 from core import sync
 from core import tenant
 from etl import run
-from tests.helpers import people, person
+from tests.helpers import consent, people, person
 
 
 class SyncTest(unittest.TestCase):
@@ -53,6 +54,7 @@ class PerPerson(unittest.TestCase):
 
     def setUp(self):
         self.enterContext(people({"x": {"source": "garmin"}, "y": {"source": "apple"}, "z": {"source": "garmin"}}))
+        consent("x", "y", "z")
 
     def test_lock_and_record_are_per_person(self):
         with tenant.use("x"):
@@ -87,6 +89,17 @@ class PerPerson(unittest.TestCase):
                 mock.patch.object(sync, "running", return_value=False), mock.patch.object(sync.time, "sleep"):
             self.assertEqual(sync.check_all(6), ["x", "z"])
         self.assertEqual([c.kwargs["env"]["GARMIN_USER"] for c in popen.call_args_list], ["x", "z"])
+
+
+    def test_nobody_is_pulled_or_rebuilt_without_consent(self):
+        privacy.withdraw(tenant.get("z"))
+        with tenant.use("y"):
+            sync.pending_path().parent.mkdir(parents=True, exist_ok=True)
+            sync.pending_path().touch()
+        tenant.get("y").consent_file.unlink()  # a push waiting, but no consent: it stays unprocessed
+        with mock.patch.object(sync.subprocess, "Popen"), mock.patch.object(sync, "running", return_value=False), \
+                mock.patch.object(sync.time, "sleep"):
+            self.assertEqual(sync.check_all(6), ["x"])
 
 
 if __name__ == "__main__":

@@ -22,6 +22,8 @@ from ui import bento
 from core import i18n
 from core import monitor
 from core import sync
+from core import audit
+from core import privacy
 from core import tenant
 
 REFRESH_S = 15
@@ -82,6 +84,7 @@ def render() -> None:
     st.fragment(run_every=REFRESH_S)(_live)(folks)
     _people(folks)
     _pulls(folks)
+    _privacy()
 
 
 # ------------------------------------------------------------------ live: the machine
@@ -271,7 +274,61 @@ def _pulls(folks: list[dict]) -> None:
 def _start(person_id: str, args: list[str] | None) -> None:
     with tenant.use(person_id):
         started = sync.start(args)
+    if started and person_id != tenant.current().id:
+        # Acting on someone else's data is the admin's to answer for: it goes to their access log.
+        audit.record("admin", person_id, by=tenant.current().id, detail=" ".join(args or ["pull"]))
     if not started:
         st.warning(i18n.tr(pl="Już trwa — spróbuj, gdy skończy.", en="Already running — try when it is done."))
         return
     st.rerun()
+
+
+# ------------------------------------------------------------------ privacy: consents, retention, access
+
+
+def _privacy() -> None:
+    """Who consented, who is past the inactivity limit, who was refused -- no health data in any of it."""
+    tr = i18n.tr
+    stored = privacy.settings()
+    due = {person.id for person, _ in privacy.inactive()}
+    rows = []
+    for person in tenant.users().values():
+        given = privacy.consent(person)
+        if privacy.controller(person):
+            state = tr(pl="administrator", en="controller")
+        elif not given:
+            state = tr(pl="brak zgody", en="no consent")
+        elif given.get("version") != privacy.POLICY_VERSION:
+            state = tr(pl=f"stara wersja {given.get('version')}", en=f"old version {given.get('version')}")
+        else:
+            state = tr(pl=f"zgoda {str(given.get('accepted_at', ''))[:10]}", en=f"consent {str(given.get('accepted_at', ''))[:10]}")
+        last = privacy.last_seen(person)
+        rows.append({tr(pl="osoba", en="person"): person.name, tr(pl="zgoda", en="consent"): state,
+                     tr(pl="ostatnio", en="last seen"): str(last or "—"),
+                     tr(pl="do usunięcia", en="to delete"): "●" if person.id in due else ""})
+    name, contact = privacy.responsible()
+    left, right = bento.row(2, 2)
+    with left, bento.panel(tr(pl="Prywatność", en="Privacy"), key="adm_privacy",
+                           caption=tr(pl=f"Zasady {privacy.POLICY_VERSION} · administrator: {name} {contact} · konto "
+                                         f"nieużywane {stored['inactive_days']} dni do usunięcia.",
+                                      en=f"Policy {privacy.POLICY_VERSION} · controller: {name} {contact} · accounts "
+                                         f"unused for {stored['inactive_days']} days are deleted.")):
+        tables.show(pd.DataFrame(rows))
+        if due:
+            st.warning(tr(pl="Konta po terminie usuwa `python -m core.privacy retention --apply` na serwerze.",
+                          en="Accounts past the limit are deleted by `python -m core.privacy retention --apply` on "
+                             "the server."))
+    with right, bento.panel(tr(pl="Dziennik dostępu", en="Access log"), key="adm_audit",
+                            caption=tr(pl=f"Ostatnie zdarzenia wszystkich osób ({audit.KEEP_DAYS} dni). Odmowy "
+                                          "logowania to pierwsze, na co patrzeć.",
+                                       en=f"Latest events of everyone ({audit.KEEP_DAYS} days). Refused sign-ins "
+                                          "are the first thing to look at.")):
+        items = audit.events(limit=40)
+        if not items:
+            st.caption(tr(pl="Pusto.", en="Empty."))
+            return
+        tables.show(pd.DataFrame([{
+            tr(pl="kiedy", en="when"): item["at"].replace("T", " "),
+            tr(pl="co", en="what"): item["event"],
+            tr(pl="kto", en="who"): item.get("person") or item.get("identity") or "—",
+            tr(pl="skąd", en="from"): item.get("ip") or "—"} for item in items]))

@@ -29,6 +29,7 @@ import threading
 import time
 from pathlib import Path
 
+from core import privacy
 from core import tenant
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -158,6 +159,8 @@ def check_all(hours: float) -> list[str]:
     started = []
     for person in tenant.users().values():
         try:
+            if privacy.required(person):
+                continue  # nothing is pulled or rebuilt for someone who has not consented (core/privacy.py)
             with tenant.use(person.id):
                 # A queued rebuild (a push during a busy run) is picked up for anyone.
                 if pending_path().exists() and not running():

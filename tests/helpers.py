@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -16,6 +17,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from core import audit  # noqa: E402
+from core import privacy  # noqa: E402
+from core import secretbox  # noqa: E402
 from core import tenant  # noqa: E402
 
 
@@ -23,6 +27,10 @@ def _point_registry(stack: contextlib.ExitStack, base: Path) -> None:
     for name, value in (("REGISTRY", base / "users.json"), ("USERS", base / "users"),
                         ("SECRET", base / "server.secret")):
         stack.enter_context(mock.patch.object(tenant, name, value))
+    # The access log, the privacy settings and the token key: never the real ones.
+    stack.enter_context(mock.patch.object(audit, "DIR", base / "audit"))
+    stack.enter_context(mock.patch.object(privacy, "SETTINGS", base / "privacy.json"))
+    stack.enter_context(mock.patch.dict(os.environ, {secretbox.KEY_ENV: str(base / "keys" / "data.key")}))
 
 
 @contextlib.contextmanager
@@ -134,3 +142,9 @@ def training_block(start: str, weeks: int, *, easy_pace: float = 6.0, easy_hr: f
                         hr=easy_hr + 3))
         activity_id += 1
     return rows
+
+
+def consent(*user_ids: str) -> None:
+    """These people agreed to the current policy (core/privacy.py) -- without it nothing of theirs is processed."""
+    for user_id in user_ids:
+        privacy.accept(tenant.get(user_id), "pl")

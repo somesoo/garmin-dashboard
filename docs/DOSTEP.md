@@ -218,9 +218,19 @@ da się podrobić.
 | dane w gicie | `data/`, `secrets.toml`, `export*.zip` w `.gitignore` |
 | klucz telefonu wycieknie | klucz otwiera jedną osobę i jeden zakres; odwołanie na stronie Konto |
 | aplikacja na telefonie | CSP: tylko własne pliki i własny adres, bez ramek; klucz we fragmencie linku |
+| przetwarzanie bez podstawy prawnej | ekran zgody przed czymkolwiek; bez zgody API 403, timer pomija (`core/privacy.py`) |
+| tokeny Garmina na dysku | zaszyfrowane, klucz poza `data/` (`core/secretbox.py`) |
+| nikt nie wie, kto otwierał dane | dziennik dostępu bez danych zdrowotnych (`core/audit.py`), widoczny dla osoby i admina |
+| kopia zapasowa wycieka | zaszyfrowana do klucza właściciela, rotowana (`tools/backup.py`) |
 
 ## Prawa każdej osoby
 
+Po pierwszym zalogowaniu znajomy widzi **ekran zgody** z polityką prywatności — bez
+zgody nic nie jest pobierane ani pokazywane. Ty (administrator) go nie widzisz.
+
 Na stronie **Konto → Twoje dane** każdy sam: pobiera archiwum wszystkiego, co
-o nim jest (bez sekretów), albo usuwa wszystko (po wpisaniu swojej nazwy). Administrator:
+o nim jest (bez sekretów, z jego wpisami dziennika dostępu), albo usuwa wszystko (po
+wpisaniu swojej nazwy). **Konto → Prywatność**: polityka, data zgody, kto i kiedy
+otwierał dane, wycofanie zgody (= usunięcie). Administrator:
 `.venv/bin/python -m core.tenant remove <id> --yes` usuwa też wpis z rejestru.
+Całość — RODO, rejestr, naruszenia, lista do zrobienia: [PRYWATNOSC.md](PRYWATNOSC.md).
