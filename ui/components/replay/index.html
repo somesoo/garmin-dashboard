@@ -14,6 +14,10 @@
   #mapwrap { position: relative; border-radius: 12px; overflow: hidden; background: #000; border: 1px solid var(--edge); }
   #map { display: block; width: 100%; }
   #chips { position: absolute; left: 8px; top: 8px; display: flex; gap: 4px; flex-wrap: wrap; max-width: calc(100% - 16px); }
+  #zoom { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  #zoom button { width: 34px; height: 34px; padding: 0; border-radius: 10px; font-size: 18px; line-height: 1; }
+  #zoom button:disabled { opacity: .35; cursor: default; }
+  #map.pan { cursor: grab; } #map.pan:active { cursor: grabbing; }
   #legend { position: absolute; left: 8px; bottom: 8px; display: flex; align-items: center; gap: 6px;
             background: rgba(0,0,0,.62); border-radius: 8px; padding: 4px 8px; font-size: 11px; color: var(--ink2);
             font-variant-numeric: tabular-nums; }
@@ -47,6 +51,11 @@
   <div id="mapwrap">
     <canvas id="map"></canvas>
     <div id="chips" role="group"></div>
+    <div id="zoom" role="group">
+      <button id="zin" type="button">+</button>
+      <button id="zout" type="button">−</button>
+      <button id="zfollow" type="button" aria-pressed="true">⌖</button>
+    </div>
     <div id="legend"></div>
     <div id="attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
   </div>
@@ -74,7 +83,7 @@ const TILE_CACHE = 400;
 
 let A = null;                 // the last render's args
 let D = null;                 // the track, prepared
-const S = { pos: 0, playing: false, speed: 10, measure: "pace", last: 0, raf: 0 };
+const S = { pos: 0, playing: false, speed: 10, measure: "pace", last: 0, raf: 0, zoomStep: 0, follow: true };
 const V = { w: 0, h: 0, dpr: 1, zoom: 0, cx: 0, cy: 0 };   // map view
 const tiles = new Map();
 const base = document.createElement("canvas");
@@ -215,7 +224,11 @@ function buildStaticUi() {
   }
   $("note").textContent = `×${S.speed} = ${S.speed} ${T.speed_hint}`;
   $("scrub").setAttribute("aria-label", T.seek);
+  $("zin").setAttribute("aria-label", T.zoom_in); $("zin").title = T.zoom_in;
+  $("zout").setAttribute("aria-label", T.zoom_out); $("zout").title = T.zoom_out;
+  $("zfollow").setAttribute("aria-label", T.follow); $("zfollow").title = T.follow;
   syncChips();
+  syncZoomUi();
 }
 
 function syncChips() {
@@ -257,9 +270,46 @@ function layout() {
   const pad = 36;
   const minx = Math.min(...D.ux), maxx = Math.max(...D.ux), miny = Math.min(...D.uy), maxy = Math.max(...D.uy);
   const sx = Math.max(maxx - minx, 1e-7), sy = Math.max(maxy - miny, 1e-7);
-  const worldPx = Math.min((w - 2 * pad) / sx, (h - 2 * pad) / sy);
-  V.zoom = clamp(Math.log2(worldPx / 256), 1, 18);
-  V.cx = (minx + maxx) / 2; V.cy = (miny + maxy) / 2;
+  const fitPx = Math.min((w - 2 * pad) / sx, (h - 2 * pad) / sy);
+  V.fit = clamp(Math.log2(fitPx / 256), 1, 18);
+  V.home = [(minx + maxx) / 2, (miny + maxy) / 2];
+  applyZoom(true);
+}
+
+/* The camera. Zoom 0 shows the whole route; each step in is twice as close. Zoomed in, the camera
+   follows the runner (the default: a finger must keep scrolling the page, so there is no touch pan)
+   or stays where a mouse drag left it. */
+const MAX_STEPS = 5;
+function applyZoom(jump) {
+  V.zoom = clamp(V.fit + S.zoomStep, 1, 19);
+  if (S.zoomStep === 0) { [V.cx, V.cy] = V.home; return; }
+  if (S.follow || jump) followHead(true);
+}
+function headAt() {
+  const i = find(S.pos);
+  return [lerpAt(D.ux, S.pos, i), lerpAt(D.uy, S.pos, i)];
+}
+// Move the camera toward the runner; true when it moved (the base has to be redrawn).
+function followHead(snap) {
+  if (S.zoomStep === 0 || !S.follow) return false;
+  const [hx, hy] = headAt();
+  const k = snap ? 1 : 0.2;
+  const nx = V.cx + (hx - V.cx) * k, ny = V.cy + (hy - V.cy) * k;
+  const moved = Math.abs(nx - V.cx) * worldPx() > 0.3 || Math.abs(ny - V.cy) * worldPx() > 0.3;
+  if (moved || snap) { V.cx = nx; V.cy = ny; }
+  return moved || snap;
+}
+function setZoomStep(step) {
+  S.zoomStep = clamp(step, 0, MAX_STEPS);
+  applyZoom(true);
+  syncZoomUi();
+  drawBase(); paint();
+}
+function syncZoomUi() {
+  $("zin").disabled = S.zoomStep >= MAX_STEPS;
+  $("zout").disabled = S.zoomStep <= 0;
+  $("zfollow").setAttribute("aria-pressed", String(S.follow));
+  $("zfollow").style.display = S.zoomStep > 0 ? "" : "none";
 }
 const worldPx = () => 256 * 2 ** V.zoom;
 const sxOf = (ux) => V.w / 2 + (ux - V.cx) * worldPx();
@@ -271,8 +321,17 @@ function requestTile(z, x, y) {
   if (e) return e;
   const img = new Image();
   img.crossOrigin = "anonymous";
-  e = { img, ok: false };
-  img.onload = () => { e.ok = true; schedule(); };
+  e = { img, ok: false, cv: null };
+  img.onload = () => {
+    // The theme filter is paid once per tile, not once per frame: a camera that follows the runner
+    // redraws the base every frame, and a filter on a dozen tiles each time is what a phone cannot do.
+    const cv = document.createElement("canvas");
+    cv.width = img.naturalWidth || 256; cv.height = img.naturalHeight || 256;
+    const c = cv.getContext("2d");
+    if (FILTER_OK) c.filter = TILE_FILTER[A && A.theme.dark ? "dark" : "light"];
+    c.drawImage(img, 0, 0);
+    e.cv = cv; e.ok = true; schedule();
+  };
   img.src = TILE_URL.replace("{z}", z).replace("{x}", x).replace("{y}", y);
   tiles.set(key, e);
   while (tiles.size > TILE_CACHE) tiles.delete(tiles.keys().next().value);
@@ -296,24 +355,21 @@ function drawBase() {
   const n = 2 ** zt, size = worldPx() / n;
   const x0 = Math.floor((V.cx - w / 2 / worldPx()) * n), x1 = Math.floor((V.cx + w / 2 / worldPx()) * n);
   const y0 = Math.max(0, Math.floor((V.cy - h / 2 / worldPx()) * n)), y1 = Math.min(n - 1, Math.floor((V.cy + h / 2 / worldPx()) * n));
-  bctx.save();
-  if (FILTER_OK) bctx.filter = TILE_FILTER[A.theme.dark ? "dark" : "light"];
   for (let ty = y0; ty <= y1; ty++) {
     for (let tx = x0; tx <= x1; tx++) {
       const wx = ((tx % n) + n) % n;
       const px = sxOf(tx / n), py = syOf(ty / n);
       const e = requestTile(zt, wx, ty);
-      if (e.ok) { bctx.drawImage(e.img, px, py, size + 0.5, size + 0.5); continue; }
+      if (e.ok) { bctx.drawImage(e.cv, px, py, size + 0.5, size + 0.5); continue; }
       for (let dz = 1; dz <= Math.min(6, zt); dz++) {      // stand in with a coarser tile while it loads
         const p = tiles.get(`${zt - dz}/${wx >> dz}/${ty >> dz}`);
         if (!p || !p.ok) continue;
-        const part = p.img.naturalWidth / 2 ** dz;
-        bctx.drawImage(p.img, (wx - ((wx >> dz) << dz)) * part, (ty - ((ty >> dz) << dz)) * part, part, part, px, py, size + 0.5, size + 0.5);
+        const part = p.cv.width / 2 ** dz;
+        bctx.drawImage(p.cv, (wx - ((wx >> dz) << dz)) * part, (ty - ((ty >> dz) << dz)) * part, part, part, px, py, size + 0.5, size + 0.5);
         break;
       }
     }
   }
-  bctx.restore();
   if (!FILTER_OK && A.theme.dark) { bctx.fillStyle = "rgba(0,0,0,.6)"; bctx.fillRect(0, 0, w, h); }
   // The whole route, quiet: where the dot is going.
   bctx.lineCap = "round"; bctx.lineJoin = "round";
@@ -389,6 +445,7 @@ function paint() {
   // The state buttons come first and a failing drawing must not take the controls with it.
   setPlayLabel();
   try {
+    if (followHead(!S.playing)) drawBase();        // the camera runs after the dot: the map moves under it
     drawTrail();
     updateStats();
   } catch (error) {
@@ -429,6 +486,30 @@ function seek(x) {
 }
 
 $("play").onclick = () => (S.playing ? stop() : start());
+$("zin").onclick = () => setZoomStep(S.zoomStep + 1);
+$("zout").onclick = () => setZoomStep(S.zoomStep - 1);
+$("zfollow").onclick = () => { S.follow = !S.follow; syncZoomUi(); if (S.follow) { followHead(true); drawBase(); } paint(); };
+// A mouse can pan a zoomed map (that turns following off); a finger cannot -- it keeps scrolling the page.
+{
+  const map = $("map");
+  let drag = null;
+  map.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "mouse" || S.zoomStep === 0) return;
+    drag = { x: e.clientX, y: e.clientY };
+    map.setPointerCapture(e.pointerId);
+  });
+  map.addEventListener("pointermove", (e) => {
+    map.classList.toggle("pan", e.pointerType === "mouse" && S.zoomStep > 0);
+    if (!drag) return;
+    V.cx -= (e.clientX - drag.x) / worldPx(); V.cy -= (e.clientY - drag.y) / worldPx();
+    drag = { x: e.clientX, y: e.clientY };
+    if (S.follow) { S.follow = false; syncZoomUi(); }
+    drawBase(); paint();
+  });
+  const end = () => { drag = null; };
+  map.addEventListener("pointerup", end);
+  map.addEventListener("pointercancel", end);
+}
 $("scrub").addEventListener("input", (e) => seek((Number(e.target.value) / 1000) * D.T));
 function openChannel(name) {
   if (name === channelName || typeof BroadcastChannel === "undefined") return;

@@ -391,6 +391,13 @@ zmiana koloru nie restartuje przebiegu Streamlita), obok liczą się dystans, cz
 tempo z ostatnich 30 s, tętno, wysokość, podejście i kadencja z tej chwili, a pod mapą
 jest suwak do przewijania.
 
+**Przybliżanie mapy**: przyciski +/− (do 5 kroków, każdy 2× bliżej; 0 = cała trasa) i ⌖.
+Przybliżona mapa domyślnie **jedzie za kropką** (kamera goni ją z wygładzeniem, a przewinięcie
+ją przyciąga); ⌖ wyłącza śledzenie. Przesuwać można tylko **myszą** (przeciągnięcie wyłącza
+śledzenie) — palec nie przesuwa mapy, bo ma dalej przewijać stronę (patrz „Telefon”). Filtr
+ciemnych kafelków liczy się raz na kafelek, a nie w każdej klatce, bo kamera w ruchu przerysowuje
+podkład co klatkę. Mechanizm na telefonie jest do przerobienia.
+
 **Trzy wykresy w drugiej kolumnie** (`replay.charts`, `ui/components/replaycharts/`):
 tempo, tętno i wysokość naraz, jeden kursor przez wszystkie. W trybie „Odtwórz” stoją
 obok mapy w miejscu dawnego samotnego profilu wysokości (`routes.streams_tile`, na stronie

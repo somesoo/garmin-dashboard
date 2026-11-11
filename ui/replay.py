@@ -110,6 +110,8 @@ def _text() -> dict[str, str]:
         "cadence": tr(pl="Kadencja", en="Cadence"),
         "m_pace": tr(pl="tempo", en="pace"), "m_hr": tr(pl="tętno", en="heart rate"),
         "m_ele": tr(pl="wysokość", en="elevation"),
+        "zoom_in": tr(pl="Przybliż", en="Zoom in"), "zoom_out": tr(pl="Oddal", en="Zoom out"),
+        "follow": tr(pl="Kamera śledzi kropkę", en="Camera follows the dot"),
         "colour": tr(pl="Kolor śladu", en="Track colour"),
         "seek": tr(pl="Przewiń", en="Seek"),
         "faster": tr(pl="szybciej", en="faster"),
