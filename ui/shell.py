@@ -316,10 +316,6 @@ _STYLE = """
     [data-testid="stPlotlyChart"]:not(.armed) .js-plotly-plot,
     [data-testid="stPlotlyChart"]:not(.armed) .maplibregl-map {pointer-events: none !important;}
   }
-  @media (hover: none) {
-    [data-testid="stPlotlyChart"] .updatemenu-container,
-    [data-testid="stPlotlyChart"] .slider-container {pointer-events: auto !important;}
-  }
   [data-testid="stPlotlyChart"] {border-radius: 8px; transition: box-shadow .15s; position: relative;}
   [data-testid="stPlotlyChart"][data-hint]::after {content: attr(data-hint); position: absolute; top: 6px; right: 8px;
       z-index: 5; pointer-events: none; font-size: 0.72rem; color: #d5d7dc; background: #1a1c20;

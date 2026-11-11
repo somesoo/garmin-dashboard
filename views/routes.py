@@ -13,6 +13,7 @@ import streamlit as st
 
 from ui import bento
 from core import i18n
+from ui import replay
 from ui import routing
 from ui import shell
 from ui import tables
@@ -137,16 +138,17 @@ def map_tile(track: pd.DataFrame, activity_id: int, *, key: str = "route") -> No
         how=tr(pl="Linia pod spodem trzyma kształt trasy, kolor niesie wartość — ślad zostaje czytelny też tam, "
                   "gdzie zawraca po sobie. Skala przycięta do 5–95%: postój na światłach nie zjada zakresu. "
                   "Tempo ma odwróconą rampę: ciemniej = szybciej. „Odtwórz” puszcza aktywność jak film: kropka "
-                  "biegnie trasą, a zegar jest przyspieszony (przyciski ▶ z mnożnikiem); postój to stojąca "
-                  "kropka, suwak przewija.",
+                  "biegnie trasą (domyślnie 10 s aktywności na 1 s filmu, do ×300), ślad ma kolor wybranej miary, "
+                  "a obok liczą się dystans, czas, tempo, tętno i wysokość z tej chwili; wykres pod mapą przewija.",
                en="The line underneath holds the route's shape, the colour carries the value — the track stays "
                   "readable even where it doubles back. Scale clipped to 5–95%: a stop at the lights does not eat "
-                  "the range. Pace has a reversed ramp: darker = faster. “Replay” plays the activity like a film: "
-                  "a dot runs the route on a sped-up clock (the ▶ buttons, with their multiplier); a stop is a "
-                  "dot standing still, the slider scrubs."),
+                  "the range. Pace has a reversed ramp: darker = faster. “Replay” plays the activity like a film: a "
+                  "dot runs the route (10 s of the activity per 1 s of film by default, up to ×300), the trail takes "
+                  "the colour of the chosen measure, and distance, time, pace, heart rate and elevation of that "
+                  "moment run beside it; the chart under the map scrubs."),
     ) as t:
         with t.header:
-            options = [*choices, *(["replay"] if tz.replay_ready(track) else [])]
+            options = [*choices, *(["replay"] if replay.ready(track) else [])]
             names = {**choices, "replay": tr(pl="▶ Odtwórz", en="▶ Replay")}
             colour_by = st.segmented_control(
                 tr(pl="Kolor śladu", en="Track colour"), options, default="pace_min_km",
@@ -157,11 +159,8 @@ def map_tile(track: pd.DataFrame, activity_id: int, *, key: str = "route") -> No
         phone = shell.phone()
         height, width = (340, 330) if phone else (bento.chart_height(3), 620)
         if colour_by == "replay":
-            t.chart(
-                tz.route_replay(track, height=height, width=width, uirevision=f"replay-{int(chosen)}"),
-                empty=tr(pl="Tej aktywności nie da się odtworzyć (brak zegara przy śladzie).",
-                         en="This activity cannot be replayed (the track has no clock)."),
-                key=f"{key}_replay_{int(chosen)}", height=height + 96)
+            # The film has its own colour switch and live numbers (ui/replay.py).
+            replay.show(track, key=f"{key}_replay_{int(chosen)}", map_height=height if phone else max(340, height - 230))
             return
         t.chart(
             tz.route_map(

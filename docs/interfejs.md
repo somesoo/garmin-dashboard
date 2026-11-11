@@ -383,6 +383,26 @@ wydarzyło, zawsze na tle własnej normy.
 - Ładunek jest cache'owany po buildzie, dniu, języku i stemplu plików trenera;
   zmiana `token` (build/dzień/język) rysuje ślad od nowa, zwykły rerun nie.
 
+## Odtwarzacz aktywności (opcja „▶ Odtwórz” w kaflu Mapa)
+
+`ui/replay.py` + `ui/components/replay/index.html`: kropka biegnie trasą, ślad za nią ma
+kolor wybranej miary (tempo / tętno / wysokość — przełącznik jest w komponencie, więc
+zmiana koloru nie restartuje przebiegu Streamlita), obok liczą się dystans, czas,
+tempo z ostatnich 30 s, tętno, wysokość, podejście i kadencja z tej chwili, a pod mapą
+wykres wybranej miary z kursorem służy do przewijania.
+
+- **Prędkość to całe wielokrotności zegara**: `replay.SPEEDS` = ×10 (domyślnie: 10 s
+  aktywności na 1 s filmu), ×30, ×60, ×120, ×300. Przeglądarka liczy pozycję z zegara
+  (`requestAnimationFrame`), więc szybciej = większy skok na klatkę, nie rzadsze klatki.
+- Python wysyła tylko równoległe tablice (`payload`): jeden zegar rosnący monotonicznie,
+  luki w strumieniach wypełnione, strumienia, którego zegarek nie zapisał, nie ma wcale.
+  Bez zegara przy śladzie opcji „Odtwórz” nie ma.
+- Kafelki OSM i ciemny filtr jak na płaskiej mapie globu; mapa jest stała (bez zoomu
+  i przesuwania), więc palec przewija stronę. Kolory kroków rampy jak w `route_map`
+  (7 kroków, bez gradientu), postój to stojąca kropka.
+- Pierwsza wersja grała w klatkach Plotly: każda klatka niosła cały ślad, więc szybki
+  film z długiego biegu ważył megabajty, a kolor śladu i liczby na żywo się nie mieściły.
+
 ## Glob na stronie Historia (`atlas`)
 
 Hero Atlasu nie jest figurą plotly — to własny komponent Streamlita

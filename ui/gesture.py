@@ -29,9 +29,7 @@ SCRIPT = """<script>
   doc.__garminGesture = true;
   const win = doc.defaultView;
   const touch = win.matchMedia("(hover: none)").matches;
-  // The replay's own controls (play buttons, slider) work on a sleeping chart: they zoom nothing.
-  const chart = (el) => el && el.closest && !el.closest('.updatemenu-container, .slider-container')
-      && el.closest('[data-testid="stPlotlyChart"]');
+  const chart = (el) => el && el.closest && el.closest('[data-testid="stPlotlyChart"]');
   const sleep = (keep) => doc.querySelectorAll('[data-testid="stPlotlyChart"].armed')
       .forEach((c) => { if (c !== keep) { c.classList.remove("armed"); delete c.dataset.hint; } });
   // The words come from Python (install), in the page's language.
