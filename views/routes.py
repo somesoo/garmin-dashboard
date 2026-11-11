@@ -136,20 +136,33 @@ def map_tile(track: pd.DataFrame, activity_id: int, *, key: str = "route") -> No
         tr(pl="Mapa", en="Map"), rows=3, key=f"{key}_map",
         how=tr(pl="Linia pod spodem trzyma kształt trasy, kolor niesie wartość — ślad zostaje czytelny też tam, "
                   "gdzie zawraca po sobie. Skala przycięta do 5–95%: postój na światłach nie zjada zakresu. "
-                  "Tempo ma odwróconą rampę: ciemniej = szybciej.",
+                  "Tempo ma odwróconą rampę: ciemniej = szybciej. „Odtwórz” puszcza aktywność jak film: kropka "
+                  "biegnie trasą, a zegar jest przyspieszony (przyciski ▶ z mnożnikiem); postój to stojąca "
+                  "kropka, suwak przewija.",
                en="The line underneath holds the route's shape, the colour carries the value — the track stays "
                   "readable even where it doubles back. Scale clipped to 5–95%: a stop at the lights does not eat "
-                  "the range. Pace has a reversed ramp: darker = faster."),
+                  "the range. Pace has a reversed ramp: darker = faster. “Replay” plays the activity like a film: "
+                  "a dot runs the route on a sped-up clock (the ▶ buttons, with their multiplier); a stop is a "
+                  "dot standing still, the slider scrubs."),
     ) as t:
         with t.header:
+            options = [*choices, *(["replay"] if tz.replay_ready(track) else [])]
+            names = {**choices, "replay": tr(pl="▶ Odtwórz", en="▶ Replay")}
             colour_by = st.segmented_control(
-                tr(pl="Kolor śladu", en="Track colour"), list(choices), default="pace_min_km",
-                format_func=lambda v: choices[v], label_visibility="collapsed", key=f"{key}_colour")
+                tr(pl="Kolor śladu", en="Track colour"), options, default="pace_min_km",
+                format_func=lambda v: names[v], label_visibility="collapsed", key=f"{key}_colour")
         colour_by = colour_by or "pace_min_km"
         chosen = activity_id
         # The zoom is fitted to the drawn size, so the size is decided here, once.
         phone = shell.phone()
         height, width = (340, 330) if phone else (bento.chart_height(3), 620)
+        if colour_by == "replay":
+            t.chart(
+                tz.route_replay(track, height=height, width=width, uirevision=f"replay-{int(chosen)}"),
+                empty=tr(pl="Tej aktywności nie da się odtworzyć (brak zegara przy śladzie).",
+                         en="This activity cannot be replayed (the track has no clock)."),
+                key=f"{key}_replay_{int(chosen)}", height=height + 96)
+            return
         t.chart(
             tz.route_map(
                 track, color=colour_by, color_title=units[colour_by],
