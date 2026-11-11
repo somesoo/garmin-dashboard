@@ -222,6 +222,11 @@ Zachowania celowe (nie „naprawiaj”):
   Porównanie · Segmenty, jak w Stravie/Garmin Connect). *Trasy* pokazują tylko
   aktywności inne niż bieg; `routing.open_activity` kieruje bieg do *Treningu*.
   Mapę i tabelę splitów dają `routes.map_tile` / `routes.split_table` — nie kopiuj.
+- **Mapa aktywności jest jedna** (`ui/replay.py`, komponent canvas): ślad w kolorze miary,
+  wskazanie czyta, kliknięcie przenosi, ▶ odtwarza — bez trybów i bez przełącznika po stronie
+  Streamlita. Nie wracaj do `route_map` w kaflu „Mapa” (zostaje dla wycinków: segmenty,
+  wspólne odcinki). Jeden palec przewija stronę, dwa ruszają mapę (jedyny `preventDefault`),
+  pełny ekran daje jeden palec. Szczegóły: `docs/interfejs.md` → „Mapa aktywności”.
 - **Strona z wieloma pytaniami → zakładki** (`st.tabs`, wzór: *Trening*): nad
   nimi wybór i 4 KPI, w każdej zakładce jedno pytanie; zakładka bez danych nie
   powstaje. Telefon przełącza je przesunięciem palca (`ui/gesture.py`).

@@ -16,9 +16,10 @@
 <div id="wrap"><canvas id="cv"></canvas></div>
 <script>
 "use strict";
-/* Three stacked charts on the replay's clock (pace, heart rate, elevation), one playhead through
+/* Three stacked charts on the map's clock (pace, heart rate, elevation), one playhead through
    all of them. The map (../replay/) owns the clock and publishes it on a BroadcastChannel; a press
-   or a drag here sends a seek back. Without the map playing, the playhead simply rests where it was. */
+   or a drag here sends a seek back, and a mouse passing over sends a peek: the dot on the map
+   shows that moment without the film moving. At rest (nothing asked about) there is no playhead. */
 function send(type, data) { window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, "*"); }
 const $ = (id) => document.getElementById(id);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -28,7 +29,7 @@ const fmtTime = (s) => { s = Math.max(0, Math.round(s)); const h = Math.floor(s 
 const fmtPace = (min) => { if (!(min > 0) || min > 60) return "—"; const s = Math.round(min * 60); return `${Math.floor(s / 60)}:${pad2(s % 60)}`; };
 
 let A = null, D = null, ctx = null, channel = null, channelName = null;
-const S = { pos: 0, playing: false };
+const S = { pos: 0, playing: false, rest: true, whole: true };
 const L = { w: 0, h: 0, dpr: 1 };
 const GAP = 10, LEFT = 4, RIGHT = 4, AXIS = 14;
 
@@ -90,7 +91,9 @@ function draw() {
     D.t.forEach((t, k) => path.lineTo(xOf(t), yOf(p.smooth[k])));
     path.lineTo(xOf(D.T), bottom); path.closePath();
     const line = () => { ctx.beginPath(); D.t.forEach((t, k) => (k ? ctx.lineTo(xOf(t), yOf(p.smooth[k])) : ctx.moveTo(xOf(t), yOf(p.smooth[k])))); ctx.stroke(); };
-    for (const [x0, x1, fill, stroke] of [[0, px, th.accent + "55", th.accent], [px, w, "rgba(154,160,170,.16)", "rgba(154,160,170,.55)"]]) {
+    const split = S.whole ? w : px;      // at rest and under a passing mouse the whole curve wears the accent, as the track does
+    for (const [x0, x1, fill, stroke] of [[0, split, th.accent + "55", th.accent], [split, w, "rgba(154,160,170,.16)", "rgba(154,160,170,.55)"]]) {
+      if (x1 <= x0) continue;
       ctx.save(); ctx.beginPath(); ctx.rect(x0, top, x1 - x0, ph + 1); ctx.clip();
       ctx.fillStyle = fill; ctx.fill(path);
       ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.strokeStyle = stroke; line();
@@ -101,7 +104,7 @@ function draw() {
     ctx.fillStyle = th.muted; ctx.font = '600 10.5px "Source Sans Pro", sans-serif';
     ctx.fillText(p.label.toUpperCase(), LEFT + 2, top);
     ctx.textAlign = "right"; ctx.fillStyle = th.ink; ctx.font = '650 14px "Source Sans Pro", sans-serif';
-    ctx.fillText(`${p.format(valueAt(p.series, S.pos))} ${p.unit}`, w - RIGHT - 2, top - 1);
+    if (!S.rest) ctx.fillText(`${p.format(valueAt(p.series, S.pos))} ${p.unit}`, w - RIGHT - 2, top - 1);
     // Range of the panel at the left edge, in the corner the curve leaves free.
     ctx.textAlign = "left"; ctx.fillStyle = th.muted; ctx.font = '10px "Source Sans Pro", sans-serif';
     ctx.textBaseline = "bottom";
@@ -113,6 +116,7 @@ function draw() {
   ctx.textAlign = "center"; ctx.fillText(fmtTime(D.T / 2), w / 2, h - 1);
   ctx.textAlign = "right"; ctx.fillText(fmtTime(D.T), w - RIGHT, h - 1);
   // One playhead through every panel.
+  if (S.rest) return;
   ctx.strokeStyle = th.ink; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h - AXIS); ctx.stroke();
 }
@@ -122,15 +126,25 @@ const wrap = $("wrap");
 let dragging = false;
 const at = (e) => { const r = wrap.getBoundingClientRect(); return clamp((e.clientX - r.left - LEFT) / (r.width - LEFT - RIGHT), 0, 1) * D.T; };
 function seek(pos) {
-  S.pos = pos;
+  S.pos = pos; S.rest = false; S.whole = false;
   draw();
   if (channel) channel.postMessage({ type: "seek", pos });
 }
+// A look, not a move: the map shows the moment and goes back when the mouse leaves.
+function peek(pos) {
+  if (S.playing) return;
+  if (pos != null) { S.pos = pos; S.rest = false; draw(); }
+  if (channel) channel.postMessage({ type: "peek", pos });
+}
 wrap.addEventListener("pointerdown", (e) => { if (!D) return; dragging = true; wrap.setPointerCapture(e.pointerId); seek(at(e)); });
-wrap.addEventListener("pointermove", (e) => { if (dragging) seek(at(e)); });
+wrap.addEventListener("pointermove", (e) => {
+  if (dragging) seek(at(e));
+  else if (e.pointerType === "mouse" && D) peek(at(e));
+});
 const release = () => { dragging = false; };
 wrap.addEventListener("pointerup", release);
 wrap.addEventListener("pointercancel", release);
+wrap.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse" && !dragging && D) peek(null); });
 
 function openChannel(name) {
   if (name === channelName || typeof BroadcastChannel === "undefined") return;
@@ -139,7 +153,7 @@ function openChannel(name) {
   channel = new BroadcastChannel(name);
   channel.onmessage = (e) => {
     const m = e.data || {};
-    if (m.type === "pos" && D && !dragging) { S.pos = clamp(m.pos, 0, D.T); S.playing = !!m.playing; draw(); }
+    if (m.type === "pos" && D && !dragging) { S.pos = clamp(m.pos, 0, D.T); S.playing = !!m.playing; S.rest = !!m.rest; S.whole = !!m.whole; draw(); }
   };
   channel.postMessage({ type: "hello" });      // the map may already be playing: ask where it is
 }
@@ -149,7 +163,7 @@ let token = null;
 function render(args) {
   A = args;
   const next = JSON.stringify([args.data.t.length, args.data.t[args.data.t.length - 1], args.height]);
-  if (next !== token) { token = next; S.pos = 0; prepare(); }
+  if (next !== token) { token = next; S.pos = 0; S.rest = true; S.whole = true; prepare(); }
   layout(); draw(); fit();
   openChannel(`garmin-replay-${args.channel}`);
 }

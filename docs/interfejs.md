@@ -383,29 +383,53 @@ wydarzyło, zawsze na tle własnej normy.
 - Ładunek jest cache'owany po buildzie, dniu, języku i stemplu plików trenera;
   zmiana `token` (build/dzień/język) rysuje ślad od nowa, zwykły rerun nie.
 
-## Odtwarzacz aktywności (opcja „▶ Odtwórz” w kaflu Mapa)
+## Mapa aktywności (kafel „Mapa”: *Trening* → Przegląd, *Trasy*)
 
-`ui/replay.py` + `ui/components/replay/index.html`: kropka biegnie trasą, ślad za nią ma
-kolor wybranej miary (tempo / tętno / wysokość — przełącznik jest w komponencie, więc
-zmiana koloru nie restartuje przebiegu Streamlita), obok liczą się dystans, czas,
-tempo z ostatnich 30 s, tętno, wysokość, podejście i kadencja z tej chwili, a pod mapą
-jest suwak do przewijania.
+`ui/replay.py` + `ui/components/replay/index.html` — **jedna mapa**, własny komponent na
+canvasie. Wcześniej były dwie rzeczy pod jednym przełącznikiem: figura Plotly do oglądania
+(uśpiona do podwójnego dotknięcia, z odczytem na niewidzialnych znacznikach) i osobny
+odtwarzacz wybierany jako piąty „kolor” (zoom tylko krokami, bez przesuwania palcem, siedem
+kafelków liczb, suwak, pięć przycisków prędkości). Teraz:
 
-**Przybliżanie mapy**: przyciski +/− (do 5 kroków, każdy 2× bliżej; 0 = cała trasa) i ⌖.
-Przybliżona mapa domyślnie **jedzie za kropką** (kamera goni ją z wygładzeniem, a przewinięcie
-ją przyciąga); ⌖ wyłącza śledzenie. Przesuwać można tylko **myszą** (przeciągnięcie wyłącza
-śledzenie) — palec nie przesuwa mapy, bo ma dalej przewijać stronę (patrz „Telefon”). Filtr
-ciemnych kafelków liczy się raz na kafelek, a nie w każdej klatce, bo kamera w ruchu przerysowuje
-podkład co klatkę. Mechanizm na telefonie jest do przerobienia.
+- **Ślad zawsze w kolorze miary** (tempo / tętno / wysokość — przełącznik w rogu mapy, w
+  komponencie, więc nic nie restartuje przebiegu Streamlita), legenda w dolnym rogu, kółka
+  z liczbą = kilometry (przerzedzone do ≤ 12), jasna kropka = start, ciemna = meta.
+- **Wskazanie czyta** (`peek`): mysz nad śladem, nad paskiem albo nad wykresami obok pokazuje
+  kropkę i liczby z tego miejsca (dystans, czas, tempo z 30 s, tętno, wysokość, podejście,
+  kadencja; na telefonie pierwsze cztery), a po zjechaniu wszystko wraca. **Kliknięcie /
+  dotknięcie śladu przenosi tam film** (`seek`). W spoczynku zamiast zer stoi jedno zdanie,
+  które to mówi.
+- **Mapa rusza się jak mapa**: przeciąganie myszą, dwuklik, przyciski +/−, „cała trasa”
+  (pojawia się po przybliżeniu), Ctrl/⌘ + kółko (gładzik: uszczypnięcie). Samo kółko
+  przewija stronę i pokazuje podpowiedź. Oddalić się nie da dalej niż cała trasa, a środek
+  nie wyjdzie poza jej ramkę — nie można się zgubić.
+- **Telefon**: jeden palec przewija stronę (i dotknięciem wybiera miejsce na śladzie), **dwa
+  palce** przesuwają i szczypią mapę; przeciągnięcie w bok jednym palcem pokazuje podpowiedź.
+  To jedyny handler, który woła `preventDefault` — tylko dla gestu dwóch palców. Przycisk
+  **pełnego ekranu** (gdy przeglądarka go daje) zdejmuje ograniczenie: tam nie ma strony do
+  przewijania, więc jeden palec przesuwa mapę.
+- **▶ w tym samym miejscu**: okrągły przycisk, obok pasek = profil wybranej miary i zarazem
+  suwak (uchwyt do złapania), dalej jeden przycisk prędkości, który przechodzi po
+  `replay.SPEEDS`. W filmie kolor ma tylko droga za kropką; przybliżona mapa jedzie za kropką,
+  dopóki ręka jej nie przesunie (następne ▶ oddaje kamerę kropce). Przewinięcie spoza mapy
+  nie zostawia kropki poza kadrem.
+- **Ślad bez zegara** też ma mapę (`replay.route`): „zegarem” jest wtedy dystans, a
+  `playable: false` chowa ▶, prędkość i czas. Bez `distance_km` dystans liczy się po linii GPS.
+- Filtr ciemnych kafelków liczy się raz na kafelek, nie w każdej klatce (kamera w ruchu
+  przerysowuje podkład co klatkę).
 
 **Trzy wykresy w drugiej kolumnie** (`replay.charts`, `ui/components/replaycharts/`):
-tempo, tętno i wysokość naraz, jeden kursor przez wszystkie. W trybie „Odtwórz” stoją
-obok mapy w miejscu dawnego samotnego profilu wysokości (`routes.streams_tile`, na stronie
-biegu i w Trasach), poza nim to zwykły wykres Plotly wzdłuż dystansu. Mapa i wykresy
+tempo, tętno i wysokość naraz, jeden kursor przez wszystkie, zawsze gdy ślad ma zegar
+(`routes.streams_tile`; bez zegara zwykła figura Plotly wzdłuż dystansu). Mapa i wykresy
 rozmawiają w przeglądarce przez `BroadcastChannel("garmin-replay-<id aktywności>")`:
-mapa trzyma zegar i publikuje `pos`, wykresy odsyłają `seek` (dotknięcie lub przeciągnięcie
-przewija film) — żaden z tych ruchów nie przeładowuje Streamlita. Tryb poznaje się po
-stanie przełącznika koloru (`<key>_colour` == `"replay"`).
+mapa trzyma zegar i publikuje `pos` (z `rest`/`whole`: w spoczynku wykresy nie mają kursora),
+wykresy odsyłają `peek` (mysz nad wykresem) i `seek` (dotknięcie lub przeciągnięcie) —
+żaden z tych ruchów nie przeładowuje Streamlita.
+
+Podgląd bez Streamlita: strona, która w ramce ładuje `index.html` i po
+`streamlit:componentReady` odsyła `{type: "streamlit:render", args}` (te same `args` co
+w `replay.show`); funkcje komponentu (`seek`, `peek`, `start`, `zoomButton`) są globalne
+w ramce, więc da się ustawić stan do zrzutu. Tylko na śladzie syntetycznym.
 
 - **Prędkość to całe wielokrotności zegara**: `replay.SPEEDS` = ×10 (domyślnie: 10 s
   aktywności na 1 s filmu), ×30, ×60, ×120, ×300. Przeglądarka liczy pozycję z zegara
@@ -413,9 +437,8 @@ stanie przełącznika koloru (`<key>_colour` == `"replay"`).
 - Python wysyła tylko równoległe tablice (`payload`): jeden zegar rosnący monotonicznie,
   luki w strumieniach wypełnione, strumienia, którego zegarek nie zapisał, nie ma wcale.
   Bez zegara przy śladzie opcji „Odtwórz” nie ma.
-- Kafelki OSM i ciemny filtr jak na płaskiej mapie globu; mapa jest stała (bez zoomu
-  i przesuwania), więc palec przewija stronę. Kolory kroków rampy jak w `route_map`
-  (7 kroków, bez gradientu), postój to stojąca kropka.
+- Kafelki OSM i ciemny filtr jak na płaskiej mapie globu. Kolory kroków rampy jak
+  w `route_map` (bez gradientu), postój to stojąca kropka.
 - Pierwsza wersja grała w klatkach Plotly: każda klatka niosła cały ślad, więc szybki
   film z długiego biegu ważył megabajty, a kolor śladu i liczby na żywo się nie mieściły.
 

@@ -56,6 +56,23 @@ class ReplayPayloadTest(unittest.TestCase):
         self.assertFalse(replay.ready(None))
         self.assertTrue(replay.ready(_track()))
 
+    def test_a_track_without_a_clock_is_still_a_map(self):
+        track = _track().drop(columns="duration_s")
+        self.assertIsNone(replay.payload(track))
+        data = replay.route(track)
+        self.assertFalse(data["playable"])
+        self.assertEqual(data["t"], sorted(set(data["t"])))
+        self.assertEqual(len(data["lat"]), len(data["t"]))
+        self.assertTrue(replay.route(_track())["playable"])
+        self.assertIsNone(replay.route(pd.DataFrame()))
+
+    def test_distance_is_measured_along_the_line_when_the_watch_gave_none(self):
+        data = replay.route(_track().drop(columns=["duration_s", "distance_km"]))
+        self.assertFalse(data["playable"])
+        # 59 steps of 1e-4 degrees both ways near Warsaw: about 0.8 km.
+        self.assertAlmostEqual(data["km"][-1], 0.77, delta=0.05)
+        self.assertEqual(data["km"], sorted(data["km"]))
+
     def test_speeds_start_at_ten(self):
         self.assertEqual(replay.SPEEDS[0], 10)
         self.assertEqual(list(replay.SPEEDS), sorted(replay.SPEEDS))

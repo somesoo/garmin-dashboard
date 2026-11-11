@@ -19,18 +19,6 @@ from ui import shell
 from ui import tables
 from ui import theme as tz
 
-def _colour_choices() -> dict[str, str]:
-    tr = i18n.tr
-    return {"pace_min_km": tr(pl="tempo", en="pace"), "hr": tr(pl="tętno", en="heart rate"),
-            "elevation_m": tr(pl="wysokość", en="elevation"), "speed_ms": tr(pl="prędkość", en="speed")}
-
-
-def _colour_units() -> dict[str, str]:
-    tr = i18n.tr
-    return {"pace_min_km": tr(pl="tempo /km", en="pace /km"), "hr": "bpm",
-            "elevation_m": tr(pl="m n.p.m.", en="m a.s.l."), "speed_ms": "m/s"}
-
-
 def _sport_label(code: object) -> str:
     """The discipline's name where the catalogue knows the Garmin sport, the code otherwise."""
     from sport import catalog
@@ -125,56 +113,39 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
         if any(word in sport for word in ("walk", "hik", "trail")):
             splits_tile(track)
     with right:
-        streams_tile(track, int(chosen), mode="route_colour", key="route_ov_streams")
+        streams_tile(track, int(chosen), key="route_ov_streams")
     _gpx(chosen)
 
 
 def map_tile(track: pd.DataFrame, activity_id: int, *, key: str = "route") -> None:
-    """The GPS track coloured by a measure picked in the tile's header (also the run page's map)."""
+    """The activity's map (also the run page's): one component that shows, reads, moves and plays.
+
+    Everything happens inside it (ui/replay.py) -- the colour switch, the zoom, the play button --
+    so nothing on it reruns Streamlit, and the phone gets the same map, only narrower.
+    """
     tr = i18n.tr
-    choices, units = _colour_choices(), _colour_units()
     with bento.tile(
         tr(pl="Mapa", en="Map"), rows=3, key=f"{key}_map",
-        how=tr(pl="Linia pod spodem trzyma kształt trasy, kolor niesie wartość — ślad zostaje czytelny też tam, "
-                  "gdzie zawraca po sobie. Skala przycięta do 5–95%: postój na światłach nie zjada zakresu. "
-                  "Tempo ma odwróconą rampę: ciemniej = szybciej. „Odtwórz” puszcza aktywność jak film: kropka "
-                  "biegnie trasą (domyślnie 10 s aktywności na 1 s filmu, do ×300), ślad ma kolor wybranej miary, "
-                  "a obok liczą się dystans, czas, tempo, tętno i wysokość z tej chwili; wykres pod mapą przewija.",
-               en="The line underneath holds the route's shape, the colour carries the value — the track stays "
-                  "readable even where it doubles back. Scale clipped to 5–95%: a stop at the lights does not eat "
-                  "the range. Pace has a reversed ramp: darker = faster. “Replay” plays the activity like a film: a "
-                  "dot runs the route (10 s of the activity per 1 s of film by default, up to ×300), the trail takes "
-                  "the colour of the chosen measure, and distance, time, pace, heart rate and elevation of that "
-                  "moment run beside it; the chart under the map scrubs."),
-    ) as t:
-        with t.header:
-            options = [*choices, *(["replay"] if replay.ready(track) else [])]
-            names = {**choices, "replay": tr(pl="▶ Odtwórz", en="▶ Replay")}
-            colour_by = st.segmented_control(
-                tr(pl="Kolor śladu", en="Track colour"), options, default="pace_min_km",
-                format_func=lambda v: names[v], label_visibility="collapsed", key=f"{key}_colour")
-        colour_by = colour_by or "pace_min_km"
-        chosen = activity_id
-        # The zoom is fitted to the drawn size, so the size is decided here, once.
-        phone = shell.phone()
-        height, width = (340, 330) if phone else (bento.chart_height(3), 620)
-        if colour_by == "replay":
-            # The film has its own colour switch and live numbers (ui/replay.py).
-            replay.show(track, key=f"{key}_replay_{int(chosen)}", channel=int(chosen),
-                        map_height=height if phone else max(340, height - 230))
-            return
-        t.chart(
-            tz.route_map(
-                track, color=colour_by, color_title=units[colour_by],
-                reverse_scale=(colour_by == "pace_min_km"), pace=(colour_by == "pace_min_km"),
-                height=height, width=width,
-                # Tied to the activity, not the metric: recolouring keeps the view.
-                uirevision=f"route-{int(chosen)}",
-            ),
-            empty=tr(pl="Ta aktywność nie ma śladu GPS.", en="This activity has no GPS track."),
-            key=f"{key}_map_{int(chosen)}",
-            height=height,
-        )
+        how=tr(pl="Kolor śladu niesie miarę z przełącznika w rogu (tempo: jaśniej = szybciej); skala przycięta do "
+                  "5–95%, więc postój na światłach nie zjada zakresu. Kółka z liczbą to kilometry. Najedź na ślad "
+                  "(na telefonie: dotknij), a pod mapą pojawią się liczby z tego miejsca; kliknięcie przenosi tam "
+                  "kropkę. Mapę przeciągasz myszą, przybliżasz przyciskami, dwuklikiem albo Ctrl + kółkiem; na "
+                  "telefonie dwoma palcami (jeden przewija stronę) albo wygodniej na pełnym ekranie. ▶ puszcza "
+                  "aktywność jak film: przycisk ×10 zmienia prędkość (10 s aktywności na 1 s filmu, do ×300), "
+                  "pasek obok to profil wybranej miary i zarazem suwak.",
+               en="The track's colour carries the measure from the switch in the corner (pace: lighter = faster); "
+                  "the scale is clipped to 5–95%, so a stop at the lights does not eat the range. Numbered circles "
+                  "are kilometres. Point at the track (on a phone: tap it) and the numbers of that spot appear "
+                  "under the map; a click moves the dot there. Drag the map with the mouse, zoom with the buttons, "
+                  "a double click or Ctrl + scroll; on a phone with two fingers (one scrolls the page) or, easier, "
+                  "in full screen. ▶ plays the activity like a film: the ×10 button changes the speed (10 s of "
+                  "the activity per 1 s of film, up to ×300); the bar beside it is the profile of the chosen "
+                  "measure and the seek bar at once."),
+    ):
+        # Under the map stand the numbers and the bar (about 110 px); on a phone the map is about square.
+        height = 360 if shell.phone() else max(340, bento.chart_height(3) - 110)
+        if not replay.show(track, key=f"{key}_map_{int(activity_id)}", channel=int(activity_id), map_height=height):
+            st.caption(tr(pl="Ta aktywność nie ma śladu GPS.", en="This activity has no GPS track."))
 
 
 def split_table(splits: pd.DataFrame) -> tuple[pd.DataFrame, str]:
@@ -233,21 +204,23 @@ def splits_tile(track: pd.DataFrame) -> None:
                 height=len(splits) * 26 + 24, empty=i18n.tr(pl="Brak splitów.", en="No splits."))
 
 
-def streams_tile(track: pd.DataFrame, activity_id: int, *, mode: str, key: str) -> None:
+def streams_tile(track: pd.DataFrame, activity_id: int, *, key: str) -> None:
     """Pace, heart rate and elevation, all three at once (what used to be a lone elevation profile).
 
-    Next to the map in its "replay" mode (``mode`` is the map's colour switch in the session) these
-    are the replay's own charts: the same clock, one playhead, a drag scrubs the film. Otherwise
-    a plain figure along the distance, with hover.
+    With a clock in the track these are the map's own charts: the same clock, one playhead, a mouse
+    over them moves the dot on the map and a press or a drag moves the film. A track nobody timed
+    gets a plain figure along the distance, with hover.
     """
     tr = i18n.tr
     caption = tr(pl="Wyżej na panelu tempa = szybciej.", en="Higher on the pace panel = faster.")
-    if st.session_state.get(mode) == "replay" and replay.ready(track):
+    if replay.ready(track):
         with bento.tile(tr(pl="Przebieg w czasie", en="Over time"), rows=2, key=f"{key}_replay", caption=caption,
-                        how=tr(pl="Te same wykresy co przy odtwarzaniu: kursor biegnie razem z kropką na mapie, "
-                                  "dotknięcie albo przeciągnięcie przewija film.",
-                               en="The same charts as in the replay: the cursor runs with the dot on the map, "
-                                  "a tap or a drag scrubs the film.")):
+                        how=tr(pl="Wykresy i mapa mają jeden zegar: najedź na wykres, a kropka na mapie pokaże to "
+                                  "miejsce; dotknięcie albo przeciągnięcie przenosi tam film, a przy odtwarzaniu "
+                                  "kursor biegnie razem z kropką.",
+                               en="The charts and the map share one clock: point at a chart and the dot on the map "
+                                  "shows that spot; a tap or a drag moves the film there, and during a replay "
+                                  "the cursor runs with the dot.")):
             replay.charts(track, key=f"{key}_replaycharts_{int(activity_id)}", channel=int(activity_id),
                           height=bento.chart_height(2))
         return

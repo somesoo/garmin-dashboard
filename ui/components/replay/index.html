@@ -3,47 +3,80 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Odtwarzacz</title>
+<title>Mapa aktywności</title>
 <style>
-  :root { --ink: #fafafa; --ink2: #d5d7dc; --muted: #9aa0aa; --faint: #6b707a; --line: #1f2126; --edge: #24272d;
-          --card: #0d0e10; --hover: #15171b; --accent: #3987e5; }
+  :root { --ink: #fafafa; --ink2: #d5d7dc; --muted: #9aa0aa; --faint: #6b707a; --edge: #24272d;
+          --glass: rgba(10,11,13,.84); --hover: #1b1e23; --accent: #3987e5; }
   html, body { margin: 0; padding: 0; background: transparent; color: var(--ink); overflow: hidden;
                font: 14px/1.4 "Source Sans 3", "Source Sans Pro", -apple-system, system-ui, "Segoe UI", sans-serif;
                -webkit-tap-highlight-color: transparent; }
   #app { display: flex; flex-direction: column; gap: 10px; }
-  #mapwrap { position: relative; border-radius: 12px; overflow: hidden; background: #000; border: 1px solid var(--edge); }
-  #map { display: block; width: 100%; }
-  #chips { position: absolute; left: 8px; top: 8px; display: flex; gap: 4px; flex-wrap: wrap; max-width: calc(100% - 16px); }
-  #zoom { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; gap: 4px; }
-  #zoom button { width: 34px; height: 34px; padding: 0; border-radius: 10px; font-size: 18px; line-height: 1; }
-  #zoom button:disabled { opacity: .35; cursor: default; }
-  #map.pan { cursor: grab; } #map.pan:active { cursor: grabbing; }
+  #app.full { background: #000; padding: 10px; box-sizing: border-box; height: 100vh; }
+  #mapwrap { position: relative; flex: none; border-radius: 12px; overflow: hidden; background: #000;
+             border: 1px solid var(--edge); }
+  /* One finger scrolls the page, two move the map (the touch handlers below); full screen has no page. */
+  #map { display: block; width: 100%; touch-action: pan-x pan-y; cursor: grab; user-select: none; }
+  #app.full #map { touch-action: none; }
+  #map.near { cursor: pointer; } #map.drag { cursor: grabbing; }
+
+  button { font: inherit; color: var(--ink2); background: var(--glass); border: 1px solid var(--edge);
+           cursor: pointer; line-height: 1.3; padding: 0; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button svg { display: block; width: 18px; height: 18px; margin: auto; fill: none; stroke: currentColor;
+               stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  @media (hover: hover) { button:hover:not([aria-pressed="true"]):not(#play) { background: var(--hover); color: var(--ink); } }
+
+  /* What the colour means: one joined switch, top left. */
+  #chips { position: absolute; left: 8px; top: 8px; display: flex; border-radius: 999px; overflow: hidden;
+           border: 1px solid var(--edge); background: var(--glass); }
+  #chips button { border: 0; background: transparent; padding: 5px 12px; font-size: 13px; }
+  #chips button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+  #tools { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  #tools .pair { display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; border: 1px solid var(--edge); }
+  #tools button { width: 36px; height: 36px; }
+  #tools .pair button { border: 0; }
+  #tools .pair button + button { border-top: 1px solid var(--edge); }
+  #tools > button { border-radius: 10px; }
+  #tools button:disabled { color: var(--faint); cursor: default; background: var(--glass); }
   #legend { position: absolute; left: 8px; bottom: 8px; display: flex; align-items: center; gap: 6px;
-            background: rgba(0,0,0,.62); border-radius: 8px; padding: 4px 8px; font-size: 11px; color: var(--ink2);
-            font-variant-numeric: tabular-nums; }
-  #legend .sw { display: flex; } #legend .sw i { display: block; width: 14px; height: 8px; }
-  #attr { position: absolute; right: 6px; bottom: 4px; font-size: 10px; color: #9aa0aa; background: rgba(0,0,0,.5);
+            background: var(--glass); border-radius: 8px; padding: 4px 8px; font-size: 11.5px; color: var(--ink2);
+            font-variant-numeric: tabular-nums; pointer-events: none; }
+  #legend .sw { display: flex; } #legend .sw i { display: block; width: 13px; height: 8px; }
+  #legend .u { color: var(--muted); }
+  #attr { position: absolute; right: 6px; bottom: 4px; font-size: 10px; color: var(--muted); background: rgba(0,0,0,.5);
           padding: 0 4px; border-radius: 4px; }
   #attr a { color: inherit; }
-  button { font: inherit; color: var(--ink2); background: rgba(13,14,16,.86); border: 1px solid var(--edge);
-           border-radius: 999px; padding: 3px 11px; cursor: pointer; line-height: 1.3; }
-  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  @media (hover: hover) { button:hover:not([aria-pressed="true"]) { background: var(--hover); color: var(--ink); } }
-  #stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  @media (max-width: 520px) { #stats { grid-template-columns: repeat(3, 1fr); } }
-  .cell { background: var(--card); border: 1px solid var(--edge); border-radius: 10px; padding: 7px 10px 8px; min-width: 0; }
+  #hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.82);
+          border: 1px solid var(--edge); color: var(--ink); padding: 8px 14px; border-radius: 10px; font-size: 13px;
+          white-space: nowrap; opacity: 0; transition: opacity .18s; pointer-events: none; }
+  #hint.on { opacity: 1; }
+
+  /* The numbers of the moment under the dot; at rest one line that says how to get them. */
+  #stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0 14px; min-height: 42px;
+           align-items: center; padding: 0 2px; }
+  #rest { color: var(--muted); font-size: 13px; }
+  #stats.rest .cell, #stats:not(.rest) #rest { display: none; }
+  .cell { min-width: 0; }
   .cell .k { font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint);
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cell .v { font-size: 20px; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cell .v { font-size: 19px; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .cell .v small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 3px; }
-  #scrub { width: 100%; margin: 0; accent-color: var(--accent); cursor: pointer; }
-  #ctrl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  #play { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 650; min-width: 96px;
-          padding: 5px 14px; }
-  #clock { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
-  #note { font-size: 11.5px; color: var(--faint); }
-  @media (max-width: 520px) { .cell .v { font-size: 17px; } #play { min-width: 80px; } }
+
+  /* Play, the activity's profile as the seek bar, the speed. One row on every screen. */
+  #bar { display: flex; align-items: center; gap: 10px; }
+  #play { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--accent); color: #fff; }
+  #play svg { width: 20px; height: 20px; fill: currentColor; stroke: none; }
+  #stripwrap { flex: 1; min-width: 0; touch-action: pan-y; cursor: ew-resize; user-select: none; }
+  #strip { display: block; width: 100%; height: 44px; }
+  #speed { flex: none; min-width: 54px; height: 34px; padding: 0 10px; border-radius: 999px; font-weight: 600;
+           font-variant-numeric: tabular-nums; }
+  .hidden { display: none !important; }
+  @media (max-width: 520px) {
+    .cell:nth-child(n+6) { display: none; }       /* #rest is the first child: four cells stay */
+    .cell .v { font-size: 17px; } #stats { gap: 0 8px; }
+    #chips button { padding: 5px 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) { #hint { transition: none; } }
 </style>
 </head>
 <body>
@@ -51,27 +84,35 @@
   <div id="mapwrap">
     <canvas id="map"></canvas>
     <div id="chips" role="group"></div>
-    <div id="zoom" role="group">
-      <button id="zin" type="button">+</button>
-      <button id="zout" type="button">−</button>
-      <button id="zfollow" type="button" aria-pressed="true">⌖</button>
+    <div id="tools">
+      <div class="pair">
+        <button id="zin" type="button"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button id="zout" type="button"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+      </div>
+      <button id="zfit" type="button"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><circle cx="12" cy="12" r="1.5"/></svg></button>
+      <button id="full" type="button"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7"/></svg></button>
     </div>
     <div id="legend"></div>
-    <div id="attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
+    <div id="attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></div>
+    <div id="hint" role="status"></div>
   </div>
-  <div id="stats"></div>
-  <input id="scrub" type="range" min="0" max="1000" step="1" value="0" />
-  <div id="ctrl"><button id="play" type="button"></button><span id="speeds" role="group"></span><span id="clock"></span></div>
-  <div id="note"></div>
+  <div id="stats" class="rest"></div>
+  <div id="bar">
+    <button id="play" type="button"></button>
+    <div id="stripwrap"><canvas id="strip"></canvas></div>
+    <button id="speed" type="button"></button>
+  </div>
 </div>
 <script>
 "use strict";
-/* The Streamlit component protocol by hand, as in ../globe/ and ../herochart/. */
+/* One map for an activity: the track coloured by a measure, read by pointing at it, moved like any
+   map, and played as a film from the same place. The Streamlit component protocol by hand, as in
+   ../globe/ and ../herochart/. */
 function send(type, data) { window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, "*"); }
 const $ = (id) => document.getElementById(id);
 
 // OpenStreetMap standard tiles, as the globe's flat map (CARTO's rasters want a key now).
-// The canvas filter turns them dark, so the trail stays the loudest thing on the map.
+// The canvas filter turns them dark, so the track stays the loudest thing on the map.
 const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const TILE_FILTER = {
   light: "saturate(0.35) brightness(1.04) contrast(0.92)",
@@ -80,15 +121,23 @@ const TILE_FILTER = {
 const FILTER_OK = "filter" in CanvasRenderingContext2D.prototype;
 const PACE_WINDOW = 30;       // seconds the pace figure looks back
 const TILE_CACHE = 400;
+const MAX_ZOOM = 19;
+const REACH = { mouse: 22, touch: 30 };   // px from the track that still count as pointing at it
+const ICON = {
+  play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>',
+  again: '<svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4.5h4.5"/></svg>',
+};
 
 let A = null;                 // the last render's args
 let D = null;                 // the track, prepared
-const S = { pos: 0, playing: false, speed: 10, measure: "pace", last: 0, raf: 0, zoomStep: 0, follow: true };
-const V = { w: 0, h: 0, dpr: 1, zoom: 0, cx: 0, cy: 0 };   // map view
+// pos: where the film is. peek: where the pointer is (a look, not a move) -- it wins while the film stands.
+const S = { pos: 0, peek: null, playing: false, speed: 10, measure: "pace", last: 0, raf: 0, panned: false, full: false };
+const V = { w: 0, h: 0, dpr: 1, zoom: 0, fit: 0, cx: 0, cy: 0, home: [0, 0] };   // map view
 const tiles = new Map();
 const base = document.createElement("canvas");
-let ctx, bctx;
-// The charts in the other column (../replaycharts/) share this clock: we publish it, they send seeks.
+let ctx, bctx, sctx;
+// The charts in the other column (../replaycharts/) share this clock: we publish it, they send seeks and peeks.
 let channel = null, channelName = null;
 
 /* ------------------------------------------------------------ helpers */
@@ -123,12 +172,16 @@ function quantile(values, q) {
   if (!v.length) return 0;
   return v[Math.min(v.length - 1, Math.max(0, Math.round(q * (v.length - 1))))];
 }
+const shown = () => (S.peek != null && !S.playing ? S.peek : S.pos);
+const atRest = () => !S.playing && S.peek == null && S.pos <= 0;
+const zoomed = () => V.zoom > V.fit + 0.01;
 
 /* ------------------------------------------------------------ prepare */
 
 function prepare() {
   const d = A.data;
-  D = { t: d.t, km: d.km, lat: d.lat, lon: d.lon, hr: d.hr, ele: d.ele, pace: d.pace, cad: d.cad };
+  D = { t: d.t, km: d.km, lat: d.lat, lon: d.lon, hr: d.hr, ele: d.ele, pace: d.pace, cad: d.cad,
+        playable: d.playable !== false };
   D.T = d.t[d.t.length - 1];
   // Spherical Mercator, world = 1.
   D.ux = d.lon.map((lon) => (lon + 180) / 360);
@@ -136,6 +189,7 @@ function prepare() {
     const r = (lat * Math.PI) / 180;
     return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2;
   });
+  D.box = [Math.min(...D.ux), Math.max(...D.ux), Math.min(...D.uy), Math.max(...D.uy)];
   // Climb so far: positive changes of a smoothed profile, so GPS jitter does not count as hills.
   if (D.ele) {
     const sm = D.ele.map((_, i) => {
@@ -146,23 +200,34 @@ function prepare() {
     D.gain = [0];
     for (let i = 1; i < sm.length; i++) D.gain.push(D.gain[i - 1] + Math.max(0, sm[i] - sm[i - 1]));
   }
+  // Kilometre marks: whole kilometres, thinned so a marathon does not wear forty of them.
+  const total = D.km[D.km.length - 1];
+  const step = [1, 2, 5, 10, 20, 50, 100].find((s) => total / s <= 12) || 200;
+  D.marks = [];
+  for (let k = step, i = 0; k < total - 0.15 * step; k += step) {
+    while (i < D.km.length - 2 && D.km[i + 1] < k) i++;
+    const span = D.km[i + 1] - D.km[i];
+    const f = span > 0 ? clamp((k - D.km[i]) / span, 0, 1) : 0;
+    D.marks.push({ km: k, ux: D.ux[i] + (D.ux[i + 1] - D.ux[i]) * f, uy: D.uy[i] + (D.uy[i + 1] - D.uy[i]) * f });
+  }
   // The measures the track can colour by; pace runs backwards (fast = the light end on dark).
   D.measures = [];
-  if (D.pace) D.measures.push({ key: "pace", label: A.text.m_pace, series: D.pace, reverse: true });
-  if (D.hr) D.measures.push({ key: "hr", label: A.text.m_hr, series: D.hr, reverse: false });
-  if (D.ele) D.measures.push({ key: "ele", label: A.text.m_ele, series: D.ele, reverse: false });
+  if (D.pace) D.measures.push({ key: "pace", label: A.text.m_pace, unit: "/km", series: D.pace, reverse: true });
+  if (D.hr) D.measures.push({ key: "hr", label: A.text.m_hr, unit: "bpm", series: D.hr, reverse: false });
+  if (D.ele) D.measures.push({ key: "ele", label: A.text.m_ele, unit: "m", series: D.ele, reverse: false });
   if (!D.measures.some((m) => m.key === S.measure)) S.measure = D.measures.length ? D.measures[0].key : null;
   for (const m of D.measures) {
     m.lo = quantile(m.series, 0.05);
     m.hi = quantile(m.series, 0.95);
     if (!(m.hi > m.lo)) { m.lo = Math.min(...m.series); m.hi = Math.max(...m.series); }
-    // Smoothed copy for the strip underneath.
+    // Smoothed copy for the seek bar.
     const w = Math.max(1, Math.round(m.series.length / 60));
     m.smooth = m.series.map((_, i) => {
       let s = 0, n = 0;
       for (let k = Math.max(0, i - w); k <= Math.min(m.series.length - 1, i + w); k++) { s += m.series[k]; n++; }
       return s / n;
     });
+    m.slo = Math.min(...m.smooth); m.shi = Math.max(...m.smooth);
   }
   buildStaticUi();
 }
@@ -171,50 +236,38 @@ function measure() { return D.measures.find((m) => m.key === S.measure) || null;
 function binOf(m, value) {
   const steps = A.theme.ramp.length;
   const share = (value - m.lo) / (m.hi - m.lo || 1);
-  let idx = clamp(Math.floor(share * steps), 0, steps - 1);
-  const ramp = m.reverse ? steps - 1 - idx : idx;      // pace: low value = fast = the light end
-  return A.theme.ramp[ramp];
+  const idx = clamp(Math.floor(share * steps), 0, steps - 1);
+  return A.theme.ramp[m.reverse ? steps - 1 - idx : idx];      // pace: low value = fast = the light end
 }
-function formatValue(m, v) {
-  if (m.key === "pace") return fmtPace(v);
-  return Math.round(v).toString();
-}
+const formatValue = (m, v) => (m.key === "pace" ? fmtPace(v) : Math.round(v).toString());
 
 /* ------------------------------------------------------------ static UI */
 
 function buildStaticUi() {
   const T = A.text;
-  // Colour chips (inside the film: changing the colour must not restart a Streamlit run).
+  // The colour switch lives inside the map: changing it must not restart a Streamlit run.
   const chips = $("chips");
   chips.innerHTML = "";
   chips.setAttribute("aria-label", T.colour);
-  if (D.measures.length > 1) {
-    for (const m of D.measures) {
-      const b = document.createElement("button");
-      b.type = "button"; b.textContent = m.label; b.dataset.key = m.key;
-      b.onclick = () => { S.measure = m.key; syncChips(); drawBase(); paint(); };
-      chips.appendChild(b);
-    }
-  }
-  // Speeds.
-  const sp = $("speeds");
-  sp.innerHTML = "";
-  sp.setAttribute("aria-label", T.speed);
-  for (const x of A.speeds) {
+  chips.classList.toggle("hidden", D.measures.length < 2);
+  for (const m of D.measures) {
     const b = document.createElement("button");
-    b.type = "button"; b.textContent = `×${x}`; b.dataset.speed = x;
-    b.title = `${x} ${T.speed_hint}`;
-    b.onclick = () => { S.speed = x; syncChips(); };
-    sp.appendChild(b);
+    b.type = "button"; b.textContent = m.label; b.dataset.key = m.key;
+    b.onclick = () => { S.measure = m.key; syncUi(); paint(); };
+    chips.appendChild(b);
   }
   if (!A.speeds.includes(S.speed)) S.speed = A.speeds[0];
-  // Numbers beside the map: the cells that exist for this track.
-  const cells = [["distance", "dist"], ["time", "time"], ["pace", "pace"]];
+  // The cells that exist for this track. On a phone the first four stay (CSS).
+  const cells = [["distance", "dist"]];
+  if (D.playable) cells.push(["time", "time"]);
+  if (D.playable || D.pace) cells.push(["pace", "pace"]);
   if (D.hr) cells.push(["hr", "hr"]);
   if (D.ele) cells.push(["elevation", "ele"], ["climb", "gain"]);
   if (D.cad) cells.push(["cadence", "cad"]);
   const st = $("stats");
-  st.innerHTML = "";
+  st.innerHTML = '<div id="rest"></div>';
+  const touch = window.matchMedia("(hover: none)").matches;
+  $("rest").textContent = D.playable ? (touch ? T.rest_touch : T.rest_mouse) : (touch ? T.rest_touch_still : T.rest_mouse_still);
   for (const [label, id] of cells) {
     const c = document.createElement("div");
     c.className = "cell";
@@ -222,98 +275,151 @@ function buildStaticUi() {
     c.firstChild.textContent = T[label];
     st.appendChild(c);
   }
-  $("note").textContent = `×${S.speed} = ${S.speed} ${T.speed_hint}`;
-  $("scrub").setAttribute("aria-label", T.seek);
-  $("zin").setAttribute("aria-label", T.zoom_in); $("zin").title = T.zoom_in;
-  $("zout").setAttribute("aria-label", T.zoom_out); $("zout").title = T.zoom_out;
-  $("zfollow").setAttribute("aria-label", T.follow); $("zfollow").title = T.follow;
-  syncChips();
-  syncZoomUi();
+  for (const [id, label] of [["zin", T.zoom_in], ["zout", T.zoom_out], ["zfit", T.fit], ["full", T.full],
+                             ["stripwrap", T.seek]]) {
+    $(id).setAttribute("aria-label", label); $(id).title = label;
+  }
+  $("play").classList.toggle("hidden", !D.playable);
+  $("speed").classList.toggle("hidden", !D.playable);
+  $("full").classList.toggle("hidden", !document.fullscreenEnabled);
+  syncUi();
 }
 
-function syncChips() {
+function syncUi() {
   for (const b of $("chips").children) b.setAttribute("aria-pressed", String(b.dataset.key === S.measure));
-  for (const b of $("speeds").children) b.setAttribute("aria-pressed", String(Number(b.dataset.speed) === S.speed));
-  $("note").textContent = `×${S.speed} = ${S.speed} ${A.text.speed_hint}`;
+  $("speed").textContent = `×${S.speed}`;
+  $("speed").title = `${A.text.speed}: ${S.speed} ${A.text.speed_hint}`;
+  $("speed").setAttribute("aria-label", $("speed").title);
+  $("zin").disabled = V.zoom >= MAX_ZOOM;
+  $("zout").disabled = !zoomed();
+  $("zfit").classList.toggle("hidden", !zoomed());
   const m = measure();
   const lg = $("legend");
-  if (!m) { lg.style.display = "none"; return; }
-  lg.style.display = "flex";
+  lg.classList.toggle("hidden", !m);
+  if (!m) return;
   // The ramp always reads dark -> light; pace is the one that flips what the ends mean
   // (the light end is fast), so its labels run slow -> fast.
   const left = m.reverse ? m.hi : m.lo, right = m.reverse ? m.lo : m.hi;
-  lg.innerHTML = `<span>${formatValue(m, left)}</span><span class="sw">${A.theme.ramp.map((c) => `<i style="background:${c}"></i>`).join("")}</span><span>${formatValue(m, right)}</span>`;
+  lg.innerHTML = `<span>${formatValue(m, left)}</span><span class="sw">${A.theme.ramp.map((c) => `<i style="background:${c}"></i>`).join("")}</span><span>${formatValue(m, right)}</span><span class="u">${m.unit}</span>`;
 }
 
-function setPlayLabel() {
+function setPlayIcon() {
   const T = A.text;
-  const end = S.pos >= D.T;
-  const text = S.playing ? `❚❚ ${T.pause}` : end ? `↺ ${T.again}` : `▶ ${T.play}`;
-  // Only when it changes: rewriting the button's text sixty times a second is churn under a pressed button.
+  const state = S.playing ? "pause" : S.pos >= D.T ? "again" : "play";
   const button = $("play");
-  if (button.textContent !== text) button.textContent = text;
-  button.setAttribute("aria-label", S.playing ? T.pause : T.play);
+  // Only when it changes: rewriting the button sixty times a second is churn under a pressed button.
+  if (button.dataset.state === state) return;
+  button.dataset.state = state;
+  button.innerHTML = ICON[state];
+  button.setAttribute("aria-label", T[state]); button.title = T[state];
 }
 
-/* ------------------------------------------------------------ map */
+let hintTimer = 0;
+function hint(text) {
+  const el = $("hint");
+  el.textContent = text;
+  el.classList.add("on");
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => el.classList.remove("on"), 1600);
+}
+
+/* ------------------------------------------------------------ view */
+
+const worldPx = () => 256 * 2 ** V.zoom;
+const sxOf = (ux) => V.w / 2 + (ux - V.cx) * worldPx();
+const syOf = (uy) => V.h / 2 + (uy - V.cy) * worldPx();
 
 function layout() {
   const wrap = $("mapwrap");
   const w = Math.max(220, Math.floor(wrap.clientWidth || document.body.clientWidth));
-  const h = Math.max(220, A.map_height | 0);
+  // Full screen: whatever the numbers and the bar leave of the window.
+  const rest = $("stats").offsetHeight + $("bar").offsetHeight + 20 + 20 + 2;
+  const h = S.full ? Math.max(220, window.innerHeight - rest) : Math.max(220, A.map_height | 0);
   V.w = w; V.h = h; V.dpr = window.devicePixelRatio || 1;
   for (const c of [$("map"), base]) { c.width = Math.round(w * V.dpr); c.height = Math.round(h * V.dpr); }
   $("map").style.height = `${h}px`;
   ctx = $("map").getContext("2d");
   bctx = base.getContext("2d");
-  // Fit the route in the box with a margin, centred.
-  const pad = 36;
-  const minx = Math.min(...D.ux), maxx = Math.max(...D.ux), miny = Math.min(...D.uy), maxy = Math.max(...D.uy);
-  const sx = Math.max(maxx - minx, 1e-7), sy = Math.max(maxy - miny, 1e-7);
-  const fitPx = Math.min((w - 2 * pad) / sx, (h - 2 * pad) / sy);
+  const strip = $("strip");
+  strip.width = Math.round(strip.clientWidth * V.dpr); strip.height = Math.round(strip.clientHeight * V.dpr);
+  sctx = strip.getContext("2d");
+  // The whole route in the box with a margin, centred: zoom never goes further out than this.
+  const pad = 40;
+  const [minx, maxx, miny, maxy] = D.box;
+  const fitPx = Math.min((w - 2 * pad) / Math.max(maxx - minx, 1e-7), (h - 2 * pad) / Math.max(maxy - miny, 1e-7));
+  const was = zoomed();
   V.fit = clamp(Math.log2(fitPx / 256), 1, 18);
   V.home = [(minx + maxx) / 2, (miny + maxy) / 2];
-  applyZoom(true);
+  if (!was) goHome(); else V.zoom = clamp(V.zoom, V.fit, MAX_ZOOM);
 }
 
-/* The camera. Zoom 0 shows the whole route; each step in is twice as close. Zoomed in, the camera
-   follows the runner (the default: a finger must keep scrolling the page, so there is no touch pan)
-   or stays where a mouse drag left it. */
-const MAX_STEPS = 5;
-function applyZoom(jump) {
-  V.zoom = clamp(V.fit + S.zoomStep, 1, 19);
-  if (S.zoomStep === 0) { [V.cx, V.cy] = V.home; return; }
-  if (S.follow || jump) followHead(true);
+function goHome() { V.zoom = V.fit; [V.cx, V.cy] = V.home; S.panned = false; }
+function redraw() { syncUi(); drawBase(); paint(); }
+// After any change of the view: back at the whole route means home; otherwise the centre stays on the route.
+function settle() {
+  if (!zoomed()) goHome();
+  else { V.cx = clamp(V.cx, D.box[0], D.box[1]); V.cy = clamp(V.cy, D.box[2], D.box[3]); }
+  redraw();
+}
+// Zoom by dz levels keeping the point under (px, py) where it is.
+function zoomAt(dz, px, py) {
+  const z = clamp(V.zoom + dz, V.fit, MAX_ZOOM);
+  if (z === V.zoom) return;
+  const wx = V.cx + (px - V.w / 2) / worldPx(), wy = V.cy + (py - V.h / 2) / worldPx();
+  V.zoom = z;
+  V.cx = wx - (px - V.w / 2) / worldPx(); V.cy = wy - (py - V.h / 2) / worldPx();
+  settle();
+}
+function panBy(dx, dy) {
+  if (!zoomed()) return false;
+  V.cx -= dx / worldPx(); V.cy -= dy / worldPx();
+  S.panned = true;               // the hand has the camera now, not the dot
+  settle();
+  return true;
 }
 function headAt() {
-  const i = find(S.pos);
-  return [lerpAt(D.ux, S.pos, i), lerpAt(D.uy, S.pos, i)];
+  const x = shown(), i = find(x);
+  return [lerpAt(D.ux, x, i), lerpAt(D.uy, x, i)];
 }
-// Move the camera toward the runner; true when it moved (the base has to be redrawn).
-function followHead(snap) {
-  if (S.zoomStep === 0 || !S.follow) return false;
+// The buttons zoom toward the dot when there is one on screen, else toward the middle.
+function zoomButton(dz) {
+  let px = V.w / 2, py = V.h / 2;
+  if (!atRest()) {
+    const [hx, hy] = headAt();
+    const x = sxOf(hx), y = syOf(hy);
+    if (x >= 0 && x <= V.w && y >= 0 && y <= V.h) { px = x; py = y; }
+  }
+  zoomAt(dz, px, py);
+}
+// While the film runs zoomed in, the camera goes after the dot -- until a hand moves the map.
+function follow() {
+  if (!S.playing || !zoomed() || S.panned) return false;
   const [hx, hy] = headAt();
-  const k = snap ? 1 : 0.2;
-  const nx = V.cx + (hx - V.cx) * k, ny = V.cy + (hy - V.cy) * k;
-  const moved = Math.abs(nx - V.cx) * worldPx() > 0.3 || Math.abs(ny - V.cy) * worldPx() > 0.3;
-  if (moved || snap) { V.cx = nx; V.cy = ny; }
-  return moved || snap;
+  const nx = V.cx + (hx - V.cx) * 0.2, ny = V.cy + (hy - V.cy) * 0.2;
+  if (Math.abs(nx - V.cx) * worldPx() < 0.3 && Math.abs(ny - V.cy) * worldPx() < 0.3) return false;
+  V.cx = nx; V.cy = ny;
+  return true;
 }
-function setZoomStep(step) {
-  S.zoomStep = clamp(step, 0, MAX_STEPS);
-  applyZoom(true);
-  syncZoomUi();
-  drawBase(); paint();
+// A seek from elsewhere (the bar, the charts) must not leave the dot off the map.
+function reveal() {
+  if (!zoomed()) return false;
+  const [hx, hy] = headAt();
+  const x = sxOf(hx), y = syOf(hy), m = 28;
+  if (x >= m && x <= V.w - m && y >= m && y <= V.h - m) return false;
+  V.cx = hx; V.cy = hy;
+  return true;
 }
-function syncZoomUi() {
-  $("zin").disabled = S.zoomStep >= MAX_STEPS;
-  $("zout").disabled = S.zoomStep <= 0;
-  $("zfollow").setAttribute("aria-pressed", String(S.follow));
-  $("zfollow").style.display = S.zoomStep > 0 ? "" : "none";
+// The sample nearest to a point of the canvas, and how far it is in px.
+function nearest(px, py) {
+  let best = -1, bd = Infinity;
+  for (let i = 0; i < D.ux.length; i++) {
+    const dx = sxOf(D.ux[i]) - px, dy = syOf(D.uy[i]) - py, d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = i; }
+  }
+  return { i: best, d: Math.sqrt(bd) };
 }
-const worldPx = () => 256 * 2 ** V.zoom;
-const sxOf = (ux) => V.w / 2 + (ux - V.cx) * worldPx();
-const syOf = (uy) => V.h / 2 + (uy - V.cy) * worldPx();
+
+/* ------------------------------------------------------------ drawing */
 
 function requestTile(z, x, y) {
   const key = `${z}/${x}/${y}`;
@@ -345,6 +451,7 @@ function schedule() {            // tiles arrive one by one: repaint the base on
 }
 
 function drawBase() {
+  if (!bctx) return;
   const { w, h, dpr } = V;
   bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   bctx.clearRect(0, 0, w, h);
@@ -371,92 +478,156 @@ function drawBase() {
     }
   }
   if (!FILTER_OK && A.theme.dark) { bctx.fillStyle = "rgba(0,0,0,.6)"; bctx.fillRect(0, 0, w, h); }
-  // The whole route, quiet: where the dot is going.
+  // The whole route, quiet: the shape under the colour, and where the dot is going.
   bctx.lineCap = "round"; bctx.lineJoin = "round";
-  bctx.strokeStyle = A.theme.dark ? "rgba(255,255,255,.2)" : "rgba(0,0,0,.2)";
+  bctx.strokeStyle = A.theme.dark ? "rgba(255,255,255,.22)" : "rgba(0,0,0,.2)";
   bctx.lineWidth = 7;
   bctx.beginPath();
   D.ux.forEach((u, i) => { const x = sxOf(u), y = syOf(D.uy[i]); i ? bctx.lineTo(x, y) : bctx.moveTo(x, y); });
   bctx.stroke();
 }
 
-function drawTrail() {
+function drawMap() {
   const { dpr } = V;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(base, 0, 0);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.lineWidth = 4.5;
   const m = measure();
-  const i = find(S.pos);
-  const hx = lerpAt(D.ux, S.pos, i), hy = lerpAt(D.uy, S.pos, i);
-  const colourOf = (k) => (m ? binOf(m, (m.series[k] + m.series[Math.min(k + 1, m.series.length - 1)]) / 2) : A.theme.series);
-  for (let k = 0; k < i; k++) {
-    ctx.strokeStyle = colourOf(k);
-    ctx.beginPath();
-    ctx.moveTo(sxOf(D.ux[k]), syOf(D.uy[k]));
-    ctx.lineTo(sxOf(D.ux[k + 1]), syOf(D.uy[k + 1]));
-    ctx.stroke();
+  const x = shown(), i = find(x), last = D.ux.length - 1;
+  const hx = lerpAt(D.ux, x, i), hy = lerpAt(D.uy, x, i);
+  // Standing still or being pointed at, the whole track wears the colour; a film (or a place
+  // it was moved to) colours only what is behind the dot.
+  const whole = atRest() || (S.peek != null && !S.playing);
+  const upTo = whole ? last : i;
+  const colourOf = (k) => (m ? binOf(m, (m.series[k] + m.series[Math.min(k + 1, last)]) / 2) : A.theme.series);
+  // One path per shade, not one per segment.
+  const paths = new Map();
+  for (let k = 0; k < upTo; k++) {
+    const c = colourOf(k);
+    let p = paths.get(c);
+    if (!p) { p = new Path2D(); paths.set(c, p); }
+    p.moveTo(sxOf(D.ux[k]), syOf(D.uy[k]));
+    p.lineTo(sxOf(D.ux[k + 1]), syOf(D.uy[k + 1]));
   }
-  ctx.strokeStyle = colourOf(i);
-  ctx.beginPath();
-  ctx.moveTo(sxOf(D.ux[i]), syOf(D.uy[i]));
-  ctx.lineTo(sxOf(hx), syOf(hy));
-  ctx.stroke();
-  // Start (a ring) and the runner.
-  ctx.fillStyle = A.theme.ink; ctx.strokeStyle = A.theme.surface; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(sxOf(D.ux[0]), syOf(D.uy[0]), 4.5, 0, 7); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = "#fff"; ctx.strokeStyle = A.theme.accent; ctx.lineWidth = 3.5;
-  ctx.beginPath(); ctx.arc(sxOf(hx), syOf(hy), 7, 0, 7); ctx.fill(); ctx.stroke();
+  if (!whole) {
+    const c = colourOf(i);
+    let p = paths.get(c);
+    if (!p) { p = new Path2D(); paths.set(c, p); }
+    p.moveTo(sxOf(D.ux[i]), syOf(D.uy[i]));
+    p.lineTo(sxOf(hx), syOf(hy));
+  }
+  for (const [c, p] of paths) { ctx.strokeStyle = c; ctx.stroke(p); }
+  // Kilometre marks.
+  ctx.font = '600 10px "Source Sans 3", "Source Sans Pro", system-ui, sans-serif';
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const k of D.marks) {
+    const px = sxOf(k.ux), py = syOf(k.uy);
+    if (px < -10 || py < -10 || px > V.w + 10 || py > V.h + 10) continue;
+    ctx.fillStyle = "rgba(0,0,0,.78)"; ctx.strokeStyle = "rgba(255,255,255,.55)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(px, py, 8.5, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#fff";
+    ctx.fillText(String(k.km), px, py + 0.5);
+  }
+  // Start: a light dot. Finish: a dark one with a light ring.
+  ctx.lineWidth = 2.5;
+  ctx.fillStyle = "#000"; ctx.strokeStyle = "#fff";
+  ctx.beginPath(); ctx.arc(sxOf(D.ux[last]), syOf(D.uy[last]), 5, 0, 7); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#fff"; ctx.strokeStyle = "#000";
+  ctx.beginPath(); ctx.arc(sxOf(D.ux[0]), syOf(D.uy[0]), 5, 0, 7); ctx.fill(); ctx.stroke();
+  // The dot: only when it stands for a moment someone asked about.
+  if (!atRest()) {
+    ctx.fillStyle = "#fff"; ctx.strokeStyle = A.theme.accent; ctx.lineWidth = 3.5;
+    ctx.beginPath(); ctx.arc(sxOf(hx), syOf(hy), 7.5, 0, 7); ctx.fill(); ctx.stroke();
+  }
 }
 
-/* ------------------------------------------------------------ numbers + strip */
+// The seek bar is the activity's profile in the chosen measure: where it was hard is where to look.
+function drawStrip() {
+  const canvas = $("strip");
+  const w = canvas.clientWidth, h = canvas.clientHeight, dpr = V.dpr;
+  if (!w || !sctx) return;
+  sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  sctx.clearRect(0, 0, w, h);
+  const m = measure();
+  const px = (shown() / D.T) * w, bottom = h - 4, top = 4;
+  const xOf = (t) => (t / D.T) * w;
+  if (m) {
+    const span = m.shi - m.slo || 1;
+    // Up is more of the measure; for pace up is faster, as on every pace axis here.
+    const yOf = (v) => top + (bottom - top - 6) * (m.reverse ? (v - m.slo) / span : 1 - (v - m.slo) / span);
+    const area = new Path2D();
+    area.moveTo(0, bottom);
+    D.t.forEach((t, k) => area.lineTo(xOf(t), yOf(m.smooth[k])));
+    area.lineTo(w, bottom); area.closePath();
+    const rest = atRest();
+    for (const [x0, x1, fill] of [[0, rest ? w : px, A.theme.accent + (rest ? "66" : "aa")], [rest ? w : px, w, "rgba(154,160,170,.28)"]]) {
+      if (x1 <= x0) continue;
+      sctx.save(); sctx.beginPath(); sctx.rect(x0, 0, x1 - x0, h); sctx.clip();
+      sctx.fillStyle = fill; sctx.fill(area);
+      sctx.restore();
+    }
+  } else {
+    sctx.fillStyle = "rgba(154,160,170,.28)"; sctx.fillRect(0, h / 2 - 2, w, 4);
+    sctx.fillStyle = A.theme.accent; sctx.fillRect(0, h / 2 - 2, px, 4);
+  }
+  sctx.fillStyle = A.theme.grid; sctx.fillRect(0, bottom, w, 1);
+  // The playhead: a line with a handle, so it reads as something to grab.
+  const hxp = clamp(px, 5, w - 5);
+  sctx.fillStyle = "#fff";
+  sctx.fillRect(hxp - 1, 0, 2, h);
+  sctx.beginPath(); sctx.arc(hxp, bottom, 5, 0, 7); sctx.fill();
+}
 
 function updateStats() {
-  const i = find(S.pos);
+  $("stats").classList.toggle("rest", atRest());
+  if (atRest()) return;
+  const x = shown(), i = find(x);
   const set = (id, text, unit) => {
     const el = $(`v_${id}`);
     if (!el) return;
     el.textContent = text;
     if (unit) { const s = document.createElement("small"); s.textContent = unit; el.appendChild(s); }
   };
-  const km = lerpAt(D.km, S.pos, i);
+  const km = lerpAt(D.km, x, i);
   set("dist", km.toFixed(2), "km");
-  set("time", fmtTime(S.pos));
-  // Pace of the last half minute: a stop at the lights reads "—", not a pace of 40 min/km.
-  const back = Math.max(0, S.pos - PACE_WINDOW);
-  const dk = km - lerpAt(D.km, back, find(back)), dt = S.pos - back;
-  set("pace", dt >= 5 && dk * 1000 > dt * 0.4 ? fmtPace(dt / 60 / dk) : "—", "/km");
-  if (D.hr) set("hr", String(Math.round(lerpAt(D.hr, S.pos, i))), "bpm");
+  set("time", fmtTime(x));
+  if (D.playable) {
+    // Pace of the last half minute: a stop at the lights reads "—", not a pace of 40 min/km.
+    const back = Math.max(0, x - PACE_WINDOW);
+    const dk = km - lerpAt(D.km, back, find(back)), dt = x - back;
+    set("pace", dt >= 5 && dk * 1000 > dt * 0.4 ? fmtPace(dt / 60 / dk) : "—", "/km");
+  } else if (D.pace) set("pace", fmtPace(lerpAt(D.pace, x, i)), "/km");
+  if (D.hr) set("hr", String(Math.round(lerpAt(D.hr, x, i))), "bpm");
   if (D.ele) {
-    set("ele", String(Math.round(lerpAt(D.ele, S.pos, i))), "m");
-    set("gain", `+${Math.round(lerpAt(D.gain, S.pos, i))}`, "m");
+    set("ele", String(Math.round(lerpAt(D.ele, x, i))), "m");
+    set("gain", `+${Math.round(lerpAt(D.gain, x, i))}`, "m");
   }
-  if (D.cad) set("cad", String(Math.round(lerpAt(D.cad, S.pos, i))), "spm");
-  $("clock").textContent = `${fmtTime(S.pos)} / ${fmtTime(D.T)}`;
+  if (D.cad) set("cad", String(Math.round(lerpAt(D.cad, x, i))), "spm");
 }
 
-// What the charts beside the map need to know: where we are and whether the film runs.
+// What the charts beside the map need to know: where the dot is and whether the film runs.
 function publish() {
-  if (channel) channel.postMessage({ type: "pos", pos: S.pos, playing: S.playing, T: D.T, speed: S.speed });
+  if (channel) channel.postMessage({ type: "pos", pos: shown(), playing: S.playing, rest: atRest(),
+                                     whole: atRest() || (S.peek != null && !S.playing), T: D.T });
 }
 
 function paint() {
   if (!D || !ctx) return;
-  // The state buttons come first and a failing drawing must not take the controls with it.
-  setPlayLabel();
+  // The state button comes first and a failing drawing must not take the controls with it.
+  setPlayIcon();
   try {
-    if (followHead(!S.playing)) drawBase();        // the camera runs after the dot: the map moves under it
-    drawTrail();
+    if (follow()) drawBase();        // the camera runs after the dot: the map moves under it
+    drawMap();
+    drawStrip();
     updateStats();
   } catch (error) {
-    console.error("replay paint failed:", error);
+    console.error("map paint failed:", error);
   }
-  const scrub = $("scrub");
-  if (document.activeElement !== scrub || S.playing) scrub.value = String(Math.round((S.pos / D.T) * 1000));
   publish();
 }
 
-/* ------------------------------------------------------------ playback */
+/* ------------------------------------------------------------ the clock */
 
 function frame(now) {
   S.raf = 0;
@@ -469,9 +640,13 @@ function frame(now) {
   if (S.playing) S.raf = requestAnimationFrame(frame);
 }
 function start() {
+  if (!D.playable) return;
   if (S.pos >= D.T) S.pos = 0;
+  S.peek = null;
   S.playing = true;
+  S.panned = false;                 // pressing play hands the camera back to the dot
   S.last = performance.now();
+  if (reveal()) drawBase();
   if (!S.raf) S.raf = requestAnimationFrame(frame);
 }
 // Pausing does not depend on drawing: the state flips and the loop is cancelled first.
@@ -480,37 +655,161 @@ function stop() {
   if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
   paint();
 }
+// Move the film (a press, a drag, a tap on the track).
 function seek(x) {
   S.pos = clamp(x, 0, D.T);
+  S.peek = null;
+  if (reveal()) drawBase();
   if (!S.playing) paint();
 }
+// Look at a moment without moving the film (a mouse over the track or over a chart).
+function peek(x) {
+  if (S.playing) x = null;
+  if (x != null) x = clamp(x, 0, D.T);
+  if (x === S.peek) return;
+  S.peek = x;
+  if (x != null && reveal()) drawBase();
+  paint();
+}
+
+/* ------------------------------------------------------------ input */
 
 $("play").onclick = () => (S.playing ? stop() : start());
-$("zin").onclick = () => setZoomStep(S.zoomStep + 1);
-$("zout").onclick = () => setZoomStep(S.zoomStep - 1);
-$("zfollow").onclick = () => { S.follow = !S.follow; syncZoomUi(); if (S.follow) { followHead(true); drawBase(); } paint(); };
-// A mouse can pan a zoomed map (that turns following off); a finger cannot -- it keeps scrolling the page.
+$("speed").onclick = () => { S.speed = A.speeds[(A.speeds.indexOf(S.speed) + 1) % A.speeds.length]; syncUi(); };
+$("zin").onclick = () => zoomButton(1);
+$("zout").onclick = () => zoomButton(-1);
+$("zfit").onclick = () => { goHome(); redraw(); };
+$("full").onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else $("app").requestFullscreen().catch(() => {});
+};
+document.addEventListener("fullscreenchange", () => {
+  S.full = !!document.fullscreenElement;
+  $("app").classList.toggle("full", S.full);
+  if (!S.full) goHome();
+  layout(); redraw(); fit();
+});
+
 {
   const map = $("map");
+  const at = (e) => { const r = map.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+
+  /* A mouse: moving over the track reads it, a click moves the film there, a drag moves the map,
+     a double click zooms in. The wheel belongs to the page unless Ctrl/⌘ is held (a trackpad pinch
+     arrives that way), so scrolling past the map never changes it. */
   let drag = null;
   map.addEventListener("pointerdown", (e) => {
-    if (e.pointerType !== "mouse" || S.zoomStep === 0) return;
-    drag = { x: e.clientX, y: e.clientY };
+    if (e.pointerType !== "mouse" || e.button !== 0) return;
+    drag = { x: e.clientX, y: e.clientY, moved: false };
     map.setPointerCapture(e.pointerId);
   });
   map.addEventListener("pointermove", (e) => {
-    map.classList.toggle("pan", e.pointerType === "mouse" && S.zoomStep > 0);
-    if (!drag) return;
-    V.cx -= (e.clientX - drag.x) / worldPx(); V.cy -= (e.clientY - drag.y) / worldPx();
-    drag = { x: e.clientX, y: e.clientY };
-    if (S.follow) { S.follow = false; syncZoomUi(); }
-    drawBase(); paint();
+    if (e.pointerType !== "mouse") return;
+    if (drag) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+      drag.moved = true; drag.x = e.clientX; drag.y = e.clientY;
+      map.classList.add("drag");
+      panBy(dx, dy);
+      return;
+    }
+    const [px, py] = at(e);
+    const hit = nearest(px, py);
+    const on = hit.d <= REACH.mouse;
+    map.classList.toggle("near", on);
+    peek(on ? D.t[hit.i] : null);
   });
-  const end = () => { drag = null; };
-  map.addEventListener("pointerup", end);
-  map.addEventListener("pointercancel", end);
+  const release = (e) => {
+    if (e.pointerType !== "mouse" || !drag) return;
+    const moved = drag.moved;
+    drag = null;
+    map.classList.remove("drag");
+    if (moved || e.type !== "pointerup") return;
+    const [px, py] = at(e);
+    const hit = nearest(px, py);
+    if (hit.d <= REACH.mouse) seek(D.t[hit.i]);
+  };
+  map.addEventListener("pointerup", release);
+  map.addEventListener("pointercancel", release);
+  map.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse" && !drag) { map.classList.remove("near"); peek(null); } });
+  map.addEventListener("dblclick", (e) => { const [px, py] = at(e); zoomAt(1, px, py); });
+  map.addEventListener("wheel", (e) => {
+    if (e.ctrlKey || e.metaKey) { e.preventDefault(); zoomAt(-e.deltaY * (e.deltaMode ? 0.12 : 0.012), ...at(e)); }
+    else if (D) hint(/Mac|iPhone|iPad/.test(navigator.platform) ? A.text.wheel_mac : A.text.wheel);
+  }, { passive: false });
+
+  /* Fingers: one scrolls the page (and a tap on the track moves the film there), two move and
+     pinch the map. Only the two-finger gesture is taken from the page. In full screen there is no
+     page to scroll, so one finger moves the map. */
+  let touch = null;
+  const point = (t) => { const r = map.getBoundingClientRect(); return [t.clientX - r.left, t.clientY - r.top]; };
+  const pair = (ts) => {
+    const [ax, ay] = point(ts[0]), [bx, by] = point(ts[1]);
+    return { d: Math.max(1, Math.hypot(ax - bx, ay - by)), x: (ax + bx) / 2, y: (ay + by) / 2 };
+  };
+  map.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 1) {
+      const [x, y] = point(e.touches[0]);
+      touch = { mode: "one", x, y, sx: x, sy: y, moved: false };
+    } else if (e.touches.length === 2) {
+      if (e.cancelable) e.preventDefault();
+      touch = { mode: "two", ...pair(e.touches) };
+    }
+  }, { passive: false });
+  map.addEventListener("touchmove", (e) => {
+    if (!touch) return;
+    if (touch.mode === "two" && e.touches.length >= 2) {
+      if (e.cancelable) e.preventDefault();
+      const now = pair(e.touches);
+      zoomAt(Math.log2(now.d / touch.d), now.x, now.y);
+      panBy(now.x - touch.x, now.y - touch.y);
+      touch = { mode: "two", ...now };
+    } else if (touch.mode === "one" && e.touches.length === 1) {
+      const [x, y] = point(e.touches[0]);
+      if (Math.hypot(x - touch.sx, y - touch.sy) > 10) touch.moved = true;
+      if (S.full) {
+        if (e.cancelable) e.preventDefault();
+        panBy(x - touch.x, y - touch.y);
+      } else if (Math.abs(x - touch.sx) > 30 && Math.abs(x - touch.sx) > Math.abs(y - touch.sy)) {
+        hint(A.text.two_fingers);        // a sideways drag wanted the map: say how
+      }
+      touch.x = x; touch.y = y;
+    }
+  }, { passive: false });
+  map.addEventListener("touchend", (e) => {
+    if (!touch) return;
+    if (e.touches.length === 0) {
+      if (touch.mode === "one" && !touch.moved) {
+        const hit = nearest(touch.x, touch.y);
+        if (hit.d <= REACH.touch) seek(D.t[hit.i]);
+      }
+      touch = null;
+    } else if (e.touches.length === 1) {
+      // The finger left from a pinch neither taps nor drags on.
+      const [x, y] = point(e.touches[0]);
+      touch = { mode: "one", x, y, sx: x, sy: y, moved: true };
+    }
+  });
+  map.addEventListener("touchcancel", () => { touch = null; });
 }
-$("scrub").addEventListener("input", (e) => seek((Number(e.target.value) / 1000) * D.T));
+
+/* The seek bar: a press or a drag moves the film (finger and mouse alike, the page keeps its
+   vertical scroll); a mouse passing over it only looks. */
+{
+  const wrap = $("stripwrap");
+  let dragging = false;
+  const at = (e) => { const r = wrap.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width, 0, 1) * D.T; };
+  wrap.addEventListener("pointerdown", (e) => { if (!D) return; dragging = true; wrap.setPointerCapture(e.pointerId); seek(at(e)); });
+  wrap.addEventListener("pointermove", (e) => {
+    if (dragging) seek(at(e));
+    else if (e.pointerType === "mouse" && D) peek(at(e));
+  });
+  const release = () => { dragging = false; };
+  wrap.addEventListener("pointerup", release);
+  wrap.addEventListener("pointercancel", release);
+  wrap.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse" && !dragging) peek(null); });
+}
+
 function openChannel(name) {
   if (name === channelName || typeof BroadcastChannel === "undefined") return;
   if (channel) channel.close();
@@ -520,35 +819,43 @@ function openChannel(name) {
     const m = e.data || {};
     if (!D) return;
     if (m.type === "seek") seek(m.pos);
+    else if (m.type === "peek") peek(m.pos);
     else if (m.type === "hello") publish();
   };
 }
 document.addEventListener("keydown", (e) => {
   if (!D) return;
-  if (e.key === " " && e.target === document.body) { e.preventDefault(); S.playing ? stop() : start(); }
+  if (e.key === " " && (e.target === document.body || e.target === $("app"))) { e.preventDefault(); S.playing ? stop() : start(); }
   else if (e.key === "ArrowRight") seek(S.pos + Math.max(5, D.T / 50));
   else if (e.key === "ArrowLeft") seek(S.pos - Math.max(5, D.T / 50));
+  else if (e.key === "+" || e.key === "=") zoomButton(1);
+  else if (e.key === "-") zoomButton(-1);
 });
 
 /* ------------------------------------------------------------ Streamlit */
 
-function fit() { send("streamlit:setFrameHeight", { height: Math.ceil(document.getElementById("app").getBoundingClientRect().height) + 4 }); }
+function fit() {
+  if (S.full) return;
+  send("streamlit:setFrameHeight", { height: Math.ceil($("app").getBoundingClientRect().height) + 4 });
+}
 let token = null;
 function render(args) {
-  const fresh = JSON.stringify([args.data.t.length, args.data.km[args.data.km.length - 1], args.map_height]) !== token;
+  const next = JSON.stringify([args.data.t.length, args.data.km[args.data.km.length - 1], args.data.lat[0], args.channel]);
   A = args;
   openChannel(`garmin-replay-${args.channel}`);
-  if (fresh) {                    // a different activity: start again
-    token = JSON.stringify([args.data.t.length, args.data.km[args.data.km.length - 1], args.map_height]);
-    S.pos = 0; S.playing = false;
+  if (next !== token) {            // a different activity: start again, whole route in view
+    token = next;
+    S.pos = 0; S.peek = null; S.playing = false;
+    if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
+    V.zoom = -1;
     prepare();
   } else {
-    buildStaticUi();
+    buildStaticUi();               // the same activity, maybe another language
   }
-  layout(); drawBase(); paint(); fit();
+  layout(); redraw(); fit();
 }
 let timer;
-window.addEventListener("resize", () => { clearTimeout(timer); timer = setTimeout(() => { if (A) { layout(); drawBase(); paint(); fit(); } }, 120); });
+window.addEventListener("resize", () => { clearTimeout(timer); timer = setTimeout(() => { if (A) { layout(); redraw(); fit(); } }, 120); });
 window.addEventListener("message", (event) => {
   const data = event.data || {};
   if (data.type === "streamlit:render" && data.args && data.args.data) render(data.args);

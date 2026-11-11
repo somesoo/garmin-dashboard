@@ -94,8 +94,8 @@ def _tabs(frame: pd.DataFrame, run: pd.Series, track: pd.DataFrame) -> None:
                     rt.map_tile(track, int(run["activity_id"]), key="run")
                 with right:
                     _character(run)
-                    # Pace, heart rate and elevation together; in the map's replay mode the replay's own charts.
-                    rt.streams_tile(track, int(run["activity_id"]), mode="run_colour", key="ov_streams")
+                    # Pace, heart rate and elevation together, on the map's clock.
+                    rt.streams_tile(track, int(run["activity_id"]), key="ov_streams")
             elif name == "splits":
                 left, right = bento.row(2, 2)
                 with left:

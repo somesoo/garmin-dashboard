@@ -1,10 +1,14 @@
-"""An activity played back on its map: a static component, like the globe and the hero chart.
+"""An activity on its map: a static component, like the globe and the hero chart.
 
-The browser animates (``ui/components/replay/index.html``): a dot runs the route
-on a sped-up clock, the trail behind it takes the colour of the chosen measure,
-and the numbers beside the map (distance, time, pace, heart rate, elevation,
-climb, cadence) are those of the moment on screen. Python only sends the track
+One map does everything (``ui/components/replay/index.html``): the track wears
+the colour of a measure, pointing at it reads that moment (distance, time, pace,
+heart rate, elevation, climb, cadence), it pans and zooms like any map, and the
+play button runs a dot along it on a sped-up clock. Python only sends the track
 as parallel arrays -- one clock, one value per sample -- and the words.
+
+The map used to be two things under one switch (a Plotly figure to look at, this
+player to play); the switch is gone, and a track without a clock is still drawn
+here, only without the play button (``route``).
 
 Playing back in Plotly frames was tried and dropped: every frame carries the
 whole trail, so a quick replay of a long run is megabytes, and the colour of the
@@ -16,6 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import streamlit.components.v1 as components
 
@@ -50,6 +55,21 @@ def _series(frame: pd.DataFrame, column: str, decimals: int) -> list[float] | No
     return values.ffill().bfill().round(decimals).tolist()
 
 
+def _along(data: pd.DataFrame) -> pd.Series | None:
+    """Kilometres from the start: the watch's own distance, else measured along the GPS line."""
+    if "distance_km" in data.columns:
+        values = pd.to_numeric(data["distance_km"], errors="coerce")
+        if values.notna().sum() > 5:
+            return values
+    lat = np.radians(pd.to_numeric(data["lat"], errors="coerce"))
+    lon = np.radians(pd.to_numeric(data["lon"], errors="coerce"))
+    if lat.notna().sum() < 5:
+        return None
+    lat, lon = lat.ffill().bfill(), lon.ffill().bfill()
+    a = np.sin(lat.diff() / 2) ** 2 + np.cos(lat) * np.cos(lat.shift()) * np.sin(lon.diff() / 2) ** 2
+    return (2 * 6371.0 * np.arcsin(np.sqrt(a.fillna(0)))).cumsum()
+
+
 def payload(track: pd.DataFrame | None) -> dict[str, Any] | None:
     """The track as parallel arrays for the browser, or None when there is nothing to play.
 
@@ -57,15 +77,34 @@ def payload(track: pd.DataFrame | None) -> dict[str, Any] | None:
     only runs forward (a GPS hiccup that says otherwise is dropped), so the
     browser can look a moment up by bisecting ``t``.
     """
-    if track is None or track.empty or not {"lat", "lon", "distance_km"} <= set(track.columns):
+    return _arrays(track, timed=True)
+
+
+def route(track: pd.DataFrame | None) -> dict[str, Any] | None:
+    """What the map draws: ``payload``, or the same arrays without a clock.
+
+    A track nobody timed is still a line to look at and point at. Its "clock"
+    is then the distance in metres and ``playable`` is False, so the browser
+    hides the play button and the time.
+    """
+    return _arrays(track, timed=True) or _arrays(track, timed=False)
+
+
+def _arrays(track: pd.DataFrame | None, *, timed: bool) -> dict[str, Any] | None:
+    if track is None or track.empty or not {"lat", "lon"} <= set(track.columns):
+        return None
+    if timed and "distance_km" not in track.columns:
         return None
     data = track.sort_values("seq") if "seq" in track.columns else track
-    clock = _clock(data)
+    along = _along(data)
+    if along is None:
+        return None
+    clock = _clock(data) if timed else along * 1000.0
     if clock is None:
         return None
     frame = pd.DataFrame({
         "t": clock.values,
-        "km": pd.to_numeric(data["distance_km"], errors="coerce").values,
+        "km": along.values,
         "lat": pd.to_numeric(data["lat"], errors="coerce").values,
         "lon": pd.to_numeric(data["lon"], errors="coerce").values,
     }, index=data.index)
@@ -90,6 +129,7 @@ def payload(track: pd.DataFrame | None) -> dict[str, Any] | None:
         "ele": _series(frame, "elevation_m", 1),
         "pace": _series(frame, "pace_min_km", 2),
         "cad": cadence,
+        "playable": timed,
     }
 
 
@@ -105,13 +145,22 @@ def _text() -> dict[str, str]:
         "speed": tr(pl="Prędkość", en="Speed"),
         "speed_hint": tr(pl="s biegu na 1 s filmu", en="s of the activity per 1 s of film"),
         "distance": tr(pl="Dystans", en="Distance"), "time": tr(pl="Czas", en="Time"),
-        "pace": tr(pl="Tempo (30 s)", en="Pace (30 s)"), "hr": tr(pl="Tętno", en="Heart rate"),
+        "pace": tr(pl="Tempo", en="Pace"), "hr": tr(pl="Tętno", en="Heart rate"),
         "elevation": tr(pl="Wysokość", en="Elevation"), "climb": tr(pl="Podejście", en="Climb"),
         "cadence": tr(pl="Kadencja", en="Cadence"),
         "m_pace": tr(pl="tempo", en="pace"), "m_hr": tr(pl="tętno", en="heart rate"),
         "m_ele": tr(pl="wysokość", en="elevation"),
         "zoom_in": tr(pl="Przybliż", en="Zoom in"), "zoom_out": tr(pl="Oddal", en="Zoom out"),
-        "follow": tr(pl="Kamera śledzi kropkę", en="Camera follows the dot"),
+        "fit": tr(pl="Cała trasa", en="Whole route"), "full": tr(pl="Pełny ekran", en="Full screen"),
+        "rest_mouse": tr(pl="Najedź na trasę albo wykres, żeby odczytać to miejsce · ▶ odtwarza aktywność",
+                         en="Point at the route or a chart to read that spot · ▶ plays the activity"),
+        "rest_touch": tr(pl="Dotknij trasy, żeby odczytać to miejsce · ▶ odtwarza aktywność",
+                         en="Tap the route to read that spot · ▶ plays the activity"),
+        "rest_mouse_still": tr(pl="Najedź na trasę, żeby odczytać to miejsce", en="Point at the route to read that spot"),
+        "rest_touch_still": tr(pl="Dotknij trasy, żeby odczytać to miejsce", en="Tap the route to read that spot"),
+        "wheel": tr(pl="Ctrl + kółko przybliża mapę", en="Ctrl + scroll zooms the map"),
+        "wheel_mac": tr(pl="⌘ + przewijanie przybliża mapę", en="⌘ + scroll zooms the map"),
+        "two_fingers": tr(pl="Mapę przesuwają dwa palce", en="Two fingers move the map"),
         "colour": tr(pl="Kolor śladu", en="Track colour"),
         "seek": tr(pl="Przewiń", en="Seek"),
         "faster": tr(pl="szybciej", en="faster"),
@@ -128,11 +177,11 @@ def _theme() -> dict[str, Any]:
 
 
 def show(track: pd.DataFrame, *, key: str, channel: int | str, map_height: int = 340) -> bool:
-    """Draw the player. False when the track cannot be played (no clock), so the caller can say so.
+    """Draw the map. False when there is no line to draw, so the caller can say so.
 
     ``channel`` names the clock the charts beside it (``charts``) follow: the activity's id.
     """
-    data = payload(track)
+    data = route(track)
     if data is None:
         return False
     _component(data=data, text=_text(), theme=_theme(), speeds=list(SPEEDS), map_height=int(map_height),
