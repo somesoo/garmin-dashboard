@@ -215,8 +215,9 @@ def splits_tile(track: pd.DataFrame) -> None:
         return
     table, caption = split_table(splits)
     with bento.tile(i18n.tr(pl="Splity kilometrowe", en="Kilometre splits"), key="route_splits", caption=caption,
-                    how=split_how()):
-        tables.show(table)
+                    how=split_how()) as t:
+        t.chart(tz.split_bars(splits), table=table, key="split_bars_route",
+                height=len(splits) * 26 + 24, empty=i18n.tr(pl="Brak splitów.", en="No splits."))
 
 
 def _side(track: pd.DataFrame) -> None:

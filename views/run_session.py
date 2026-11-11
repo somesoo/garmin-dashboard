@@ -132,8 +132,9 @@ def _split_table(run: pd.Series) -> None:
         return
     table, caption = rt.split_table(mine)
     with bento.tile(i18n.tr(pl="Kilometr po kilometrze", en="Kilometre by kilometre"), key="split_table",
-                    caption=caption, how=rt.split_how()):
-        tables.show(table)
+                    caption=caption, how=rt.split_how()) as t:
+        t.chart(tz.split_bars(mine), table=table, key="split_bars_run",
+                height=len(mine) * 26 + 24, empty=i18n.tr(pl="Brak splitów.", en="No splits."))
 
 
 def _summary(run: pd.Series) -> None:

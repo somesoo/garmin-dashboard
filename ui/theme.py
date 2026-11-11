@@ -381,6 +381,78 @@ def hbars(
     return fig
 
 
+def _mmss(pace_min_km: float) -> str:
+    seconds = int(round(pace_min_km * 60))
+    return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def split_bars(splits: pd.DataFrame, *, height: int | None = None) -> go.Figure | None:
+    """Kilometre splits as a Strava-style list: one horizontal bar per km, top to bottom.
+
+    The bar is as long as the kilometre was fast (the fastest is the longest),
+    measured from a baseline under the slowest one -- from zero every bar would
+    look alike. The pace is written at the tip, never read off an axis, so it
+    stays ``m:ss``. Colour is one blue ramp by speed. Heart rate, climb and a
+    stop sit in the hover.
+    """
+    data, keep = _numeric(splits, ["pace_min_km"])
+    if not keep:
+        return None
+    data = data.dropna(subset=["pace_min_km"])
+    data = data[data["pace_min_km"] > 0].reset_index(drop=True)
+    if data.empty:
+        return None
+    tr = i18n.tr
+    t = tokens()
+    speed = 60.0 / data["pace_min_km"]
+    low, high = float(speed.min()), float(speed.max())
+    base = low * 0.6
+    span = max(high - low, 1e-9)
+    ramp = t["sequential"] if t["sequential"][0] < t["sequential"][-1] else t["sequential"][::-1]
+    ramp = ramp[2:]
+    colors = [ramp[min(len(ramp) - 1, int((v - low) / span * len(ramp)))] if high > low else ramp[len(ramp) // 2]
+              for v in speed]
+
+    def cell(column: str) -> pd.Series:
+        if column in data.columns:
+            return pd.to_numeric(data[column], errors="coerce")
+        return pd.Series(float("nan"), index=data.index)
+
+    length, hr, up, down, stop = cell("length_km"), cell("hr"), cell("elev_gain_m"), cell("elev_loss_m"), cell("stop_s")
+    labels, custom = [], []
+    for i in range(len(data)):
+        km = f"{int(data.at[i, 'km'])}"
+        if pd.notna(length[i]) and length[i] < 0.9:
+            km += f" ({length[i]:.2f})"
+        labels.append(km)
+        lines = [tr(pl="tempo", en="pace") + f" {_mmss(data.at[i, 'pace_min_km'])} /km"]
+        if pd.notna(hr[i]):
+            lines.append(tr(pl="tętno", en="HR") + f" {hr[i]:.0f}")
+        if pd.notna(up[i]) and pd.notna(down[i]):
+            lines.append(f"↑ {up[i]:.0f} / ↓ {down[i]:.0f} m")
+        if pd.notna(stop[i]) and stop[i] >= 5:
+            lines.append(tr(pl="postój", en="stop") + f" {int(stop[i])} s")
+        custom.append("<br>".join(lines))
+    fig = go.Figure(
+        go.Bar(
+            x=speed - base, y=labels, orientation="h",
+            marker=dict(color=colors, line=dict(width=0), cornerradius=3),
+            text=[_mmss(v) for v in data["pace_min_km"]], textposition="outside", cliponaxis=False,
+            textfont=dict(family=FONT, size=12, color=t["ink_secondary"]),
+            customdata=custom, hovertemplate="%{customdata}<extra></extra>",
+            width=0.7,
+        )
+    )
+    fig.update_layout(**base_layout(legend=False, height=height or 26 * len(data) + 24, hover="closest"))
+    fig.update_layout(margin=dict(l=8, r=48, t=8, b=8))
+    fig = style_axes(fig)
+    fig.update_xaxes(showticklabels=False, showgrid=False, showline=False, range=[0, high - base])
+    # Kilometre 1 on top, the way a log lists them.
+    fig.update_yaxes(showgrid=False, autorange="reversed", type="category",
+                     tickfont=dict(size=12, color=t["ink_secondary"]))
+    return fig
+
+
 def stacked(
     frame: pd.DataFrame,
     x: str,
