@@ -24,6 +24,7 @@ from ui import theme as tz
 
 COMPONENT = Path(__file__).resolve().parent / "components" / "replay"
 _component = components.declare_component("garmin_replay", path=str(COMPONENT))
+_charts = components.declare_component("garmin_replaycharts", path=str(COMPONENT.parent / "replaycharts"))
 
 # Seconds of the activity per second of the film. The first is the default.
 SPEEDS = (10, 30, 60, 120, 300)
@@ -124,11 +125,29 @@ def _theme() -> dict[str, Any]:
             "ramp": ramp, "accent": t["sequential"][4] if dark else t["sequential"][3]}
 
 
-def show(track: pd.DataFrame, *, key: str, map_height: int = 340) -> bool:
-    """Draw the player. False when the track cannot be played (no clock), so the caller can say so."""
+def show(track: pd.DataFrame, *, key: str, channel: int | str, map_height: int = 340) -> bool:
+    """Draw the player. False when the track cannot be played (no clock), so the caller can say so.
+
+    ``channel`` names the clock the charts beside it (``charts``) follow: the activity's id.
+    """
     data = payload(track)
     if data is None:
         return False
     _component(data=data, text=_text(), theme=_theme(), speeds=list(SPEEDS), map_height=int(map_height),
-               key=key, default=None)
+               channel=str(channel), key=key, default=None)
+    return True
+
+
+def charts(track: pd.DataFrame, *, key: str, channel: int | str, height: int = 360) -> bool:
+    """Pace, heart rate and elevation on the player's clock, one playhead through the three.
+
+    A press or a drag scrubs the player (they talk over a BroadcastChannel in the browser, so
+    nothing here reruns Streamlit). False when there is no clock to play by.
+    """
+    data = payload(track)
+    if data is None:
+        return False
+    # Only what the charts draw: the route stays out of this iframe.
+    data = {name: data[name] for name in ("t", "km", "hr", "ele", "pace")}
+    _charts(data=data, text=_text(), theme=_theme(), height=int(height), channel=str(channel), key=key, default=None)
     return True

@@ -26,14 +26,14 @@
   button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   @media (hover: hover) { button:hover:not([aria-pressed="true"]) { background: var(--hover); color: var(--ink); } }
-  #stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  #stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  @media (max-width: 520px) { #stats { grid-template-columns: repeat(3, 1fr); } }
   .cell { background: var(--card); border: 1px solid var(--edge); border-radius: 10px; padding: 7px 10px 8px; min-width: 0; }
   .cell .k { font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint);
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cell .v { font-size: 20px; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .cell .v small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 3px; }
-  #strip { position: relative; height: 74px; touch-action: pan-y; cursor: ew-resize; user-select: none; }
-  #strip canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #scrub { width: 100%; margin: 0; accent-color: var(--accent); cursor: pointer; }
   #ctrl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   #play { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 650; min-width: 96px;
           padding: 5px 14px; }
@@ -51,7 +51,7 @@
     <div id="attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
   </div>
   <div id="stats"></div>
-  <div id="strip"><canvas id="sc"></canvas></div>
+  <input id="scrub" type="range" min="0" max="1000" step="1" value="0" />
   <div id="ctrl"><button id="play" type="button"></button><span id="speeds" role="group"></span><span id="clock"></span></div>
   <div id="note"></div>
 </div>
@@ -78,7 +78,9 @@ const S = { pos: 0, playing: false, speed: 10, measure: "pace", last: 0, raf: 0 
 const V = { w: 0, h: 0, dpr: 1, zoom: 0, cx: 0, cy: 0 };   // map view
 const tiles = new Map();
 const base = document.createElement("canvas");
-let ctx, bctx, sctx;
+let ctx, bctx;
+// The charts in the other column (../replaycharts/) share this clock: we publish it, they send seeks.
+let channel = null, channelName = null;
 
 /* ------------------------------------------------------------ helpers */
 
@@ -212,6 +214,7 @@ function buildStaticUi() {
     st.appendChild(c);
   }
   $("note").textContent = `×${S.speed} = ${S.speed} ${T.speed_hint}`;
+  $("scrub").setAttribute("aria-label", T.seek);
   syncChips();
 }
 
@@ -232,7 +235,11 @@ function syncChips() {
 function setPlayLabel() {
   const T = A.text;
   const end = S.pos >= D.T;
-  $("play").textContent = S.playing ? `❚❚ ${T.pause}` : end ? `↺ ${T.again}` : `▶ ${T.play}`;
+  const text = S.playing ? `❚❚ ${T.pause}` : end ? `↺ ${T.again}` : `▶ ${T.play}`;
+  // Only when it changes: rewriting the button's text sixty times a second is churn under a pressed button.
+  const button = $("play");
+  if (button.textContent !== text) button.textContent = text;
+  button.setAttribute("aria-label", S.playing ? T.pause : T.play);
 }
 
 /* ------------------------------------------------------------ map */
@@ -253,11 +260,6 @@ function layout() {
   const worldPx = Math.min((w - 2 * pad) / sx, (h - 2 * pad) / sy);
   V.zoom = clamp(Math.log2(worldPx / 256), 1, 18);
   V.cx = (minx + maxx) / 2; V.cy = (miny + maxy) / 2;
-  // The strip.
-  const sc = $("sc");
-  const rect = $("strip").getBoundingClientRect();
-  sc.width = Math.round(rect.width * V.dpr); sc.height = Math.round(rect.height * V.dpr);
-  sctx = sc.getContext("2d");
 }
 const worldPx = () => 256 * 2 ** V.zoom;
 const sxOf = (ux) => V.w / 2 + (ux - V.cx) * worldPx();
@@ -377,55 +379,24 @@ function updateStats() {
   $("clock").textContent = `${fmtTime(S.pos)} / ${fmtTime(D.T)}`;
 }
 
-function drawStrip() {
-  const m = measure();
-  const el = $("strip").getBoundingClientRect();
-  const w = el.width, h = el.height;
-  sctx.setTransform(V.dpr, 0, 0, V.dpr, 0, 0);
-  sctx.clearRect(0, 0, w, h);
-  const px = (S.pos / D.T) * w;
-  if (m) {
-    const lo = Math.min(...m.smooth), hi = Math.max(...m.smooth), span = hi - lo || 1;
-    // Up is more of the measure; for pace up is faster (the pace axis runs backwards, as everywhere).
-    const yOf = (v) => 6 + (h - 18) * (m.reverse ? (v - lo) / span : 1 - (v - lo) / span);
-    const path = new Path2D();
-    path.moveTo(0, h);
-    D.t.forEach((t, k) => path.lineTo((t / D.T) * w, yOf(m.smooth[k])));
-    path.lineTo(w, h); path.closePath();
-    for (const [x0, x1, fill] of [[0, px, A.theme.accent + "66"], [px, w, "rgba(154,160,170,.18)"]]) {
-      sctx.save(); sctx.beginPath(); sctx.rect(x0, 0, x1 - x0, h); sctx.clip();
-      sctx.fillStyle = fill; sctx.fill(path); sctx.restore();
-    }
-    sctx.lineWidth = 1.5; sctx.lineJoin = "round";
-    for (const [x0, x1, stroke] of [[0, px, A.theme.accent], [px, w, "rgba(154,160,170,.6)"]]) {
-      sctx.save(); sctx.beginPath(); sctx.rect(x0, 0, x1 - x0, h); sctx.clip();
-      sctx.strokeStyle = stroke; sctx.beginPath();
-      D.t.forEach((t, k) => { const x = (t / D.T) * w, y = yOf(m.smooth[k]); k ? sctx.lineTo(x, y) : sctx.moveTo(x, y); });
-      sctx.stroke(); sctx.restore();
-    }
-    sctx.fillStyle = A.theme.muted; sctx.font = '10px "Source Sans Pro", sans-serif'; sctx.textBaseline = "top";
-    const top = m.reverse ? lo : hi, bottom = m.reverse ? hi : lo;
-    sctx.fillText(formatValue(m, top), 3, 2);
-    sctx.textBaseline = "bottom";
-    sctx.fillText(formatValue(m, bottom), 3, h - 14);
-  }
-  // Time axis: start, middle, end.
-  sctx.fillStyle = A.theme.muted; sctx.font = '10px "Source Sans Pro", sans-serif'; sctx.textBaseline = "bottom";
-  sctx.textAlign = "left"; sctx.fillText("0:00", 3, h - 1);
-  sctx.textAlign = "center"; sctx.fillText(fmtTime(D.T / 2), w / 2, h - 1);
-  sctx.textAlign = "right"; sctx.fillText(fmtTime(D.T), w - 3, h - 1);
-  sctx.textAlign = "left";
-  // The playhead.
-  sctx.strokeStyle = A.theme.ink; sctx.lineWidth = 1.5;
-  sctx.beginPath(); sctx.moveTo(px, 0); sctx.lineTo(px, h - 14); sctx.stroke();
+// What the charts beside the map need to know: where we are and whether the film runs.
+function publish() {
+  if (channel) channel.postMessage({ type: "pos", pos: S.pos, playing: S.playing, T: D.T, speed: S.speed });
 }
 
 function paint() {
   if (!D || !ctx) return;
-  drawTrail();
-  updateStats();
-  drawStrip();
+  // The state buttons come first and a failing drawing must not take the controls with it.
   setPlayLabel();
+  try {
+    drawTrail();
+    updateStats();
+  } catch (error) {
+    console.error("replay paint failed:", error);
+  }
+  const scrub = $("scrub");
+  if (document.activeElement !== scrub || S.playing) scrub.value = String(Math.round((S.pos / D.T) * 1000));
+  publish();
 }
 
 /* ------------------------------------------------------------ playback */
@@ -433,7 +404,7 @@ function paint() {
 function frame(now) {
   S.raf = 0;
   if (S.playing) {
-    S.pos += ((now - S.last) / 1000) * S.speed;
+    S.pos += (Math.max(0, now - S.last) / 1000) * S.speed;
     S.last = now;
     if (S.pos >= D.T) { S.pos = D.T; S.playing = false; }
   }
@@ -446,22 +417,31 @@ function start() {
   S.last = performance.now();
   if (!S.raf) S.raf = requestAnimationFrame(frame);
 }
-function stop() { S.playing = false; paint(); }
+// Pausing does not depend on drawing: the state flips and the loop is cancelled first.
+function stop() {
+  S.playing = false;
+  if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
+  paint();
+}
 function seek(x) {
   S.pos = clamp(x, 0, D.T);
   if (!S.playing) paint();
 }
 
 $("play").onclick = () => (S.playing ? stop() : start());
-// Scrubbing the strip: pointer events, so a finger and a mouse do the same.
-const strip = $("strip");
-let dragging = false;
-const at = (e) => { const r = strip.getBoundingClientRect(); return ((e.clientX - r.left) / r.width) * D.T; };
-strip.addEventListener("pointerdown", (e) => { dragging = true; strip.setPointerCapture(e.pointerId); seek(at(e)); });
-strip.addEventListener("pointermove", (e) => { if (dragging) seek(at(e)); });
-const release = () => { dragging = false; };
-strip.addEventListener("pointerup", release);
-strip.addEventListener("pointercancel", release);
+$("scrub").addEventListener("input", (e) => seek((Number(e.target.value) / 1000) * D.T));
+function openChannel(name) {
+  if (name === channelName || typeof BroadcastChannel === "undefined") return;
+  if (channel) channel.close();
+  channelName = name;
+  channel = new BroadcastChannel(name);
+  channel.onmessage = (e) => {
+    const m = e.data || {};
+    if (!D) return;
+    if (m.type === "seek") seek(m.pos);
+    else if (m.type === "hello") publish();
+  };
+}
 document.addEventListener("keydown", (e) => {
   if (!D) return;
   if (e.key === " " && e.target === document.body) { e.preventDefault(); S.playing ? stop() : start(); }
@@ -476,6 +456,7 @@ let token = null;
 function render(args) {
   const fresh = JSON.stringify([args.data.t.length, args.data.km[args.data.km.length - 1], args.map_height]) !== token;
   A = args;
+  openChannel(`garmin-replay-${args.channel}`);
   if (fresh) {                    // a different activity: start again
     token = JSON.stringify([args.data.t.length, args.data.km[args.data.km.length - 1], args.map_height]);
     S.pos = 0; S.playing = false;

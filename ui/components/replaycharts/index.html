@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Wykresy odtwarzacza</title>
+<style>
+  :root { --ink: #fafafa; --ink2: #d5d7dc; --muted: #9aa0aa; --faint: #6b707a; --line: #1f2126; --accent: #3987e5; }
+  html, body { margin: 0; padding: 0; background: transparent; color: var(--ink); overflow: hidden;
+               font: 14px/1.4 "Source Sans 3", "Source Sans Pro", -apple-system, system-ui, "Segoe UI", sans-serif; }
+  #wrap { position: relative; touch-action: pan-y; cursor: ew-resize; user-select: none; }
+  canvas { display: block; width: 100%; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="cv"></canvas></div>
+<script>
+"use strict";
+/* Three stacked charts on the replay's clock (pace, heart rate, elevation), one playhead through
+   all of them. The map (../replay/) owns the clock and publishes it on a BroadcastChannel; a press
+   or a drag here sends a seek back. Without the map playing, the playhead simply rests where it was. */
+function send(type, data) { window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, "*"); }
+const $ = (id) => document.getElementById(id);
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const pad2 = (n) => String(n).padStart(2, "0");
+const fmtTime = (s) => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h ? `${h}:${pad2(m)}:${pad2(s % 60)}` : `${m}:${pad2(s % 60)}`; };
+const fmtPace = (min) => { if (!(min > 0) || min > 60) return "—"; const s = Math.round(min * 60); return `${Math.floor(s / 60)}:${pad2(s % 60)}`; };
+
+let A = null, D = null, ctx = null, channel = null, channelName = null;
+const S = { pos: 0, playing: false };
+const L = { w: 0, h: 0, dpr: 1 };
+const GAP = 10, LEFT = 4, RIGHT = 4, AXIS = 14;
+
+function prepare() {
+  const d = A.data;
+  D = { t: d.t, T: d.t[d.t.length - 1], panels: [] };
+  const add = (key, label, unit, series, reverse, format) => {
+    if (!series) return;
+    const w = Math.max(1, Math.round(series.length / 60));
+    const smooth = series.map((_, i) => {
+      let s = 0, n = 0;
+      for (let k = Math.max(0, i - w); k <= Math.min(series.length - 1, i + w); k++) { s += series[k]; n++; }
+      return s / n;
+    });
+    D.panels.push({ key, label, unit, series, smooth, reverse, format, lo: Math.min(...smooth), hi: Math.max(...smooth) });
+  };
+  add("pace", A.text.m_pace, "/km", d.pace, true, fmtPace);
+  add("hr", A.text.m_hr, "bpm", d.hr, false, (v) => String(Math.round(v)));
+  add("ele", A.text.m_ele, "m", d.ele, false, (v) => String(Math.round(v)));
+}
+
+function valueAt(series, x) {
+  const t = D.t;
+  let lo = 0, hi = t.length - 1;
+  while (lo < hi - 1) { const mid = (lo + hi) >> 1; if (t[mid] <= x) lo = mid; else hi = mid; }
+  const j = Math.min(lo + 1, t.length - 1), span = t[j] - t[lo];
+  return series[lo] + (series[j] - series[lo]) * (span > 0 ? clamp((x - t[lo]) / span, 0, 1) : 0);
+}
+
+function layout() {
+  const canvas = $("cv");
+  L.w = Math.max(200, Math.floor($("wrap").clientWidth || document.body.clientWidth));
+  L.h = Math.max(160, A.height | 0);
+  L.dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(L.w * L.dpr); canvas.height = Math.round(L.h * L.dpr);
+  canvas.style.height = `${L.h}px`;
+  ctx = canvas.getContext("2d");
+}
+
+function draw() {
+  if (!D || !ctx) return;
+  const { w, h, dpr } = L, th = A.theme;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const n = D.panels.length;
+  const ph = (h - AXIS - GAP * (n - 1)) / n;
+  const px = LEFT + (S.pos / D.T) * (w - LEFT - RIGHT);
+  const xOf = (t) => LEFT + (t / D.T) * (w - LEFT - RIGHT);
+  D.panels.forEach((p, idx) => {
+    const top = idx * (ph + GAP), bottom = top + ph;
+    const span = p.hi - p.lo || 1;
+    // Up is more of the measure; for pace up is faster, as on every pace axis here.
+    const yOf = (v) => top + 16 + (ph - 20) * (p.reverse ? (v - p.lo) / span : 1 - (v - p.lo) / span);
+    // A quiet baseline, then the area: the played part in the accent, the rest muted.
+    ctx.strokeStyle = th.grid; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(LEFT, bottom - 0.5); ctx.lineTo(w - RIGHT, bottom - 0.5); ctx.stroke();
+    const path = new Path2D();
+    path.moveTo(xOf(0), bottom);
+    D.t.forEach((t, k) => path.lineTo(xOf(t), yOf(p.smooth[k])));
+    path.lineTo(xOf(D.T), bottom); path.closePath();
+    const line = () => { ctx.beginPath(); D.t.forEach((t, k) => (k ? ctx.lineTo(xOf(t), yOf(p.smooth[k])) : ctx.moveTo(xOf(t), yOf(p.smooth[k])))); ctx.stroke(); };
+    for (const [x0, x1, fill, stroke] of [[0, px, th.accent + "55", th.accent], [px, w, "rgba(154,160,170,.16)", "rgba(154,160,170,.55)"]]) {
+      ctx.save(); ctx.beginPath(); ctx.rect(x0, top, x1 - x0, ph + 1); ctx.clip();
+      ctx.fillStyle = fill; ctx.fill(path);
+      ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.strokeStyle = stroke; line();
+      ctx.restore();
+    }
+    // Title (left) and the value at the playhead (right).
+    ctx.textBaseline = "top"; ctx.textAlign = "left";
+    ctx.fillStyle = th.muted; ctx.font = '600 10.5px "Source Sans Pro", sans-serif';
+    ctx.fillText(p.label.toUpperCase(), LEFT + 2, top);
+    ctx.textAlign = "right"; ctx.fillStyle = th.ink; ctx.font = '650 14px "Source Sans Pro", sans-serif';
+    ctx.fillText(`${p.format(valueAt(p.series, S.pos))} ${p.unit}`, w - RIGHT - 2, top - 1);
+    // Range of the panel at the left edge, in the corner the curve leaves free.
+    ctx.textAlign = "left"; ctx.fillStyle = th.muted; ctx.font = '10px "Source Sans Pro", sans-serif';
+    ctx.textBaseline = "bottom";
+    ctx.fillText(`${p.format(p.reverse ? p.hi : p.lo)}–${p.format(p.reverse ? p.lo : p.hi)}`, LEFT + 2, bottom - 2);
+  });
+  // The time axis under the last panel.
+  ctx.fillStyle = th.muted; ctx.font = '10px "Source Sans Pro", sans-serif'; ctx.textBaseline = "bottom";
+  ctx.textAlign = "left"; ctx.fillText("0:00", LEFT, h - 1);
+  ctx.textAlign = "center"; ctx.fillText(fmtTime(D.T / 2), w / 2, h - 1);
+  ctx.textAlign = "right"; ctx.fillText(fmtTime(D.T), w - RIGHT, h - 1);
+  // One playhead through every panel.
+  ctx.strokeStyle = th.ink; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h - AXIS); ctx.stroke();
+}
+
+// Seeking: pointer events, so a finger and a mouse do the same; the page keeps its vertical scroll.
+const wrap = $("wrap");
+let dragging = false;
+const at = (e) => { const r = wrap.getBoundingClientRect(); return clamp((e.clientX - r.left - LEFT) / (r.width - LEFT - RIGHT), 0, 1) * D.T; };
+function seek(pos) {
+  S.pos = pos;
+  draw();
+  if (channel) channel.postMessage({ type: "seek", pos });
+}
+wrap.addEventListener("pointerdown", (e) => { if (!D) return; dragging = true; wrap.setPointerCapture(e.pointerId); seek(at(e)); });
+wrap.addEventListener("pointermove", (e) => { if (dragging) seek(at(e)); });
+const release = () => { dragging = false; };
+wrap.addEventListener("pointerup", release);
+wrap.addEventListener("pointercancel", release);
+
+function openChannel(name) {
+  if (name === channelName || typeof BroadcastChannel === "undefined") return;
+  if (channel) channel.close();
+  channelName = name;
+  channel = new BroadcastChannel(name);
+  channel.onmessage = (e) => {
+    const m = e.data || {};
+    if (m.type === "pos" && D && !dragging) { S.pos = clamp(m.pos, 0, D.T); S.playing = !!m.playing; draw(); }
+  };
+  channel.postMessage({ type: "hello" });      // the map may already be playing: ask where it is
+}
+
+function fit() { send("streamlit:setFrameHeight", { height: Math.ceil(L.h) + 2 }); }
+let token = null;
+function render(args) {
+  A = args;
+  const next = JSON.stringify([args.data.t.length, args.data.t[args.data.t.length - 1], args.height]);
+  if (next !== token) { token = next; S.pos = 0; prepare(); }
+  layout(); draw(); fit();
+  openChannel(`garmin-replay-${args.channel}`);
+}
+let timer;
+window.addEventListener("resize", () => { clearTimeout(timer); timer = setTimeout(() => { if (A) { layout(); draw(); } }, 120); });
+window.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type === "streamlit:render" && data.args && data.args.data) render(data.args);
+});
+send("streamlit:componentReady", { apiVersion: 1 });
+</script>
+</body>
+</html>

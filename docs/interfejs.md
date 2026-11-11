@@ -389,7 +389,16 @@ wydarzyło, zawsze na tle własnej normy.
 kolor wybranej miary (tempo / tętno / wysokość — przełącznik jest w komponencie, więc
 zmiana koloru nie restartuje przebiegu Streamlita), obok liczą się dystans, czas,
 tempo z ostatnich 30 s, tętno, wysokość, podejście i kadencja z tej chwili, a pod mapą
-wykres wybranej miary z kursorem służy do przewijania.
+jest suwak do przewijania.
+
+**Trzy wykresy w drugiej kolumnie** (`replay.charts`, `ui/components/replaycharts/`):
+tempo, tętno i wysokość naraz, jeden kursor przez wszystkie. W trybie „Odtwórz” stoją
+obok mapy w miejscu dawnego samotnego profilu wysokości (`routes.streams_tile`, na stronie
+biegu i w Trasach), poza nim to zwykły wykres Plotly wzdłuż dystansu. Mapa i wykresy
+rozmawiają w przeglądarce przez `BroadcastChannel("garmin-replay-<id aktywności>")`:
+mapa trzyma zegar i publikuje `pos`, wykresy odsyłają `seek` (dotknięcie lub przeciągnięcie
+przewija film) — żaden z tych ruchów nie przeładowuje Streamlita. Tryb poznaje się po
+stanie przełącznika koloru (`<key>_colour` == `"replay"`).
 
 - **Prędkość to całe wielokrotności zegara**: `replay.SPEEDS` = ×10 (domyślnie: 10 s
   aktywności na 1 s filmu), ×30, ×60, ×120, ×300. Przeglądarka liczy pozycję z zegara

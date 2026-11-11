@@ -125,7 +125,7 @@ def _explorer(routes: pd.DataFrame, catalogue: pd.DataFrame) -> None:
         if any(word in sport for word in ("walk", "hik", "trail")):
             splits_tile(track)
     with right:
-        _side(track)
+        streams_tile(track, int(chosen), mode="route_colour", key="route_ov_streams")
     _gpx(chosen)
 
 
@@ -160,7 +160,8 @@ def map_tile(track: pd.DataFrame, activity_id: int, *, key: str = "route") -> No
         height, width = (340, 330) if phone else (bento.chart_height(3), 620)
         if colour_by == "replay":
             # The film has its own colour switch and live numbers (ui/replay.py).
-            replay.show(track, key=f"{key}_replay_{int(chosen)}", map_height=height if phone else max(340, height - 230))
+            replay.show(track, key=f"{key}_replay_{int(chosen)}", channel=int(chosen),
+                        map_height=height if phone else max(340, height - 230))
             return
         t.chart(
             tz.route_map(
@@ -232,26 +233,41 @@ def splits_tile(track: pd.DataFrame) -> None:
                 height=len(splits) * 26 + 24, empty=i18n.tr(pl="Brak splitów.", en="No splits."))
 
 
-def _side(track: pd.DataFrame) -> None:
+def streams_tile(track: pd.DataFrame, activity_id: int, *, mode: str, key: str) -> None:
+    """Pace, heart rate and elevation, all three at once (what used to be a lone elevation profile).
+
+    Next to the map in its "replay" mode (``mode`` is the map's colour switch in the session) these
+    are the replay's own charts: the same clock, one playhead, a drag scrubs the film. Otherwise
+    a plain figure along the distance, with hover.
+    """
     tr = i18n.tr
-    with bento.tile(tr(pl="Profil wysokości", en="Elevation profile"), key="route_profile") as t:
-        t.chart(tz.profile(track), empty=tr(pl="Brak danych wysokości.", en="No elevation data."))
+    caption = tr(pl="Wyżej na panelu tempa = szybciej.", en="Higher on the pace panel = faster.")
+    if st.session_state.get(mode) == "replay" and replay.ready(track):
+        with bento.tile(tr(pl="Przebieg w czasie", en="Over time"), rows=2, key=f"{key}_replay", caption=caption,
+                        how=tr(pl="Te same wykresy co przy odtwarzaniu: kursor biegnie razem z kropką na mapie, "
+                                  "dotknięcie albo przeciągnięcie przewija film.",
+                               en="The same charts as in the replay: the cursor runs with the dot on the map, "
+                                  "a tap or a drag scrubs the film.")):
+            replay.charts(track, key=f"{key}_replaycharts_{int(activity_id)}", channel=int(activity_id),
+                          height=bento.chart_height(2))
+        return
     panels = []
-    if "hr" in track.columns and track["hr"].notna().any():
-        panels.append({"title": tr(pl="Tętno (bpm)", en="Heart rate (bpm)"),
-                       "series": {tr(pl="tętno", en="heart rate"): "hr"}, "kind": "line"})
     if "pace_min_km" in track.columns and track["pace_min_km"].notna().any():
         panels.append({"title": tr(pl="Tempo (/km)", en="Pace (/km)"),
                        "series": {tr(pl="tempo", en="pace"): "pace_min_km"}, "kind": "line", "pace": True})
-    if "cadence" in track.columns and track["cadence"].notna().any():
-        panels.append({"title": tr(pl="Kadencja", en="Cadence"),
-                       "series": {tr(pl="kadencja", en="cadence"): "cadence"}, "kind": "line"})
-    with bento.tile(tr(pl="Przebieg wzdłuż dystansu", en="Along the distance"), rows=2, key="route_streams",
-                    caption=tr(pl="Wyżej na panelu tempa = szybciej.", en="Higher on the pace panel = faster.")) as t:
-        figure = tz.stacked_panels(track, "distance_km", panels, height=400) if panels else None
+    if "hr" in track.columns and track["hr"].notna().any():
+        panels.append({"title": tr(pl="Tętno (bpm)", en="Heart rate (bpm)"),
+                       "series": {tr(pl="tętno", en="heart rate"): "hr"}, "kind": "line"})
+    if "elevation_m" in track.columns and track["elevation_m"].notna().any():
+        panels.append({"title": tr(pl="Wysokość (m n.p.m.)", en="Elevation (m a.s.l.)"),
+                       "series": {tr(pl="wysokość", en="elevation"): "elevation_m"}, "kind": "line"})
+    with bento.tile(tr(pl="Przebieg wzdłuż dystansu", en="Along the distance"), rows=2, key=key,
+                    caption=caption) as t:
+        figure = tz.stacked_panels(track, "distance_km", panels, height=bento.chart_height(2)) if panels else None
         if figure is not None:
             figure.update_xaxes(title_text=tr(pl="dystans (km)", en="distance (km)"), row=len(panels), col=1)
-        t.chart(figure, table=track.head(200), empty=tr(pl="Brak strumienia próbek.", en="No sample stream."))
+        t.chart(figure, table=track.head(200), empty=tr(pl="Brak strumienia próbek.", en="No sample stream."),
+                key=f"{key}_chart_{int(activity_id)}")
 
 
 def _gpx(chosen: int) -> None:
