@@ -45,6 +45,7 @@ ACTIVITIES = (
     "te_aerobic", "te_anaerobic", "avg_power", "norm_power", "cadence", "stride_m",
     "hr_z1_s", "hr_z2_s", "hr_z3_s", "hr_z4_s", "hr_z5_s", "location",
     "start_lat", "start_lon", "end_lat", "end_lon", "best_1k_s", "best_mile_s", "best_5k_s",
+    "best_10k_s",
     "gap_speed", "max_speed", "vo2max_activity", "lap_count", "temperature_max", "moderate_minutes",
     "workout_id", "event_type", "source", "day", "iso_week",
 )

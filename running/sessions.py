@@ -46,7 +46,7 @@ EFFORT_DISTANCES: dict[str, float] = {
     "hm": 21097.5,
     "m": 42195.0,
 }
-GARMIN_SPLITS = {"1k": "best_1k_s", "mile": "best_mile_s", "5k": "best_5k_s"}
+GARMIN_SPLITS = {"1k": "best_1k_s", "mile": "best_mile_s", "5k": "best_5k_s", "10k": "best_10k_s"}
 # Best efforts too short for the forecast (VDOT from 400 m means nothing),
 # shown with the records only.
 SHORT_EFFORTS: dict[str, float] = {"400m": 400.0, "800m": 800.0}
@@ -482,7 +482,8 @@ def efforts(
                     if clock is not None and not clock.empty:
                         found = best_segment(clock, metres)
                         hr = found[1] if found else np.nan
-            if seconds is None and units.race_key(run.distance_km) == key:
+            trimmable = clock is not None and not clock.empty and run_m > metres * 1.005
+            if seconds is None and units.race_key(run.distance_km) == key and not trimmable:
                 seconds, source = float(run.duration_min) * 60, "whole"
                 hr = float(run.avg_hr) if run.avg_hr is not None and not pd.isna(run.avg_hr) else np.nan
             if seconds is None and clock is not None and not clock.empty:

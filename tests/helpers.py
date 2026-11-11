@@ -87,6 +87,7 @@ def run(activity_id: int, day: str, km: float, pace: float, *, hr: float | None 
         "best_1k_s": None,
         "best_mile_s": None,
         "best_5k_s": None,
+        "best_10k_s": None,
     }
     row.update(extra)
     return row

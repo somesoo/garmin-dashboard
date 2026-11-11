@@ -160,9 +160,14 @@ def awaiting_result(runs: Any, today: dt.date | None = None) -> list[dict[str, A
     return out
 
 
-def race_verdict(race: dict[str, Any], run: dict[str, Any]) -> dict[str, Any]:
-    """The linked run against the race goal: finish time (stopwatch), gap to the goal, pace."""
-    seconds = float(run["duration_min"]) * 60
+def race_verdict(race: dict[str, Any], run: dict[str, Any], effort_s: float | None = None) -> dict[str, Any]:
+    """The linked run against the race goal: time over the race distance, gap to the goal.
+
+    ``effort_s`` is the run's best effort at the race distance (``run_efforts``,
+    trimmed to the distance: a watch that ran 10.08 km did not run a 10.08 km
+    race); without it the whole stopwatch time stands.
+    """
+    seconds = float(effort_s) if effort_s else float(run["duration_min"]) * 60
     goal = race.get("goal_s")
     return {"time_s": seconds, "goal_s": goal, "gap_s": seconds - goal if goal else None,
             "reached": bool(goal and seconds <= goal)}

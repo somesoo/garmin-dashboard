@@ -151,6 +151,16 @@ class Efforts(unittest.TestCase):
         self.assertNotIn("1k", set(table[table["activity_id"] == 2]["effort"]))
         self.assertAlmostEqual(mine.loc["10k", "vdot"], physio.vdot(10000, 3000), places=3)
 
+    def test_race_distance_is_trimmed_not_the_whole_run(self):
+        rows = [run(1, "2026-01-05", 10.08, 5.0, best_10k_s=2819), run(2, "2026-01-06", 10.08, 5.0)]
+        frame = sessions.select_runs(activities(rows))
+        table = sessions.efforts(frame, pd.concat([track(1, 10.08, 5.0), track(2, 10.08, 5.0)]))
+        one = table[(table["activity_id"] == 1) & (table["effort"] == "10k")].iloc[0]
+        two = table[(table["activity_id"] == 2) & (table["effort"] == "10k")].iloc[0]
+        self.assertEqual((one["source"], one["seconds"]), ("garmin", 2819.0))
+        self.assertEqual(two["source"], "stream")  # no Garmin split: trimmed on the stream
+        self.assertLess(two["seconds"], 10.08 * 5.0 * 60)
+
     def test_records_pick_fastest(self):
         table = pd.DataFrame([
             {"effort": "5k", "seconds": 1500, "activity_id": 1},

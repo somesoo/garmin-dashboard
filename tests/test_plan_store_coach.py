@@ -405,6 +405,8 @@ class Store(TempStore):
         verdict = store.race_verdict(race, ask[0]["candidates"][0])
         self.assertFalse(verdict["reached"])
         self.assertAlmostEqual(verdict["gap_s"], 24.0)
+        trimmed = store.race_verdict(race, ask[0]["candidates"][0], 2819.4)
+        self.assertTrue(trimmed["reached"])
         store.save_race({**race, "result_dismissed": True})
         self.assertEqual(store.awaiting_result(runs, today), [])
         store.save_race({**race, "result_dismissed": False, "result_activity_id": 1})

@@ -379,6 +379,7 @@ def build_activities() -> pd.DataFrame:
                 "best_1k_s": a.get("fastestSplit_1000"),
                 "best_mile_s": a.get("fastestSplit_1609"),
                 "best_5k_s": a.get("fastestSplit_5000"),
+                "best_10k_s": a.get("fastestSplit_10000"),
                 "gap_speed": a.get("avgGradeAdjustedSpeed"),
                 "max_speed": a.get("maxSpeed"),
                 "vo2max_activity": a.get("vO2MaxValue"),

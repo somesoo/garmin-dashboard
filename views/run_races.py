@@ -60,7 +60,10 @@ def _verdict(race: dict, frame: pd.DataFrame) -> None:
     hit = frame[frame["activity_id"].astype(int) == int(race["result_activity_id"])]
     if hit.empty:
         return
-    verdict = store.race_verdict(race, hit.iloc[0].to_dict())
+    best = rc.efforts()
+    best = best[(best["activity_id"].astype(int) == int(race["result_activity_id"])) & (best["effort"] == race["distance"])] \
+        if not best.empty else best
+    verdict = store.race_verdict(race, hit.iloc[0].to_dict(), float(best["seconds"].iloc[0]) if len(best) else None)
     columns = st.columns(4)
     columns[0].metric(tr(pl="Wynik", en="Result"), units.fmt_time(verdict["time_s"]))
     columns[1].metric(tr(pl="Cel", en="Goal"), units.fmt_time(verdict["goal_s"]) if verdict["goal_s"] else "—")
