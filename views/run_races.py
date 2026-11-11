@@ -23,6 +23,62 @@ def _priority_help() -> str:
 
 
 
+def link_prompt(frame: pd.DataFrame) -> None:
+    """Ask which run was a race that has happened (today included) and validate the plan against it."""
+    tr = i18n.tr
+    for ask in store.awaiting_result(frame):
+        race = ask["race"]
+        goal = f" · {tr(pl='cel', en='goal')} {units.fmt_time(race['goal_s'])}" if race.get("goal_s") else ""
+        with bento.panel(
+            tr(pl=f"Czy to był start „{race['name']}”?", en=f"Was this the race “{race['name']}”?"),
+            key=f"race_ask_{race['id']}",
+            caption=tr(pl="Powiąż bieg ze startem: sprawdzę wynik względem celu i planu, a wynik stanie się kotwicą "
+                          "prognozy.",
+                       en="Link the run to the race: I will check the result against the goal and the plan, and the "
+                          "result becomes the forecast's anchor.") + goal,
+        ):
+            for run in ask["candidates"]:
+                label = (f"{run['start_local']:%H:%M} · {run['distance_km']:.2f} km · "
+                         f"{units.fmt_time(run['duration_min'] * 60)} · {run.get('name') or ''}")
+                if st.button(tr(pl="To był start: ", en="This was the race: ") + label,
+                             key=f"race_pick_{race['id']}_{int(run['activity_id'])}", type="primary"):
+                    store.save_race({**race, "result_activity_id": int(run["activity_id"])})
+                    with st.spinner(tr(pl="Przeliczam tabele biegowe…", en="Rebuilding the running tables…")):
+                        from running import pipeline
+
+                        pipeline.rebuild()
+                    st.cache_data.clear()
+                    st.rerun()
+            if st.button(tr(pl="Żaden z nich", en="None of these"), key=f"race_none_{race['id']}"):
+                store.save_race({**race, "result_dismissed": True})
+                st.rerun()
+
+
+def _verdict(race: dict, frame: pd.DataFrame) -> None:
+    """Result of a linked race against the goal and the plan that led to it."""
+    tr = i18n.tr
+    hit = frame[frame["activity_id"].astype(int) == int(race["result_activity_id"])]
+    if hit.empty:
+        return
+    verdict = store.race_verdict(race, hit.iloc[0].to_dict())
+    columns = st.columns(4)
+    columns[0].metric(tr(pl="Wynik", en="Result"), units.fmt_time(verdict["time_s"]))
+    columns[1].metric(tr(pl="Cel", en="Goal"), units.fmt_time(verdict["goal_s"]) if verdict["goal_s"] else "—")
+    columns[2].metric(tr(pl="Różnica", en="Gap"), units.fmt_delta(verdict["gap_s"]) if verdict["gap_s"] is not None
+                      else "—", delta_color="off")
+    plan = store.current_plan()
+    if plan is not None and planning.covers(plan, race):
+        s = planning.compliance(planning.match(plan, frame))
+        columns[3].metric(tr(pl="Plan wykonany", en="Plan followed"),
+                          f"{s.get('done', 0)}/{s.get('due', 0)}" if s.get("due") else "—",
+                          help=tr(pl="Sesje planu wykonane do dziś — czy przygotowanie, które dało ten wynik, "
+                                     "szło według planu.",
+                                  en="Plan sessions done so far — whether the preparation behind this result "
+                                     "followed the plan."))
+    else:
+        columns[3].metric(tr(pl="Plan", en="Plan"), tr(pl="brak", en="none"))
+
+
 def render() -> None:
     bento.header(
         i18n.view("zawody"),
@@ -36,9 +92,11 @@ def render() -> None:
         return
     races = store.races()
     today = dt.date.today()
-    upcoming = [r for r in races if r["date"] >= today.isoformat()]
-    past = [r for r in races if r["date"] < today.isoformat()]
+    done = lambda r: r["date"] < today.isoformat() or (r["date"] == today.isoformat() and r.get("result_activity_id"))
+    upcoming = [r for r in races if not done(r)]
+    past = [r for r in races if done(r)]
 
+    link_prompt(frame)
     plan = rc.active_plan(today)  # first: a changed race rebuilds the plan before the forecast reads it
     result = rc.current_forecast()
     if upcoming and plan is None:
@@ -274,6 +332,9 @@ def _past_rows(past: list[dict], frame: pd.DataFrame) -> None:
         columns = st.columns([3, 2])
         goal = i18n.tr(pl=" · cel ", en=" · goal ") + units.fmt_time(race["goal_s"]) if race.get("goal_s") else ""
         columns[0].markdown(f"**{race['name']}** — {rc.race_label(race['distance'])}, {date:%d.%m.%Y}{goal}")
+        if current:
+            with columns[0]:
+                _verdict(race, frame)
         chosen = columns[1].selectbox(i18n.tr(pl="Bieg", en="Run"), options, index=index, format_func=describe,
                                       key=f"race_result_{race['id']}", label_visibility="collapsed")
         if (chosen or None) != (int(current) if current else None):

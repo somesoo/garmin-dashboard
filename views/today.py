@@ -49,6 +49,10 @@ def render() -> None:
     story.head("dzis", _headline(suggestion, today),
                f"{i18n.weekdays(long=True)[today.weekday()].capitalize()}, {today:%d.%m.%Y}")
     guide.tour()
+    if not frame.empty:
+        from views import run_races
+
+        run_races.link_prompt(frame)
 
     bento.kpis(row, shell.week_before(days), [
         ("readiness", "Readiness", ""),

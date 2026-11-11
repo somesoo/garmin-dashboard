@@ -392,6 +392,24 @@ class Store(TempStore):
         store.delete_race(saved["id"])
         self.assertEqual(store.races(), [])
 
+    def test_awaiting_result_asks_for_a_race_run_and_validates(self):
+        import datetime as dt
+        import pandas as pd
+        race = store.save_race({"name": "Bieg", "date": "2026-11-11", "distance": "10k", "goal_s": 2820})
+        runs = pd.DataFrame({"activity_id": [1, 2], "day": pd.to_datetime(["2026-11-11", "2026-11-11"]),
+                             "start_local": pd.to_datetime(["2026-11-11 11:22", "2026-11-11 08:00"]),
+                             "distance_km": [10.08, 3.0], "duration_min": [47.4, 20.0]})
+        today = dt.date(2026, 11, 11)
+        ask = store.awaiting_result(runs, today)
+        self.assertEqual([c["activity_id"] for c in ask[0]["candidates"]], [1])
+        verdict = store.race_verdict(race, ask[0]["candidates"][0])
+        self.assertFalse(verdict["reached"])
+        self.assertAlmostEqual(verdict["gap_s"], 24.0)
+        store.save_race({**race, "result_dismissed": True})
+        self.assertEqual(store.awaiting_result(runs, today), [])
+        store.save_race({**race, "result_dismissed": False, "result_activity_id": 1})
+        self.assertEqual(store.awaiting_result(runs, today), [])
+
     def test_plan_roundtrip_is_atomic_and_validated(self):
         plan = {"id": "plan-x", "sessions": [{"id": "s1", "date": "2026-03-03", "type": "easy", "distance_km": 6.0}]}
         store.save_plan(plan)

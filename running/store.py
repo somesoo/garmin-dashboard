@@ -43,6 +43,7 @@ def segments_path() -> Path:
 
 
 DISTANCES = ("5k", "10k", "hm", "m")
+DISTANCE_KM = {"5k": 5.0, "10k": 10.0, "hm": 21.0975, "m": 42.195}
 SESSION_TYPES = ("rest", "recovery", "easy", "long", "tempo", "threshold", "intervals", "race", "strength")
 STATUSES = ("planned", "done", "skipped", "modified")
 PRIORITIES = ("A", "B", "C")
@@ -128,6 +129,43 @@ def manual_kinds() -> dict[int, str]:
             except (TypeError, ValueError):
                 continue
     return out
+
+
+def awaiting_result(runs: Any, today: dt.date | None = None) -> list[dict[str, Any]]:
+    """Races held (today or earlier, up to 14 days back) with no run linked yet and a candidate run.
+
+    Each item is ``{"race": ..., "candidates": [activity rows]}``; candidates are
+    the runs of the race day ±1 whose distance is within 25% of the race's.
+    A race answered "none of these" (``result_dismissed``) is not asked again.
+    """
+    today = today or dt.date.today()
+    out = []
+    if runs is None or len(runs) == 0:
+        return out
+    for item in races():
+        if item.get("result_activity_id") or item.get("result_dismissed"):
+            continue
+        try:
+            date = dt.date.fromisoformat(str(item["date"]))
+        except (KeyError, ValueError):
+            continue
+        if not 0 <= (today - date).days <= 14:
+            continue
+        km = DISTANCE_KM.get(item.get("distance"))
+        near = runs[(runs["day"].dt.date >= date - dt.timedelta(days=1)) & (runs["day"].dt.date <= date + dt.timedelta(days=1))]
+        if km:
+            near = near[(near["distance_km"] >= 0.75 * km) & (near["distance_km"] <= 1.25 * km)]
+        if len(near):
+            out.append({"race": item, "candidates": near.sort_values("start_local").to_dict("records")})
+    return out
+
+
+def race_verdict(race: dict[str, Any], run: dict[str, Any]) -> dict[str, Any]:
+    """The linked run against the race goal: finish time (stopwatch), gap to the goal, pace."""
+    seconds = float(run["duration_min"]) * 60
+    goal = race.get("goal_s")
+    return {"time_s": seconds, "goal_s": goal, "gap_s": seconds - goal if goal else None,
+            "reached": bool(goal and seconds <= goal)}
 
 
 # --------------------------------------------------------------------------
