@@ -27,6 +27,9 @@ pochodzenie zapisuje `elevation_source`. Atrybucja: Mapzen, Copernicus / EU-DEM
 [lista źródeł i licencji](https://github.com/tilezen/joerd/blob/master/docs/attribution.md).
 Odczyt profili nie wysyła zapytań do dostawców. Pobieranie używa maksymalnie
 trzech wątków w jednym procesie ETL; publiczne rastry nie zawierają śladów osób.
+Publiczny cache `data/terrain/` jest pomijany przez szyfrowany backup; ustawienia
+osoby w `terrain.json`, obie wersje wysokości w tabelach i surowe źródła są
+zachowywane. Po odtworzeniu brakujące rastry uzupełni kolejne pobranie/przeliczenie.
 
 | Tabela | Kolumny korekty |
 |---|---|

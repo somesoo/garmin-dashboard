@@ -52,7 +52,7 @@ PRIV_PREFIX = "gdkey1"
 CHUNK = 1 << 20
 INFO = b"garmin-dashboard backup v1"
 NAME = "garmin-{:%Y%m%d-%H%M}.gdbk"
-SKIP = {"cache", "fetch.lock", "streamlit.log"}  # rebuilt or meaningless after a restore
+SKIP = {"cache", "terrain", "fetch.lock", "streamlit.log"}  # public rasters/cache are rebuilt after a restore
 
 
 # ------------------------------------------------------------------ keys

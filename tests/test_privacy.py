@@ -241,12 +241,17 @@ class Backups(unittest.TestCase):
         secretbox.seal(b"make the key")
 
     def test_round_trip_and_nothing_readable_without_the_owners_key(self):
+        (self.data / "terrain").mkdir()
+        (self.data / "terrain" / "public-tile.npz").write_bytes(b"public terrain cache")
+        (self.data / "users/y/terrain.json").write_text('{"since":"2023-06-01"}')
         made = backup.create(self.data, backup._public(self.public), self.folder / "out")
         self.assertNotIn(b"rhr", made.read_bytes())
         names = backup.members(made, self.identity)
         self.assertIn("data/users/y/raw/day.json", names)
         self.assertIn("_keys/data.key", names)
         self.assertFalse(any("cache" in name for name in names))
+        self.assertFalse(any("data/terrain/" in name for name in names))
+        self.assertIn("data/users/y/terrain.json", names)
         backup.restore(made, self.identity, self.folder / "back")
         self.assertEqual((self.folder / "back/data/users/y/raw/day.json").read_text(), '{"rhr": 51}')
         with mock.patch("sys.stdout", io.StringIO()):
