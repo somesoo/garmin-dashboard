@@ -192,6 +192,13 @@ Na Macu `git push`, na serwerze:
 Restart jest konieczny: Streamlit nie przeładowuje już zaimportowanych modułów.
 Zmiana w `deploy/` (unit, proxy) — zamiast tego `deploy/install.sh <domena>`.
 
+Mapy OSM wymagają prawdziwego nagłówka `Referer`. Po aktualizacji starszej
+konfiguracji proxy zamień `Referrer-Policy: same-origin` na
+`strict-origin-when-cross-origin` (jak w obu szablonach `deploy/`), sprawdź
+konfigurację przez `nginx -t` lub `caddy validate --config /etc/caddy/Caddyfile`
+i przeładuj odpowiedni serwis. Do obcych domen trafia tylko origin, bez ścieżki
+i parametrów dashboardu. API i aplikacja telefonowa zachowują `no-referrer`.
+
 ## 8. Na co dzień
 
 ```bash

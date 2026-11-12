@@ -33,6 +33,8 @@
  * browser recounts -- the tracks themselves arrive once, as a cached file.
  */
 
+import { createTileCache } from "./tiles.js";
+
 export const MIN_ZOOM = 1;
 // Street level: at 40000x a kilometre is a couple of thousand pixels and the
 // tiles are at their most detailed level.
@@ -51,13 +53,11 @@ const FRAME_RADIUS = 26;
 // index.html is a condition of use. One style serves both themes; the canvas
 // filter mutes it on light and inverts it on dark, so the heat tracks stay the
 // loudest thing on the map.
-const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const TILE_FILTER = {
   light: "saturate(0.35) brightness(1.04) contrast(0.92)",
   dark: "invert(1) hue-rotate(180deg) saturate(0.3) brightness(0.82) contrast(0.9)",
 };
 const TILE_MAX_Z = 19;
-const TILE_CACHE = 600;
 
 // Pass-count classes: lower bound and base line width in px.
 // Width carries as much of the class as colour does: neighbouring steps of one
@@ -126,7 +126,7 @@ export function createGlobe(canvas, options = {}) {
   const path = d3.geoPath(ortho, ctx);
   const trackPath = d3.geoPath(orthoTrack, ctx);
   const sphere = { type: "Sphere" };
-  const tiles = new Map();
+  const tiles = createTileCache(kick);
 
   const state = {
     world: null,
@@ -214,41 +214,19 @@ export function createGlobe(canvas, options = {}) {
     return TILE_FILTER[state.theme.tiles] ? state.theme.tiles : null;
   }
 
-  // The filter is applied when drawing, so both themes share one cache.
-  function tileKey(z, x, y) {
-    return `${z}/${x}/${y}`;
-  }
-
-  function requestTile(z, x, y) {
-    const key = tileKey(z, x, y);
-    let entry = tiles.get(key);
-    if (entry) return entry;
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    entry = { img, ok: false };
-    img.onload = () => {
-      entry.ok = true;
-      kick();
-    };
-    img.src = TILE_URL.replace("{z}", z).replace("{x}", x).replace("{y}", y);
-    tiles.set(key, entry);
-    // Oldest first out; what is on screen was requested last.
-    while (tiles.size > TILE_CACHE) tiles.delete(tiles.keys().next().value);
-    return entry;
-  }
-
   /* Raster tiles under the flat map. Positions come straight from Web
      Mercator tile maths (the same spherical Mercator d3 draws), and a tile
      still in flight is stood in for by the nearest loaded ancestor, so a zoom
      step blurs for a moment instead of flashing the ocean. */
   function drawTiles() {
     const style = tileStyle();
-    if (!style) return;
+    if (!style) {
+      tiles.setVisible([]);
+      return;
+    }
     const { w, h } = state.size;
     const world = 2 * Math.PI * mercator.scale();
-    // One level finer on a retina screen: OSM tiles are 256 px only.
-    const sharp = state.size.dpr > 1 ? 1 : 0;
-    const z = Math.max(0, Math.min(TILE_MAX_Z, Math.round(Math.log2(world / 256)) + sharp));
+    const z = Math.max(0, Math.min(TILE_MAX_Z, Math.round(Math.log2(world / 256))));
     const n = 2 ** z;
     const size = world / n;
     const lat = state.rot.lat * RAD;
@@ -260,18 +238,20 @@ export function createGlobe(canvas, options = {}) {
     const y1 = Math.min(n - 1, Math.floor(cy + h / 2 / size));
     ctx.save();
     ctx.filter = TILE_FILTER[style];
+    const visible = [];
     for (let ty = y0; ty <= y1; ty++) {
       for (let tx = x0; tx <= x1; tx++) {
         const wx = ((tx % n) + n) % n;
         const sx = w / 2 + (tx - cx) * size;
         const sy = h / 2 + (ty - cy) * size;
-        const entry = requestTile(z, wx, ty);
-        if (entry.ok) {
+        visible.push([z, wx, ty]);
+        const entry = tiles.get(z, wx, ty);
+        if (entry?.ok) {
           ctx.drawImage(entry.img, sx, sy, size + 0.5, size + 0.5);
           continue;
         }
         for (let dz = 1; dz <= Math.min(6, z); dz++) {
-          const parent = tiles.get(tileKey(z - dz, wx >> dz, ty >> dz));
+          const parent = tiles.get(z - dz, wx >> dz, ty >> dz);
           if (!parent || !parent.ok) continue;
           const part = parent.img.naturalWidth / 2 ** dz;
           const ox = wx - ((wx >> dz) << dz);
@@ -282,6 +262,7 @@ export function createGlobe(canvas, options = {}) {
       }
     }
     ctx.restore();
+    tiles.setVisible(state.fly || state.zoomTo || state.dragging ? [] : visible);
   }
 
   function frame() {
@@ -507,6 +488,7 @@ export function createGlobe(canvas, options = {}) {
       ctx.restore();
       return;
     }
+    tiles.setVisible([]);
 
     // Flat ocean: the app uses no gradients anywhere (AGENTS.md).
     ctx.beginPath();
@@ -859,6 +841,7 @@ export function createGlobe(canvas, options = {}) {
     if (touches.size < 2) pinch = null;
     if (!pointer) {
       state.dragging = false;
+      kick();
       return;
     }
     const tapped = pointer.moved < 5;

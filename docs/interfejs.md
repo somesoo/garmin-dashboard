@@ -508,6 +508,24 @@ Jak to jest poskładane:
   OSM. Bez internetu płaska mapa pokazuje zwendorowany kontur lądu.
   Brakujący kafelek zastępuje najbliższy wczytany przodek (rozmyty na chwilę,
   zamiast błysku oceanu). Przeciąganie na płaskiej mapie idzie dokładnie za ręką.
+- **Żądania OSM** są wyłącznie w `ui/components/globe/tiles.js` (glob, Atlas
+  i podgląd `test.html`). Mapy tras Plotly korzystają osobno z CARTO
+  (`ui/theme.py`, `_map_layout`), nie z serwera kafelków OSM.
+  Zgodnie z [polityką OSM](https://operations.osmfoundation.org/policies/tiles/)
+  przeglądarka wysyła swój zwykły User-Agent i prawdziwy Referer ograniczony do
+  origin (bez ścieżki, identyfikatorów osób i parametrów). Komponent ma własną
+  politykę referrera; szablony nginx/Caddy używają `strict-origin-when-cross-origin`.
+  Kafelki zachowują domyślny cache HTTP przeglądarki (nagłówki dostawcy,
+  walidacja po wygaśnięciu), bez proxy, wymuszania odświeżenia i pobierania offline.
+  Loader czeka 220 ms na ustalenie widocznego zakresu, pobiera maksymalnie cztery
+  kafelki równolegle i pomija kadry animowanego przelotu oraz przeciągania.
+  Zmiana kadru usuwa kolejkę nieaktualnych żądań; ekran Retina nie podbija
+  poziomu kafelków. Po błędzie pobieranie ustaje do ponownego utworzenia komponentu,
+  a mapa zachowuje lokalny kontur i ślady GPS. Atrybucja jest także w podglądzie.
+  Podgląd domyślnie nie pobiera kafelków; `?tiles=on` włącza je do ręcznego
+  oglądania. Automatyczne testy i zrzuty korzystają z lokalnego konturu lub atrap.
+  Utrzymujący się 403 może oznaczać blokadę po stronie dostawcy — nie ponawiaj
+  automatycznie żądań ani nie zmieniaj tożsamości w celu jej obejścia.
 - **Klik**: pojedynczy trening to link — Atlas od razu przechodzi na *Trasy*
   z tym `activity_id`. Skupisko to pytanie — dialog z listą treningów.
   Licznik `clicks` w wartości komponentu odróżnia nowe kliknięcie od tej samej
@@ -526,7 +544,7 @@ z headless Chrome na konkretnym ujęciu):
 # http://127.0.0.1:8777/test.html?lat=85            (bieguny — tu wychodzą kliny)
 # http://127.0.0.1:8777/test.html?lat=-85
 # http://127.0.0.1:8777/test.html?lat=52&lon=21&zoom=12&theme=dark
-# ?zoom=250&tracks=cache/tracks-<build>.json  (płaska mapa + mapa ciepła; tiles=off bez kafelków)
+# ?zoom=250&tracks=cache/tracks-<build>.json  (płaska mapa + mapa ciepła; tiles=on tylko do ręcznego oglądania)
 # ?pinch=1                                    (tytuł strony = dryf punktu pod kursorem)
 # ?from=&to= zawęża ląd do wycinka wielokątów (bisekcja po wadliwym)
 ```

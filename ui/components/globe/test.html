@@ -2,15 +2,19 @@
 <html lang="pl">
 <head>
 <meta charset="utf-8" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
 <title>Glob — podgląd</title>
 <style>
   html, body {margin: 0; background: #fcfcfb;}
   body.dark {background: #0e1117;}
   canvas {display: block;}
+  #attr {position: fixed; right: 12px; bottom: 12px; background: #fff; color: #111; padding: 4px; font: 12px sans-serif;}
+  #attr a {color: inherit;}
 </style>
 </head>
 <body>
 <canvas id="globe"></canvas>
+<div id="attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
 <script src="./vendor/d3-array.min.js"></script>
 <script src="./vendor/d3-geo.min.js"></script>
 <script type="module">
@@ -26,13 +30,13 @@ if (dark) document.body.classList.add("dark");
 const LIGHT = {
   ocean: "#cfe0f1", oceanLight: "#e8f1fa", land: "#e6e3d8", coast: "#b3b0a4",
   border: "#c6c3b7", graticule: "rgba(120,140,160,0.22)", surface: "#fcfcfb",
-  ink: "#0b0b0b", glow: "#2a78d6", tiles: params.get("tiles") === "off" ? null : "light",
+  ink: "#0b0b0b", glow: "#2a78d6", tiles: params.get("tiles") === "on" ? "light" : null,
   ramp: ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"],
 };
 const DARK = {
   ocean: "#0a111b", oceanLight: "#16263a", land: "#272c34", coast: "#4b525e",
   border: "#3c424c", graticule: "rgba(120,140,160,0.18)", surface: "#0e1117",
-  ink: "#ffffff", glow: "#3987e5", tiles: params.get("tiles") === "off" ? null : "dark",
+  ink: "#ffffff", glow: "#3987e5", tiles: params.get("tiles") === "on" ? "dark" : null,
   ramp: ["#0d366b", "#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb"],
 };
 
