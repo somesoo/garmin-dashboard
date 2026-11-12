@@ -43,10 +43,10 @@ class MapTiles(unittest.TestCase):
                 if tag == "a":
                     self.links.append(attributes.get("href"))
 
-        for name in ("index.html", "test.html"):
+        for name in ("globe/index.html", "globe/test.html", "replay/index.html"):
             with self.subTest(document=name):
                 document = Document()
-                document.feed((ROOT / "ui" / "components" / "globe" / name).read_text(encoding="utf-8"))
+                document.feed((ROOT / "ui" / "components" / name).read_text(encoding="utf-8"))
                 self.assertEqual(document.referrer, "strict-origin-when-cross-origin")
                 self.assertIn("https://www.openstreetmap.org/copyright", document.links)
 

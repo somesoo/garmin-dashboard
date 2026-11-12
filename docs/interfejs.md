@@ -508,8 +508,9 @@ Jak to jest poskładane:
   OSM. Bez internetu płaska mapa pokazuje zwendorowany kontur lądu.
   Brakujący kafelek zastępuje najbliższy wczytany przodek (rozmyty na chwilę,
   zamiast błysku oceanu). Przeciąganie na płaskiej mapie idzie dokładnie za ręką.
-- **Żądania OSM** są wyłącznie w `ui/components/globe/tiles.js` (glob, Atlas
-  i podgląd `test.html`). Mapy tras Plotly korzystają osobno z CARTO
+- **Żądania OSM** są w `ui/components/globe/tiles.js` (glob, Atlas
+  i podgląd `test.html`) oraz `ui/components/replay/index.html` (mapa aktywności
+  i odtwarzanie trasy). Mapy tras Plotly korzystają osobno z CARTO
   (`ui/theme.py`, `_map_layout`), nie z serwera kafelków OSM.
   Zgodnie z [polityką OSM](https://operations.osmfoundation.org/policies/tiles/)
   przeglądarka wysyła swój zwykły User-Agent i prawdziwy Referer ograniczony do
@@ -520,7 +521,9 @@ Jak to jest poskładane:
   Loader czeka 220 ms na ustalenie widocznego zakresu, pobiera maksymalnie cztery
   kafelki równolegle i pomija kadry animowanego przelotu oraz przeciągania.
   Zmiana kadru usuwa kolejkę nieaktualnych żądań; ekran Retina nie podbija
-  poziomu kafelków. Po błędzie pobieranie ustaje do ponownego utworzenia komponentu,
+  poziomu kafelków. Mapa aktywności także ogranicza pobieranie do czterech
+  widocznych kafelków naraz i nie podbija poziomu na ekranach Retina.
+  Po błędzie pobieranie ustaje do ponownego utworzenia komponentu,
   a mapa zachowuje lokalny kontur i ślady GPS. Atrybucja jest także w podglądzie.
   Podgląd domyślnie nie pobiera kafelków; `?tiles=on` włącza je do ręcznego
   oglądania. Automatyczne testy i zrzuty korzystają z lokalnego konturu lub atrap.

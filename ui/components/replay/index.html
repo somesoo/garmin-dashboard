@@ -2,6 +2,7 @@
 <html lang="pl">
 <head>
 <meta charset="utf-8" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Mapa aktywności</title>
 <style>
@@ -135,6 +136,8 @@ let D = null;                 // the track, prepared
 const S = { pos: 0, peek: null, playing: false, speed: 10, measure: "pace", last: 0, raf: 0, panned: false, full: false };
 const V = { w: 0, h: 0, dpr: 1, zoom: 0, fit: 0, cx: 0, cy: 0, home: [0, 0] };   // map view
 const tiles = new Map();
+let tilesLoading = 0;
+let tilesFailed = false;
 const base = document.createElement("canvas");
 let ctx, bctx, sctx;
 // The charts in the other column (../replaycharts/) share this clock: we publish it, they send seeks and peeks.
@@ -425,8 +428,11 @@ function requestTile(z, x, y) {
   const key = `${z}/${x}/${y}`;
   let e = tiles.get(key);
   if (e) return e;
+  if (tilesFailed || tilesLoading >= 4) return null;
   const img = new Image();
   img.crossOrigin = "anonymous";
+  img.referrerPolicy = "strict-origin";
+  tilesLoading += 1;
   e = { img, ok: false, cv: null };
   img.onload = () => {
     // The theme filter is paid once per tile, not once per frame: a camera that follows the runner
@@ -436,7 +442,13 @@ function requestTile(z, x, y) {
     const c = cv.getContext("2d");
     if (FILTER_OK) c.filter = TILE_FILTER[A && A.theme.dark ? "dark" : "light"];
     c.drawImage(img, 0, 0);
+    tilesLoading -= 1;
     e.cv = cv; e.ok = true; schedule();
+  };
+  img.onerror = () => {
+    tilesLoading -= 1;
+    tilesFailed = true;
+    schedule();
   };
   img.src = TILE_URL.replace("{z}", z).replace("{x}", x).replace("{y}", y);
   tiles.set(key, e);
@@ -457,8 +469,7 @@ function drawBase() {
   bctx.clearRect(0, 0, w, h);
   bctx.fillStyle = A.theme.surface;
   bctx.fillRect(0, 0, w, h);
-  // Tiles: one level finer on a retina screen (OSM tiles are 256 px only).
-  const zt = clamp(Math.round(V.zoom) + (dpr > 1 ? 1 : 0), 0, 19);
+  const zt = clamp(Math.round(V.zoom), 0, 19);
   const n = 2 ** zt, size = worldPx() / n;
   const x0 = Math.floor((V.cx - w / 2 / worldPx()) * n), x1 = Math.floor((V.cx + w / 2 / worldPx()) * n);
   const y0 = Math.max(0, Math.floor((V.cy - h / 2 / worldPx()) * n)), y1 = Math.min(n - 1, Math.floor((V.cy + h / 2 / worldPx()) * n));
@@ -467,7 +478,7 @@ function drawBase() {
       const wx = ((tx % n) + n) % n;
       const px = sxOf(tx / n), py = syOf(ty / n);
       const e = requestTile(zt, wx, ty);
-      if (e.ok) { bctx.drawImage(e.cv, px, py, size + 0.5, size + 0.5); continue; }
+      if (e?.ok) { bctx.drawImage(e.cv, px, py, size + 0.5, size + 0.5); continue; }
       for (let dz = 1; dz <= Math.min(6, zt); dz++) {      // stand in with a coarser tile while it loads
         const p = tiles.get(`${zt - dz}/${wx >> dz}/${ty >> dz}`);
         if (!p || !p.ok) continue;

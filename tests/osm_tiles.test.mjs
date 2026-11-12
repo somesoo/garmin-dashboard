@@ -181,3 +181,34 @@ test("Retina rendering reuses the same OSM zoom level and tiles", (context) => {
   settle();
   assert.equal(requests.length, loaded);
 });
+
+test("the activity map identifies requests, limits concurrency and stops after failure", (context) => {
+  const { requests } = harness(context);
+  const source = readFileSync(new URL("../ui/components/replay/index.html", import.meta.url), "utf8");
+  const start = source.indexOf("function requestTile(");
+  const end = source.indexOf("let pendingBase", start);
+  const sandbox = {
+    Image: globalThis.Image,
+    TILE_URL: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    TILE_CACHE: 400,
+    tiles: new Map(),
+    tilesLoading: 0,
+    tilesFailed: false,
+    schedule() {},
+    FILTER_OK: false,
+    document: { createElement: () => ({ getContext: () => ({ drawImage() {} }) }) },
+  };
+  runInNewContext(source.slice(start, end), sandbox);
+  for (let column = 0; column < 6; column++) sandbox.requestTile(12, column, 1);
+  assert.equal(requests.length, 4);
+  assert.equal(requests[0].referrerPolicy, "strict-origin");
+  assert.equal(requests[0].url, "https://tile.openstreetmap.org/12/0/1.png");
+  requests[0].onload();
+  sandbox.requestTile(12, 4, 1);
+  assert.equal(requests.length, 5);
+  requests[1].onerror();
+  requests[2].onload();
+  assert.equal(sandbox.requestTile(12, 5, 1), null);
+  assert.equal(requests.length, 5);
+  assert.equal(sandbox.requestTile(12, 0, 1).ok, true);
+});
