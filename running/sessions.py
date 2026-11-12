@@ -269,6 +269,9 @@ def _clock(track: pd.DataFrame) -> pd.DataFrame:
     frame["stop"] = _standing(track, seconds).values
     for column in ("hr", "elevation_m", "cadence"):
         frame[column] = pd.to_numeric(track[column], errors="coerce").values if column in track.columns else np.nan
+    for column in ("elevation_gain_cum_m", "elevation_loss_cum_m"):
+        if column in track:
+            frame[column] = pd.to_numeric(track[column], errors="coerce").values
     # directRunCadence counts one foot; the activity summary (and every
     # running coach) talks in steps of both feet per minute.
     if frame["cadence"].notna().any() and frame["cadence"].median() < 120:
@@ -387,6 +390,12 @@ def km_splits(track: pd.DataFrame) -> pd.DataFrame:
         inside = clock[(clock["m"] >= start) & (clock["m"] <= end)]
         elevation = inside["elevation_m"].dropna().rolling(3, min_periods=1, center=True).mean()
         step = elevation.diff()
+        gain = round(float(step.clip(lower=0).sum()), 1) if len(elevation) > 1 else None
+        loss = round(float(-step.clip(upper=0).sum()), 1) if len(elevation) > 1 else None
+        if ("elevation_gain_cum_m" in clock and clock["elevation_gain_cum_m"].notna().all()
+                and clock["elevation_loss_cum_m"].notna().all()):
+            gain = round(float(np.diff(np.interp([start, end], clock["m"], clock["elevation_gain_cum_m"]))[0]), 1)
+            loss = round(float(np.diff(np.interp([start, end], clock["m"], clock["elevation_loss_cum_m"]))[0]), 1)
         rows.append(
             {
                 "km": index,
@@ -394,8 +403,8 @@ def km_splits(track: pd.DataFrame) -> pd.DataFrame:
                 "seconds": round(float(seconds), 1),
                 "pace_min_km": units.pace_from(seconds, length),
                 "hr": round(float(inside["hr"].mean()), 0) if inside["hr"].notna().any() else None,
-                "elev_gain_m": round(float(step.clip(lower=0).sum()), 1) if len(elevation) > 1 else None,
-                "elev_loss_m": round(float(-step.clip(upper=0).sum()), 1) if len(elevation) > 1 else None,
+                "elev_gain_m": gain,
+                "elev_loss_m": loss,
                 "cadence": round(float(inside["cadence"].mean()), 0) if inside["cadence"].notna().any() else None,
                 "stop_s": round(float(standing[index] - standing[index - 1]), 0) if standing is not None else None,
             }

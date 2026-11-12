@@ -89,7 +89,8 @@ SOURCES = ("garmin", "apple")
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 # What belongs to one person in the old layout -- moved by ``migrate``.
 OWNED = ("raw", "tables", "coach", "state.json", "excluded_nights.json", "sport.json", "ui.json",
-         "fetch.json", "fetch.log", "zones.json", "consent.json", "seen.json", "coach.json", "notes.json")
+         "fetch.json", "fetch.log", "zones.json", "consent.json", "seen.json", "coach.json", "notes.json",
+         "terrain.json")
 
 _current: contextvars.ContextVar[str | None] = contextvars.ContextVar("tenant", default=None)
 

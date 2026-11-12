@@ -1,5 +1,44 @@
 # Dane: tabele i kolumny
 
+## Korekta wysokości z NMT (opcjonalna)
+
+`terrain.json` w katalogu osoby włącza korektę od lokalnej daty `since`.
+Oryginalne JSON-y Garmina pozostają nietknięte. Starsze aktywności zachowują
+dotychczasowe wartości, także przy kolejnej przebudowie. Osoby bez ustawienia
+nie korzystają z korekty; obecnie obsługiwane jest źródło Garmin.
+
+Źródło: [NMT GUGiK, usługa WCS](https://www.geoportal.gov.pl/pl/usluga/uslugi-pobierania-wcs/),
+`DTM_PL-EVRF2007-NH`, układ poziomy EPSG:2180, siatka pobierana co 2 m.
+Publiczne, stałe kwadraty 2 × 2 km z zakładką 2 m są przechowywane w
+`data/terrain/gugik_nmt_evrf2007_2m_v1/`. Serwer pobiera kwadraty potrzebne
+do nowych tras; GUGiK otrzymuje zasięg kwadratu, nigdy ślad GPS ani identyfikator
+aktywności. Przeliczenie współrzędnych i interpolacja dwuliniowa odbywają się lokalnie.
+NMT opisuje grunt: mosty, tunele i bieżnie wewnątrz budynków wymagają odrębnej
+interpretacji. Korekta nie jest stosowana do aktywności bez śladu GPS.
+
+| Tabela | Kolumny korekty |
+|---|---|
+| `routes` | `elevation_m` — wysokość terenu; `elevation_original_m` — zapis Garmina; `elevation_source` — kod źródła; `elevation_gain_cum_m`, `elevation_loss_cum_m` — narastające podejścia i zejścia |
+| `activities`, `route_summary`, `run_laps` | `elevation_gain_m` — podejścia z NMT; `elevation_gain_original_m` — wcześniejsza wartość; `elevation_source` — kod źródła |
+
+Podejścia liczone są ze wspólnego profilu: interpolacja co 10 m dystansu,
+średnia pięciu próbek, suma dodatnich zmian. Okrążenia i splity dzielą narastającą
+sumę po dystansie; mapa odczytuje tę samą sumę. Nie zmienia to czasu, tempa,
+GPS ani wskaźników wysiłku Garmina. Starsze trasy nadal korzystają ze swojej
+dotychczasowej metody. Etykieta wysokości na mapie i wykresie wskazuje NMT GUGiK.
+
+Uruchomienie (jawnie wybrana osoba):
+
+```bash
+GARMIN_USER=<id> .venv/bin/python -m etl.terrain --since 2026-11-01 --prepare
+GARMIN_USER=<id> .venv/bin/python etl/run.py --rebuild-only
+```
+
+Koordynator `fetch.rebuild` uzupełnia brakujące kafle przed budową tabel.
+Sam `etl/load.py` używa wyłącznie cache’u i nie wysyła zapytań sieciowych.
+Brak kafla, brak danych w NMT lub trasa poza Polską przerywają korektę przed
+publikacją tabel zamiast mieszać wysokość terenową z zapisem zegarka.
+
 Opis hurtowni: co jest w każdej tabeli. Zasady i pułapki są w `AGENTS.md`.
 
 ## Tabela `daily` (jeden wiersz = jeden dzień kalendarzowy)

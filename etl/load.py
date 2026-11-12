@@ -698,7 +698,7 @@ def build_laps() -> pd.DataFrame:
     return pd.DataFrame(rows, columns=columns)
 
 
-def build_routes() -> tuple[pd.DataFrame, pd.DataFrame]:
+def build_routes(*, correct: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
     """GPS tracks with the sensor streams aligned to each point.
 
     Garmin returns the samples as a bare array plus a separate descriptor list
@@ -768,10 +768,12 @@ def build_routes() -> tuple[pd.DataFrame, pd.DataFrame]:
 
     if not tracks:
         return pd.DataFrame(columns=["activity_id"]), pd.DataFrame(columns=["activity_id"])
-    return (
-        pd.concat(tracks, ignore_index=True),
-        pd.DataFrame(summaries),
-    )
+    routes = pd.concat(tracks, ignore_index=True)
+    if correct:
+        from etl import terrain
+
+        routes = terrain.correct_routes(routes, build_activities())
+    return routes, pd.DataFrame(summaries)
 
 
 def _elevation_gain(track: pd.DataFrame) -> float | None:
@@ -839,10 +841,17 @@ def main() -> int:
         return apple.main()
     daily = build_daily()
     activities = build_activities()
+    laps = build_laps()
+    # Resolve the complete correction before publishing: missing terrain must
+    # not leave a half-corrected warehouse under the previous cache key.
+    routes, route_summary = build_routes()
+    from etl import terrain
+
+    activities, route_summary, laps = terrain.correct_summaries(activities, route_summary, laps, routes)
     write_table(daily, "daily")
     write_table(activities, "activities")
     write_table(build_segments(), "activity_segments")
-    write_table(build_laps(), "run_laps")
+    write_table(laps, "run_laps")
 
     # Intraday tables: hypnograms, overnight series, full-day 3-minute samples.
     stages = build_sleep_stages()
@@ -852,7 +861,6 @@ def main() -> int:
     write_table(nights, "night_series")
     write_table(intraday, "intraday")
 
-    routes, route_summary = build_routes()
     write_table(routes, "routes")
     write_table(route_summary, "route_summary")
     state = {

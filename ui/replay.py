@@ -108,7 +108,7 @@ def _arrays(track: pd.DataFrame | None, *, timed: bool) -> dict[str, Any] | None
         "lat": pd.to_numeric(data["lat"], errors="coerce").values,
         "lon": pd.to_numeric(data["lon"], errors="coerce").values,
     }, index=data.index)
-    for column in ("hr", "elevation_m", "pace_min_km", "cadence"):
+    for column in ("hr", "elevation_m", "pace_min_km", "cadence", "elevation_gain_cum_m"):
         if column in data.columns:
             frame[column] = pd.to_numeric(data[column], errors="coerce").values
     frame = frame.dropna(subset=["t", "km", "lat", "lon"])
@@ -127,6 +127,7 @@ def _arrays(track: pd.DataFrame | None, *, timed: bool) -> dict[str, Any] | None
         "lon": frame["lon"].round(5).tolist(),
         "hr": _series(frame, "hr", 0),
         "ele": _series(frame, "elevation_m", 1),
+        "gain": _series(frame, "elevation_gain_cum_m", 3),
         "pace": _series(frame, "pace_min_km", 2),
         "cad": cadence,
         "playable": timed,
@@ -137,8 +138,10 @@ def ready(track: pd.DataFrame | None) -> bool:
     return payload(track) is not None
 
 
-def _text() -> dict[str, str]:
+def _text(track: pd.DataFrame | None = None) -> dict[str, str]:
     tr = i18n.tr
+    terrain = (track is not None and "elevation_source" in track
+               and track["elevation_source"].notna().all())
     return {
         "play": tr(pl="Odtwórz", en="Play"), "pause": tr(pl="Pauza", en="Pause"),
         "again": tr(pl="Jeszcze raz", en="Again"),
@@ -146,10 +149,13 @@ def _text() -> dict[str, str]:
         "speed_hint": tr(pl="s biegu na 1 s filmu", en="s of the activity per 1 s of film"),
         "distance": tr(pl="Dystans", en="Distance"), "time": tr(pl="Czas", en="Time"),
         "pace": tr(pl="Tempo", en="Pace"), "hr": tr(pl="Tętno", en="Heart rate"),
-        "elevation": tr(pl="Wysokość", en="Elevation"), "climb": tr(pl="Podejście", en="Climb"),
+        "elevation": (tr(pl="Wysokość · NMT GUGiK", en="Elevation · GUGiK DTM") if terrain
+                      else tr(pl="Wysokość", en="Elevation")),
+        "climb": tr(pl="Podejście", en="Climb"),
         "cadence": tr(pl="Kadencja", en="Cadence"),
         "m_pace": tr(pl="tempo", en="pace"), "m_hr": tr(pl="tętno", en="heart rate"),
-        "m_ele": tr(pl="wysokość", en="elevation"),
+        "m_ele": (tr(pl="wysokość · NMT GUGiK", en="elevation · GUGiK DTM") if terrain
+                  else tr(pl="wysokość", en="elevation")),
         "zoom_in": tr(pl="Przybliż", en="Zoom in"), "zoom_out": tr(pl="Oddal", en="Zoom out"),
         "fit": tr(pl="Cała trasa", en="Whole route"), "full": tr(pl="Pełny ekran", en="Full screen"),
         "rest_mouse": tr(pl="Najedź na trasę albo wykres, żeby odczytać to miejsce · ▶ odtwarza aktywność",
@@ -184,7 +190,7 @@ def show(track: pd.DataFrame, *, key: str, channel: int | str, map_height: int =
     data = route(track)
     if data is None:
         return False
-    _component(data=data, text=_text(), theme=_theme(), speeds=list(SPEEDS), map_height=int(map_height),
+    _component(data=data, text=_text(track), theme=_theme(), speeds=list(SPEEDS), map_height=int(map_height),
                channel=str(channel), key=key, default=None)
     return True
 
@@ -200,5 +206,5 @@ def charts(track: pd.DataFrame, *, key: str, channel: int | str, height: int = 3
         return False
     # Only what the charts draw: the route stays out of this iframe.
     data = {name: data[name] for name in ("t", "km", "hr", "ele", "pace")}
-    _charts(data=data, text=_text(), theme=_theme(), height=int(height), channel=str(channel), key=key, default=None)
+    _charts(data=data, text=_text(track), theme=_theme(), height=int(height), channel=str(channel), key=key, default=None)
     return True

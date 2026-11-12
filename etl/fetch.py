@@ -260,7 +260,9 @@ def run(start: dt.date, end: dt.date, load_every: int = 0, details: bool = True)
 def rebuild() -> None:
     """Rebuild parquet tables and derived analytics from the raw files."""
     from etl import load
+    from etl import terrain
 
+    terrain.prepare()
     load.main()
     # Analytics is a separate step so a modelling failure never costs the
     # fetched data: the base tables are already on disk by this point.

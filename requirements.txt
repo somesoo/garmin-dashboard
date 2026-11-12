@@ -11,6 +11,7 @@ uvicorn>=0.30
 duckdb>=1.1
 pandas>=2.2
 pyarrow>=17
+pyproj>=3.6  # local GPS -> EPSG:2180 transformation for opt-in GUGiK terrain corrections
 plotly>=5.24
 PyYAML>=6.0
 scipy>=1.14
