@@ -119,7 +119,8 @@ class TerrainTests(unittest.TestCase):
                           run_laps=laps, run_sessions=a.copy(), run_splits=splits)
             for name, frame in tables.items():
                 load.write_table(frame, name)
-            with mock.patch.object(terrain, "sample", return_value=np.arange(11, dtype=float) + 100):
+            with mock.patch.object(terrain, "sample", return_value=np.arange(11, dtype=float) + 100), \
+                 mock.patch.object(terrain, "prepare_routes"):
                 self.assertEqual(terrain.backfill(), 1)
                 first = {n: pd.read_parquet(config.tables() / f"{n}.parquet") for n in tables}
                 self.assertEqual(terrain.backfill(), 1)

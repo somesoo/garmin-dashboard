@@ -142,6 +142,7 @@ def _text(track: pd.DataFrame | None = None) -> dict[str, str]:
     tr = i18n.tr
     terrain = (track is not None and "elevation_source" in track
                and track["elevation_source"].notna().all())
+    provider = "Mapzen" if terrain and track["elevation_source"].astype(str).str.startswith("mapzen").any() else "NMT GUGiK"
     return {
         "play": tr(pl="Odtwórz", en="Play"), "pause": tr(pl="Pauza", en="Pause"),
         "again": tr(pl="Jeszcze raz", en="Again"),
@@ -149,12 +150,12 @@ def _text(track: pd.DataFrame | None = None) -> dict[str, str]:
         "speed_hint": tr(pl="s biegu na 1 s filmu", en="s of the activity per 1 s of film"),
         "distance": tr(pl="Dystans", en="Distance"), "time": tr(pl="Czas", en="Time"),
         "pace": tr(pl="Tempo", en="Pace"), "hr": tr(pl="Tętno", en="Heart rate"),
-        "elevation": (tr(pl="Wysokość · NMT GUGiK", en="Elevation · GUGiK DTM") if terrain
+        "elevation": (tr(pl=f"Wysokość · {provider}", en=f"Elevation · {provider}") if terrain
                       else tr(pl="Wysokość", en="Elevation")),
         "climb": tr(pl="Podejście", en="Climb"),
         "cadence": tr(pl="Kadencja", en="Cadence"),
         "m_pace": tr(pl="tempo", en="pace"), "m_hr": tr(pl="tętno", en="heart rate"),
-        "m_ele": (tr(pl="wysokość · NMT GUGiK", en="elevation · GUGiK DTM") if terrain
+        "m_ele": (tr(pl=f"wysokość · {provider}", en=f"elevation · {provider}") if terrain
                   else tr(pl="wysokość", en="elevation")),
         "zoom_in": tr(pl="Przybliż", en="Zoom in"), "zoom_out": tr(pl="Oddal", en="Zoom out"),
         "fit": tr(pl="Cała trasa", en="Whole route"), "full": tr(pl="Pełny ekran", en="Full screen"),

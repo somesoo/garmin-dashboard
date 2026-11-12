@@ -35,6 +35,9 @@ def render() -> None:
     frame = rc.guard()
     if frame is None:
         return
+    from ui import elevation
+
+    elevation.selector()
     catalogue = frame.sort_values("start_local", ascending=False)
     options = catalogue["activity_id"].astype(int).tolist()
     wanted = st.session_state.pop("run_activity_request", None)

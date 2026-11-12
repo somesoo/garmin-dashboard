@@ -8,18 +8,31 @@ dotychczasowe wartości, także przy kolejnej przebudowie. Osoby bez ustawienia
 nie korzystają z korekty; obecnie obsługiwane jest źródło Garmin.
 
 Źródło: [NMT GUGiK, usługa WCS](https://www.geoportal.gov.pl/pl/usluga/uslugi-pobierania-wcs/),
-`DTM_PL-EVRF2007-NH`, układ poziomy EPSG:2180, siatka pobierana co 2 m.
-Publiczne, stałe kwadraty 2 × 2 km z zakładką 2 m są przechowywane w
-`data/terrain/gugik_nmt_evrf2007_2m_v1/`. Serwer pobiera kwadraty potrzebne
+`DTM_PL-EVRF2007-NH`, układ poziomy EPSG:2180, siatka pobierana co 2 lub 5 m.
+Publiczne, stałe kwadraty 2 × 2 km z zakładką jednej komórki są przechowywane w
+`data/terrain/gugik_nmt_evrf2007_<2|5>m_v1/`. Serwer pobiera kwadraty potrzebne
 do nowych tras; GUGiK otrzymuje zasięg kwadratu, nigdy ślad GPS ani identyfikator
 aktywności. Przeliczenie współrzędnych i interpolacja dwuliniowa odbywają się lokalnie.
 NMT opisuje grunt: mosty, tunele i bieżnie wewnątrz budynków wymagają odrębnej
 interpretacji. Korekta nie jest stosowana do aktywności bez śladu GPS.
 
+Opcja `global_fallback` używa poza polskim zasięgiem
+[Mapzen Terrain Tiles](https://registry.opendata.aws/terrain-tiles/): Terrarium,
+zoom 12, rozdzielczość zależna od szerokości geograficznej (około 20–40 m).
+Stałe kafle PNG pobierane są z publicznego S3, dekodowane do lokalnego cache'u
+`data/terrain/mapzen_terrarium_z12_v1/`, a wysokość jest interpolowana także
+przez krawędzie kafli. To model o mniejszej szczegółowości niż GUGiK;
+pochodzenie zapisuje `elevation_source`. Atrybucja: Mapzen, Copernicus / EU-DEM
+(dane i finansowanie Unii Europejskiej), USGS (SRTM, GMTED2010); pełna
+[lista źródeł i licencji](https://github.com/tilezen/joerd/blob/master/docs/attribution.md).
+Odczyt profili nie wysyła zapytań do dostawców. Pobieranie używa maksymalnie
+trzech wątków w jednym procesie ETL; publiczne rastry nie zawierają śladów osób.
+
 | Tabela | Kolumny korekty |
 |---|---|
 | `routes` | `elevation_m` — wysokość terenu; `elevation_original_m` — zapis Garmina; `elevation_source` — kod źródła; `elevation_gain_cum_m`, `elevation_loss_cum_m` — narastające podejścia i zejścia |
 | `activities`, `route_summary`, `run_laps` | `elevation_gain_m` — podejścia z NMT; `elevation_gain_original_m` — wcześniejsza wartość; `elevation_source` — kod źródła |
+| `run_splits` | `elev_gain_original_m`, `elev_loss_original_m` — przewyższenia splitów policzone dotychczasową metodą ze źródłowego profilu Garmina |
 
 Podejścia liczone są ze wspólnego profilu: interpolacja co 10 m dystansu,
 średnia pięciu próbek, suma dodatnich zmian. Okrążenia i splity dzielą narastającą
@@ -38,11 +51,29 @@ Jednorazowa korekta istniejącej produkcji bez przeliczania pozostałych metryk:
 `GARMIN_USER=<id> .venv/bin/python etl/run.py --terrain-only`. Polecenie bierze
 blokadę pobierania, sprawdza dokładną zgodność starszych wierszy i wszystkich
 pól poza wysokością, aktualizuje też `run_sessions` i przewyższenia `run_splits`,
-a klucz cache'u przesuwa dopiero po weryfikacji zapisu.
+a klucz cache'u przesuwa dopiero po weryfikacji zapisu. Oryginalne wartości
+nie są nadpisywane przy powtórnym uruchomieniu. Brak kompletnego strumienia
+dystansu pozwala wyznaczyć odległość do samego profilu z GPS; zapisany dystans
+i tempo aktywności nie są przy tym zmieniane.
+
+Przeliczenie całej historii, z mniejszym cache'em polskiego NMT i wyjazdami:
+
+```bash
+GARMIN_USER=<id> .venv/bin/python -m etl.terrain --since 2023-06-01 --grid-m 5 --global-fallback --prepare
+GARMIN_USER=<id> .venv/bin/python etl/run.py --terrain-only
+```
+
+Przełącznik **Korekta terenowa / Oryginał Garmin** znajduje się na Treningu,
+Trasach i Koncie. Wybór jest ustawieniem oglądającego w `ui.json`, zapisanym
+jako kod `elevation_mode`; trener nie zmienia ustawień zawodnika. Przełącza
+profil, mapę, podejścia, okrążenia, splity, zestawienia i zapytania SQL w
+dashboardzie. ETL i fizyczne parquet zawsze pozostają przy korekcie, z
+zachowanymi oryginałami. `shell.build_id()` uwzględnia tryb, a widoki SQL dla
+oryginałów zachowują identyczne ograniczenia dostępu do plików osoby.
 
 Koordynator `fetch.rebuild` uzupełnia brakujące kafle przed budową tabel.
 Sam `etl/load.py` używa wyłącznie cache’u i nie wysyła zapytań sieciowych.
-Brak kafla, brak danych w NMT lub trasa poza Polską przerywają korektę przed
+Brak kafla, brak danych w NMT lub trasa poza Polską bez `global_fallback` przerywają korektę przed
 publikacją tabel zamiast mieszać wysokość terenową z zapisem zegarka.
 
 Opis hurtowni: co jest w każdej tabeli. Zasady i pułapki są w `AGENTS.md`.

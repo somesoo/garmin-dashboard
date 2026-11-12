@@ -28,6 +28,9 @@ def _sport_label(code: object) -> str:
 
 
 def render() -> None:
+    from ui import elevation
+
+    elevation.selector()
     tr = i18n.tr
     routes = shell.table("routes")
     activities = shell.table("activities")
@@ -213,6 +216,9 @@ def streams_tile(track: pd.DataFrame, activity_id: int, *, key: str) -> None:
     """
     tr = i18n.tr
     caption = tr(pl="Wyżej na panelu tempa = szybciej.", en="Higher on the pace panel = faster.")
+    if "elevation_source" in track and track["elevation_source"].astype(str).str.startswith("mapzen").any():
+        caption += tr(pl=" Wysokość: Mapzen · Copernicus / EU-DEM (finansowanie UE) · USGS (SRTM, GMTED2010).",
+                      en=" Elevation: Mapzen · Copernicus / EU-DEM (EU funding) · USGS (SRTM, GMTED2010).")
     if replay.ready(track):
         with bento.tile(tr(pl="Przebieg w czasie", en="Over time"), rows=2, key=f"{key}_replay", caption=caption,
                         how=tr(pl="Wykresy i mapa mają jeden zegar: najedź na wykres, a kropka na mapie pokaże to "

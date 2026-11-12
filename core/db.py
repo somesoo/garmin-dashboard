@@ -54,7 +54,7 @@ DERIVED_TABLES = (
 TABLE_NAMES = BASE_TABLES + DERIVED_TABLES
 
 
-def connect() -> duckdb.DuckDBPyConnection:
+def connect(*, elevation_mode: str = "terrain") -> duckdb.DuckDBPyConnection:
     """Views over the current person's tables -- and nothing else on disk.
 
     The SQL tab and the insights run whatever SQL they are given. DuckDB can
@@ -71,9 +71,22 @@ def connect() -> duckdb.DuckDBPyConnection:
             # The path is inlined rather than bound: a view definition cannot
             # carry a prepared parameter, and queries against it would fail.
             literal = str(path).replace("'", "''")
+            selection = "*"
+            if elevation_mode == "garmin" and name in {"activities", "routes", "route_summary", "run_laps", "run_sessions", "run_splits"}:
+                columns = {row[0] for row in con.execute(f"DESCRIBE SELECT * FROM read_parquet('{literal}')").fetchall()}
+                pairs = {"elevation_m": "elevation_original_m", "elevation_gain_m": "elevation_gain_original_m",
+                         "elev_gain_m": "elev_gain_original_m", "elev_loss_m": "elev_loss_original_m"}
+                replacements = [f"{original} AS {active}" for active, original in pairs.items() if original in columns]
+                if replacements:
+                    if "elevation_source" in columns:
+                        replacements.append("NULL AS elevation_source")
+                    excluded = [c for c in ("elevation_gain_cum_m", "elevation_loss_cum_m") if c in columns] if name == "routes" else []
+                    if excluded:
+                        selection += " EXCLUDE (" + ", ".join(excluded) + ")"
+                    selection += " REPLACE (" + ", ".join(replacements) + ")"
             con.execute(
                 f"CREATE OR REPLACE VIEW {name} AS "
-                f"SELECT * FROM read_parquet('{literal}')"
+                f"SELECT {selection} FROM read_parquet('{literal}')"
             )
     allowed = (str(folder.resolve()) + "/").replace("'", "''")
     con.execute(f"SET allowed_directories = ['{allowed}']")
@@ -82,9 +95,9 @@ def connect() -> duckdb.DuckDBPyConnection:
     return con
 
 
-def query(sql: str) -> pd.DataFrame:
+def query(sql: str, *, elevation_mode: str = "terrain") -> pd.DataFrame:
     """Run read-only SQL against the warehouse and return a DataFrame."""
-    con = connect()
+    con = connect(elevation_mode=elevation_mode)
     try:
         return con.execute(sql).fetch_df()
     finally:

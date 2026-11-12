@@ -409,7 +409,16 @@ def km_splits(track: pd.DataFrame) -> pd.DataFrame:
                 "stop_s": round(float(standing[index] - standing[index - 1]), 0) if standing is not None else None,
             }
         )
-    return pd.DataFrame(rows, columns=columns)
+    result = pd.DataFrame(rows, columns=columns)
+    if ("elevation_source" in track and track["elevation_source"].notna().any()
+            and "elevation_original_m" in track):
+        from core import elevation as elevation_view
+
+        original = km_splits(elevation_view.select(track, "routes", "garmin"))
+        if len(original) == len(result):
+            result["elev_gain_original_m"] = original["elev_gain_m"].values
+            result["elev_loss_original_m"] = original["elev_loss_m"].values
+    return result
 
 
 def best_segment(track: pd.DataFrame, metres: float) -> tuple[float, float] | None:

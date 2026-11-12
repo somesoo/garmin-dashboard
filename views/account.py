@@ -95,6 +95,11 @@ def render() -> None:
     with right:
         _profile(person, email)
         _level()
+        if person.source == "garmin":
+            from ui import elevation
+
+            with bento.panel(tr(pl="Wysokość", en="Elevation"), key="acc_elevation"):
+                elevation.selector()
         _app(person)
         _tokens(person)
         _yours(person)

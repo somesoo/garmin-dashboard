@@ -17,6 +17,7 @@ import streamlit as st
 
 from core import config
 from core import db
+from core import elevation
 from ui import glossary
 from core import i18n
 from ui import routing
@@ -661,8 +662,8 @@ def _table(name: str, build: str) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False, max_entries=64)
-def _sql(sql: str, build: str) -> pd.DataFrame:
-    return db.query(sql)
+def _sql(sql: str, build: str, elevation_mode: str) -> pd.DataFrame:
+    return db.query(sql, elevation_mode=elevation_mode)
 
 
 @st.cache_data(show_spinner=False)
@@ -683,16 +684,16 @@ def build_id() -> str:
     by all sessions of the process -- without the person in it, two people with
     a build from the same second (or none yet) would get each other's tables.
     """
-    return f"{tenant.current().id}@{db.state().get('built_at', 'none')}"
+    return f"{tenant.current().id}@{db.state().get('built_at', 'none')}:{elevation.current()}"
 
 
 def table(name: str) -> pd.DataFrame:
     """A warehouse table, cached until the ETL rebuilds it."""
-    return _table(name, build_id())
+    return elevation.select(_table(name, build_id()), name, elevation.current())
 
 
 def query(sql: str) -> pd.DataFrame:
-    return _sql(sql, build_id())
+    return _sql(sql, build_id(), elevation.current())
 
 
 def models() -> dict:

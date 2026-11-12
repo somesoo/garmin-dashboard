@@ -14,6 +14,7 @@ import os
 import time
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +23,7 @@ import pandas as pd
 from core import config, tenant
 
 SOURCE = "gugik_nmt_evrf2007_2m_v1"
+SOURCE_5M = "gugik_nmt_evrf2007_5m_v1"
 URL = "https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModel"
 TILE_M = 2000
 CELL_M = 2
@@ -39,14 +41,35 @@ def settings() -> dict | None:
         return None
     value = json.loads(path.read_text(encoding="utf-8"))
     dt.date.fromisoformat(value["since"])
-    if value.get("source") != SOURCE:
+    if value.get("source") not in (SOURCE, SOURCE_5M):
         raise ValueError("Unknown terrain source")
     return value
 
 
 def cache_dir() -> Path:
     # Public rasters contain no user data and are shared by all people.
-    return config.DATA / "terrain" / SOURCE
+    return config.DATA / "terrain" / (settings() or {}).get("source", SOURCE)
+
+
+def cell_size() -> int:
+    return 5 if (settings() or {}).get("source") == SOURCE_5M else CELL_M
+
+
+def in_poland(track: pd.DataFrame) -> bool:
+    lat = pd.to_numeric(track.lat, errors="coerce")
+    lon = pd.to_numeric(track.lon, errors="coerce")
+    return bool((lat.between(48.6, 55.1) & lon.between(13.7, 24.9)).all())
+
+
+def distance_m(track: pd.DataFrame) -> np.ndarray:
+    if "distance_km" in track:
+        value = pd.to_numeric(track.distance_km, errors="coerce").to_numpy(dtype=float) * 1000
+        if np.isfinite(value).all() and value[-1] > value[0]:
+            return np.maximum.accumulate(value)
+    lat = np.radians(pd.to_numeric(track.lat, errors="coerce").to_numpy(dtype=float))
+    lon = np.radians(pd.to_numeric(track.lon, errors="coerce").to_numpy(dtype=float))
+    a = np.sin(np.diff(lat)/2)**2 + np.cos(lat[:-1])*np.cos(lat[1:])*np.sin(np.diff(lon)/2)**2
+    return np.r_[0., np.cumsum(2 * 6371000 * np.arcsin(np.sqrt(np.clip(a, 0, 1))))]
 
 
 def eligible(activities: pd.DataFrame, options: dict) -> set:
@@ -101,13 +124,13 @@ def download(ix: int, iy: int) -> None:
     path = tile_path(ix, iy)
     if path.exists():
         return
-    print("NMT: downloading a missing public terrain tile", flush=True)
-    left, bottom = ix * TILE_M - HALO_M, iy * TILE_M - HALO_M
-    side = TILE_M + 2 * HALO_M
+    cell = cell_size()
+    left, bottom = ix * TILE_M - cell, iy * TILE_M - cell
+    side = TILE_M + 2 * cell
     params = dict(SERVICE="WCS", VERSION="1.0.0", REQUEST="GetCoverage",
                   COVERAGE="DTM_PL-EVRF2007-NH", CRS="EPSG:2180", RESPONSE_CRS="EPSG:2180",
                   BBOX=f"{left},{bottom},{left + side},{bottom + side}",
-                  WIDTH=side // CELL_M, HEIGHT=side // CELL_M,
+                  WIDTH=side // cell, HEIGHT=side // cell,
                   FORMAT="image/x-aaigrid", INTERPOLATION="bilinear")
     # Only fixed public grid squares are requested, never a route-shaped bbox.
     request = urllib.request.Request(URL + "?" + urllib.parse.urlencode(params),
@@ -118,9 +141,9 @@ def download(ix: int, iy: int) -> None:
                 body = response.read(MAX_BYTES + 1)
             if len(body) > MAX_BYTES:
                 raise ValueError("NMT response too large")
-            grid, x, y, cell = parse_ascii(body)
-            if not (abs(x - left) < 0.01 and abs(y - bottom) < 0.01 and abs(cell - CELL_M) < 0.001
-                    and grid.shape == (side // CELL_M, side // CELL_M) and np.isfinite(grid).any()):
+            grid, x, y, actual_cell = parse_ascii(body)
+            if not (abs(x - left) < 0.01 and abs(y - bottom) < 0.01 and abs(actual_cell - cell) < 0.001
+                    and grid.shape == (side // cell, side // cell) and np.isfinite(grid).any()):
                 raise ValueError("NMT grid does not match requested tile")
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_suffix(f".{os.getpid()}.part")
@@ -166,7 +189,7 @@ def sample(track: pd.DataFrame, *, prepare: bool = False) -> np.ndarray:
 
 def cumulative(track: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
     """One distance-smoothed profile for the total, laps and replay (metres)."""
-    distance = pd.to_numeric(track["distance_km"], errors="coerce").to_numpy(dtype=float) * 1000
+    distance = distance_m(track)
     elevation = pd.to_numeric(track["elevation_m"], errors="coerce").to_numpy(dtype=float)
     if not (np.isfinite(distance).all() and np.isfinite(elevation).all()):
         raise ValueError("Terrain profile requires a complete distance/elevation stream")
@@ -182,24 +205,55 @@ def cumulative(track: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
     return np.interp(distance, axis, up).round(3), np.interp(distance, axis, down).round(3)
 
 
+def prepare_routes(routes: pd.DataFrame, activities: pd.DataFrame, options: dict) -> None:
+    from etl import terrain_global
+
+    local, global_tiles = set(), set()
+    for _, track in routes[routes.activity_id.isin(eligible(activities, options))].groupby("activity_id", sort=False):
+        if options.get("global_fallback") and not in_poland(track):
+            global_tiles.update(terrain_global.tiles(track))
+        else:
+            x, y = projected(track)
+            local.update(zip(np.floor(x / TILE_M).astype(int), np.floor(y / TILE_M).astype(int)))
+    work = [(download, int(x), int(y)) for x, y in sorted(local) if not tile_path(int(x), int(y)).exists()]
+    work += [(terrain_global.download, x, y) for x, y in sorted(global_tiles)
+             if not (terrain_global.cache_dir() / f"{x}_{y}.npz").exists()]
+    print(f"NMT: preparing {len(work)} missing public tiles", flush=True)
+    def one(item):
+        fn, x, y = item
+        fn(x, y)
+    # One ETL process; bounded downloads keep this within the small VPS budget.
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        for index, _ in enumerate(pool.map(one, work), start=1):
+            if index % 10 == 0 or index == len(work):
+                print(f"NMT: prepared {index}/{len(work)} tiles", flush=True)
+
+
 def correct_routes(routes: pd.DataFrame, activities: pd.DataFrame, *, prepare: bool = False) -> pd.DataFrame:
     options = settings()
     if options is None or routes.empty:
         return routes
     ids = eligible(activities, options)
+    if prepare:
+        prepare_routes(routes, activities, options)
+        return routes
     out = routes.copy()
     for aid, track in routes[routes.activity_id.isin(ids)].groupby("activity_id", sort=False):
         track = track.sort_values("seq").copy()
-        values = sample(track, prepare=prepare)
-        if prepare:
-            continue
+        source = options["source"]
+        if options.get("global_fallback") and not in_poland(track):
+            from etl import terrain_global
+
+            values, source = terrain_global.sample(track), terrain_global.SOURCE
+        else:
+            values = sample(track)
         if "elevation_original_m" not in out:
             out["elevation_original_m"] = out.get("elevation_m", np.nan)
             out["elevation_source"] = None
         track["elevation_m"] = values
         up, down = cumulative(track)
         out.loc[track.index, "elevation_m"] = values
-        out.loc[track.index, "elevation_source"] = SOURCE
+        out.loc[track.index, "elevation_source"] = source
         out.loc[track.index, "elevation_gain_cum_m"] = up
         out.loc[track.index, "elevation_loss_cum_m"] = down
     return out
@@ -216,23 +270,23 @@ def correct_summaries(activities: pd.DataFrame, summary: pd.DataFrame, laps: pd.
                 frame["elevation_gain_original_m"] = frame["elevation_gain_m"]
             if "elevation_source" not in frame:
                 frame["elevation_source"] = None
-    for aid, track in routes[routes.elevation_source == SOURCE].groupby("activity_id", sort=False):
+    for aid, track in routes[routes.elevation_source.notna()].groupby("activity_id", sort=False):
         track = track.sort_values("seq")
         total = round(float(track.elevation_gain_cum_m.iloc[-1]), 1)
         for frame in (activities, summary):
             mask = frame.activity_id == aid
             frame.loc[mask, "elevation_gain_m"] = total
-            frame.loc[mask, "elevation_source"] = SOURCE
+            frame.loc[mask, "elevation_source"] = track.elevation_source.iloc[0]
         if not laps.empty:
             selected = laps[laps.activity_id == aid].sort_values("lap")
             distances = pd.to_numeric(selected.distance_m, errors="coerce")
             if not distances.notna().all() or (distances < 0).any():
                 raise ValueError("Cannot align terrain elevations with lap distances")
             edges = np.r_[0, distances.cumsum().to_numpy()]
-            gains = np.interp(edges, np.maximum.accumulate(track.distance_km.to_numpy() * 1000),
+            gains = np.interp(edges, distance_m(track),
                               track.elevation_gain_cum_m.to_numpy())
             laps.loc[selected.index, "elevation_gain_m"] = np.diff(gains).round(1)
-            laps.loc[selected.index, "elevation_source"] = SOURCE
+            laps.loc[selected.index, "elevation_source"] = track.elevation_source.iloc[0]
     return activities, summary, laps
 
 
@@ -280,11 +334,16 @@ def backfill() -> int:
     if "elevation_source" not in runs:
         runs["elevation_source"] = None
     gain_by_id = activities.set_index("activity_id").elevation_gain_m
+    source_by_id = activities.set_index("activity_id").elevation_source
     mask = runs.activity_id.isin(ids)
     runs.loc[mask, "elevation_gain_m"] = runs.loc[mask, "activity_id"].map(gain_by_id)
-    runs.loc[mask, "elevation_source"] = SOURCE
+    runs.loc[mask, "elevation_source"] = runs.loc[mask, "activity_id"].map(source_by_id)
     new["run_sessions"] = runs
     splits = old["run_splits"].copy()
+    for column in ("elev_gain_m", "elev_loss_m"):
+        original = column.replace("_m", "_original_m")
+        if original not in splits:
+            splits[original] = splits[column]
     for aid, track in routes[routes.activity_id.isin(ids)].groupby("activity_id", sort=False):
         selected = splits[splits.activity_id == aid]
         if selected.empty:
@@ -295,13 +354,16 @@ def backfill() -> int:
             if values.isna().any():
                 raise ValueError("Cannot align corrected kilometre splits")
             splits.loc[selected.index, column] = values
+            original = column.replace("_m", "_original_m")
+            splits.loc[selected.index, original] = selected["km"].map(computed[original])
     new["run_splits"] = splits
-    allowed = {"routes": {"elevation_m"}, "run_splits": {"elev_gain_m", "elev_loss_m"}}
+    allowed = {"routes": {"elevation_m", "elevation_source", "elevation_gain_cum_m", "elevation_loss_cum_m"},
+               "run_splits": {"elev_gain_m", "elev_loss_m", "elev_gain_original_m", "elev_loss_original_m"}}
     for name in names:
         before, after = old[name], new[name]
         historic = ~before.activity_id.isin(ids)
         pd.testing.assert_frame_equal(before.loc[historic], after.loc[historic, before.columns], check_exact=True)
-        changed = allowed.get(name, {"elevation_gain_m"})
+        changed = allowed.get(name, {"elevation_gain_m", "elevation_source"})
         unchanged = [c for c in before if c not in changed]
         pd.testing.assert_frame_equal(before[unchanged], after[unchanged], check_exact=True)
     if raw != {p: (p.stat().st_size, p.stat().st_mtime_ns) for p in config.raw().rglob("*") if p.is_file()}:
@@ -327,6 +389,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Prepare local GUGiK terrain tiles for the current person")
     parser.add_argument("--since", type=dt.date.fromisoformat, help="enable corrections from this local date")
     parser.add_argument("--prepare", action="store_true")
+    parser.add_argument("--grid-m", type=int, choices=(2, 5), help="NMT sampling grid (5 m uses less disk for a long history)")
+    parser.add_argument("--global-fallback", action="store_true", help="use Mapzen terrain outside Poland")
     args = parser.parse_args()
     from core import audit, privacy
 
@@ -336,9 +400,18 @@ def main() -> int:
     if person.source != "garmin":
         raise ValueError("Terrain correction currently supports Garmin activities")
     audit.record("admin", person.id, by="owner", detail="configure/prepare local terrain correction")
-    if args.since:
+    if args.since or args.grid_m or args.global_fallback:
+        options = settings() or {"source": SOURCE}
+        if args.since:
+            options["since"] = args.since.isoformat()
+        if args.grid_m:
+            options["source"] = SOURCE_5M if args.grid_m == 5 else SOURCE
+        if args.global_fallback:
+            options["global_fallback"] = True
+        if "since" not in options:
+            parser.error("--since is required when enabling terrain correction")
         settings_path().parent.mkdir(parents=True, exist_ok=True)
-        settings_path().write_text(json.dumps({"since": args.since.isoformat(), "source": SOURCE}), encoding="utf-8")
+        settings_path().write_text(json.dumps(options), encoding="utf-8")
     if args.prepare:
         prepare()
     return 0
