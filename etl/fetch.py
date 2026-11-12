@@ -278,6 +278,7 @@ def rebuild() -> None:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Fetch raw Garmin data to data/raw/")
+    p.add_argument("--terrain-only", action="store_true", help="correct only existing elevation fields from the configured date")
     p.add_argument(
         "--backfill",
         metavar="YYYY-MM-DD",
@@ -313,6 +314,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     person = config._person()
+    if args.terrain_only:
+        from etl import terrain
+
+        terrain.backfill()
+        return 0
     if args.rebuild_only:
         log(f"{person.id}: przebudowa tabel bez pobierania")
         rebuild()

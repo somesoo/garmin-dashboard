@@ -212,8 +212,10 @@ def correct_summaries(activities: pd.DataFrame, summary: pd.DataFrame, laps: pd.
     activities, summary, laps = activities.copy(), summary.copy(), laps.copy()
     for frame in (activities, summary, laps):
         if "elevation_gain_m" in frame:
-            frame["elevation_gain_original_m"] = frame["elevation_gain_m"]
-            frame["elevation_source"] = None
+            if "elevation_gain_original_m" not in frame:
+                frame["elevation_gain_original_m"] = frame["elevation_gain_m"]
+            if "elevation_source" not in frame:
+                frame["elevation_source"] = None
     for aid, track in routes[routes.elevation_source == SOURCE].groupby("activity_id", sort=False):
         track = track.sort_values("seq")
         total = round(float(track.elevation_gain_cum_m.iloc[-1]), 1)
@@ -245,6 +247,80 @@ def prepare() -> None:
     activities = load.build_activities()
     routes, _ = load.build_routes(correct=False)
     correct_routes(routes, activities, prepare=True)
+
+
+def backfill() -> int:
+    """Publish only elevation fields in existing tables; keep older rows exact.
+
+    Called through etl/run.py, which owns the fetch lock. Build and verify all
+    six frames before writing; roll back on a publication error.
+    """
+    from core import audit, privacy
+    from etl import load
+    from running import sessions
+
+    person = tenant.current()
+    if privacy.required(person):
+        raise PermissionError("Current privacy consent required")
+    options = settings()
+    if options is None:
+        raise ValueError("Enable terrain correction before backfilling")
+    audit.record("admin", person.id, by="owner", detail="backfill elevation fields from configured local date")
+    names = ("activities", "routes", "route_summary", "run_laps", "run_sessions", "run_splits")
+    old = {name: pd.read_parquet(config.tables() / f"{name}.parquet") for name in names}
+    raw = {p: (p.stat().st_size, p.stat().st_mtime_ns) for p in config.raw().rglob("*") if p.is_file()}
+    ids = eligible(old["activities"], options) & set(old["routes"].activity_id)
+    correct_routes(old["routes"], old["activities"], prepare=True)
+    routes = correct_routes(old["routes"], old["activities"])
+    activities, summary, laps = correct_summaries(old["activities"], old["route_summary"], old["run_laps"], routes)
+    new = dict(activities=activities, routes=routes, route_summary=summary, run_laps=laps)
+    runs = old["run_sessions"].copy()
+    if "elevation_gain_original_m" not in runs:
+        runs["elevation_gain_original_m"] = runs["elevation_gain_m"]
+    if "elevation_source" not in runs:
+        runs["elevation_source"] = None
+    gain_by_id = activities.set_index("activity_id").elevation_gain_m
+    mask = runs.activity_id.isin(ids)
+    runs.loc[mask, "elevation_gain_m"] = runs.loc[mask, "activity_id"].map(gain_by_id)
+    runs.loc[mask, "elevation_source"] = SOURCE
+    new["run_sessions"] = runs
+    splits = old["run_splits"].copy()
+    for aid, track in routes[routes.activity_id.isin(ids)].groupby("activity_id", sort=False):
+        selected = splits[splits.activity_id == aid]
+        if selected.empty:
+            continue
+        computed = sessions.km_splits(track).set_index("km")
+        for column in ("elev_gain_m", "elev_loss_m"):
+            values = selected["km"].map(computed[column])
+            if values.isna().any():
+                raise ValueError("Cannot align corrected kilometre splits")
+            splits.loc[selected.index, column] = values
+    new["run_splits"] = splits
+    allowed = {"routes": {"elevation_m"}, "run_splits": {"elev_gain_m", "elev_loss_m"}}
+    for name in names:
+        before, after = old[name], new[name]
+        historic = ~before.activity_id.isin(ids)
+        pd.testing.assert_frame_equal(before.loc[historic], after.loc[historic, before.columns], check_exact=True)
+        changed = allowed.get(name, {"elevation_gain_m"})
+        unchanged = [c for c in before if c not in changed]
+        pd.testing.assert_frame_equal(before[unchanged], after[unchanged], check_exact=True)
+    if raw != {p: (p.stat().st_size, p.stat().st_mtime_ns) for p in config.raw().rglob("*") if p.is_file()}:
+        raise RuntimeError("Raw data changed during terrain preparation; retry")
+    written = []
+    try:
+        for name in names:
+            load.write_table(new[name], name)
+            written.append(name)
+        for name in names:
+            pd.testing.assert_frame_equal(new[name], pd.read_parquet(config.tables() / f"{name}.parquet"),
+                                          check_exact=True, check_dtype=False)
+    except Exception:
+        for name in written:
+            load.write_table(old[name], name)
+        raise
+    load.mark_built()
+    print(f"NMT: corrected {len(ids)} activities; older rows and other fields verified unchanged", flush=True)
+    return len(ids)
 
 
 def main() -> int:

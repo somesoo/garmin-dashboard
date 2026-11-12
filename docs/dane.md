@@ -34,6 +34,12 @@ GARMIN_USER=<id> .venv/bin/python -m etl.terrain --since 2026-11-01 --prepare
 GARMIN_USER=<id> .venv/bin/python etl/run.py --rebuild-only
 ```
 
+Jednorazowa korekta istniejącej produkcji bez przeliczania pozostałych metryk:
+`GARMIN_USER=<id> .venv/bin/python etl/run.py --terrain-only`. Polecenie bierze
+blokadę pobierania, sprawdza dokładną zgodność starszych wierszy i wszystkich
+pól poza wysokością, aktualizuje też `run_sessions` i przewyższenia `run_splits`,
+a klucz cache'u przesuwa dopiero po weryfikacji zapisu.
+
 Koordynator `fetch.rebuild` uzupełnia brakujące kafle przed budową tabel.
 Sam `etl/load.py` używa wyłącznie cache’u i nie wysyła zapytań sieciowych.
 Brak kafla, brak danych w NMT lub trasa poza Polską przerywają korektę przed

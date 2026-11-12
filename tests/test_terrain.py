@@ -5,7 +5,7 @@ from unittest import mock
 import numpy as np
 import pandas as pd
 
-from core import tenant
+from core import config, tenant
 from etl import load, terrain
 from tests.helpers import person, people
 from ui import replay
@@ -100,6 +100,36 @@ class TerrainTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "NMT missing"):
                     load.main()
                 write.assert_not_called()
+
+    def test_production_backfill_preserves_history_and_is_idempotent(self):
+        from running import sessions
+
+        with person():
+            enable()
+            a = pd.DataFrame({"activity_id": [1, 2], "start_local": ["2026-11-01", "2026-10-31"],
+                              "elevation_gain_m": [99., 88.], "other": [12., 13.]})
+            routes = pd.concat([track(1), track(2)], ignore_index=True)
+            routes["distance_km"] *= 10
+            routes["duration_s"] *= 10
+            laps = pd.DataFrame({"activity_id": [1, 1, 2], "lap": [0, 1, 0],
+                                 "distance_m": [500., 500., 1000.], "elevation_gain_m": [49., 50., 88.]})
+            splits = pd.concat([sessions.km_splits(t).assign(activity_id=aid)
+                                for aid, t in routes.groupby("activity_id")], ignore_index=True)
+            tables = dict(activities=a, routes=routes, route_summary=a[["activity_id", "elevation_gain_m"]],
+                          run_laps=laps, run_sessions=a.copy(), run_splits=splits)
+            for name, frame in tables.items():
+                load.write_table(frame, name)
+            with mock.patch.object(terrain, "sample", return_value=np.arange(11, dtype=float) + 100):
+                self.assertEqual(terrain.backfill(), 1)
+                first = {n: pd.read_parquet(config.tables() / f"{n}.parquet") for n in tables}
+                self.assertEqual(terrain.backfill(), 1)
+            for name, before in tables.items():
+                after = pd.read_parquet(config.tables() / f"{name}.parquet")
+                pd.testing.assert_frame_equal(first[name], after, check_exact=True)
+                old = ~before.activity_id.eq(1)
+                pd.testing.assert_frame_equal(before.loc[old], after.loc[old, before.columns], check_exact=True)
+            self.assertEqual(first["activities"].loc[0, "elevation_gain_original_m"], 99.)
+            self.assertEqual(first["run_sessions"].loc[0, "elevation_gain_original_m"], 99.)
 
 
 if __name__ == "__main__":
