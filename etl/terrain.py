@@ -219,9 +219,11 @@ def prepare_routes(routes: pd.DataFrame, activities: pd.DataFrame, options: dict
     work += [(terrain_global.download, x, y) for x, y in sorted(global_tiles)
              if not (terrain_global.cache_dir() / f"{x}_{y}.npz").exists()]
     print(f"NMT: preparing {len(work)} missing public tiles", flush=True)
+    person_id = tenant.current().id
     def one(item):
         fn, x, y = item
-        fn(x, y)
+        with tenant.use(person_id):
+            fn(x, y)
     # One ETL process; bounded downloads keep this within the small VPS budget.
     with ThreadPoolExecutor(max_workers=3) as pool:
         for index, _ in enumerate(pool.map(one, work), start=1):

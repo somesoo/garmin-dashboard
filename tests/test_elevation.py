@@ -1,4 +1,5 @@
 import json
+import os
 import unittest
 from unittest import mock
 
@@ -117,3 +118,18 @@ st.metric('gain', str(shell.table('activities').elevation_gain_m.iloc[0]))
                 out = terrain.correct_routes(t, a)
             self.assertTrue(out.elevation_source.eq(terrain_global.SOURCE).all())
             self.assertIn("Mapzen", replay._text(out)["elevation"])
+
+    def test_download_workers_keep_explicit_person_and_grid(self):
+        with people({"a": {}, "b": {}}, current="a"), mock.patch.dict(os.environ, {"GARMIN_USER": "b"}):
+            enable()
+            options = {"source": terrain.SOURCE_5M, "since": "2026-11-01"}
+            terrain.settings_path().write_text(json.dumps(options))
+            expected = tenant.current().root / "tiles"
+            seen = []
+            def download(x, y):
+                seen.append((tenant.current().id, terrain.cell_size()))
+            with mock.patch.object(terrain, "cache_dir", return_value=expected), \
+                 mock.patch.object(terrain, "download", side_effect=download):
+                terrain.prepare_routes(track(), pd.DataFrame({"activity_id": [1], "start_local": ["2026-11-01"]}), options)
+            self.assertTrue(seen)
+            self.assertTrue(all(value == ("a", 5) for value in seen))
