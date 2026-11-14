@@ -15,6 +15,10 @@ Endpoints (``Authorization: Bearer <token>``):
 - ``GET /api/db`` (scope ``read``): the person's warehouse as one SQLite file,
   with an ETag -- an app keeps it as its offline cache and asks again with
   ``If-None-Match`` (304 when nothing changed).
+- ``GET /api/views`` and ``GET /api/views/<name>`` (scope ``read``): one small
+  JSON per question for another app's tiles -- ``recovery``, ``last-workout``,
+  ``next-workout``, ``forecast`` (analysis/views.py) -- each with the address of
+  the dashboard page that holds the detail. ``?lang=pl|en``; ETag/304.
 - ``GET /api/health``: no token; ``{"ok": true}``.
 
 Tokens: random, shown once, stored only as SHA-256 in ``data/users/<id>/tokens.json``,
@@ -270,6 +274,54 @@ def build_app():
         return Response(body, media_type="application/json",
                         headers={"ETag": quoted, "Cache-Control": "private, no-cache"})
 
+    def dashboard(request: Request) -> str:
+        """The dashboard's address, for links back to the detail.
+
+        ``GARMIN_PUBLIC_URL`` when set (the API may be reached through another
+        name than a browser uses); otherwise the name this request came in under --
+        the API and the dashboard share one HTTPS origin (docs/DOSTEP.md)."""
+        fixed = os.environ.get("GARMIN_PUBLIC_URL", "").rstrip("/")
+        if fixed:
+            return fixed
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
+        host = request.headers.get("x-forwarded-host", request.headers.get("host", "")).split(",")[0].strip()
+        return f"{scheme}://{host}" if host else ""
+
+    def views_index(request: Request) -> Response:
+        """Which views exist and where each one's detail page is."""
+        from analysis import views
+
+        person = opened(request, "read")
+        if not isinstance(person, tenant.User):
+            return person
+        base = dashboard(request)
+        return JSONResponse({"person": person.id, "dashboard": base or None, "views": [
+            {"name": name, "page": page, "url": f"{base}/{page}" if base else None}
+            for name, page in views.PAGES.items()]}, headers={"Cache-Control": "private, no-cache"})
+
+    def view_json(request: Request) -> Response:
+        """One small view (analysis/views.py), per language; ETag/304.
+
+        The link is added per request, outside the cached body: the same person
+        may be read through more than one address."""
+        from analysis import views
+
+        person = opened(request, "read")
+        if not isinstance(person, tenant.User):
+            return person
+        name = request.path_params["name"]
+        if name not in views.NAMES:
+            return JSONResponse({"error": "unknown view", "views": list(views.NAMES)}, status_code=404)
+        body, etag = views.cached(person, name, request.query_params.get("lang", "pl"))
+        base = dashboard(request)
+        quoted = f'"{etag}-{hashlib.sha256(base.encode()).hexdigest()[:8]}"'
+        if request.headers.get("if-none-match") == quoted:
+            return Response(status_code=304, headers={"ETag": quoted})
+        payload = json.loads(body)
+        payload["url"] = f"{base}/{payload['page']}" if base else None
+        return Response(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), media_type="application/json",
+                        headers={"ETag": quoted, "Cache-Control": "private, no-cache"})
+
     # Under /api and at the root: `tailscale serve --set-path /api` may hand the
     # request on with or without the prefix, depending on the version.
     routes = []
@@ -277,6 +329,7 @@ def build_app():
         routes += [Route(f"{prefix}/health", health), Route(f"{prefix}/ingest/apple", ingest, methods=["POST"]),
                    Route(f"{prefix}/manifest", manifest), Route(f"{prefix}/db", database),
                    Route(f"{prefix}/summary", summary_json),
+                   Route(f"{prefix}/views", views_index), Route(f"{prefix}/views/{{name}}", view_json),
                    Mount(f"{prefix}/app", app=StaticFiles(directory=PWA, html=True))]
     return Starlette(routes=routes, middleware=[Middleware(_AppHeaders)])
 
