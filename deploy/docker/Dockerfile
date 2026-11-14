@@ -5,8 +5,8 @@ ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1 \
 RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends tzdata curl \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+COPY requirements.txt deploy/docker/constraints.txt ./
+RUN pip install -r requirements.txt -c constraints.txt
 COPY . .
 ARG REVISION=unknown
 LABEL org.opencontainers.image.revision=$REVISION
