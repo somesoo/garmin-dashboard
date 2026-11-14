@@ -119,6 +119,15 @@ Klucz *do odczytu* (ta sama strona) otwiera `GET /api/manifest` i `GET /api/db`
 (cała baza osoby jako SQLite z ETag) — pod aplikację na telefon. Klucze z terminala:
 `.venv/bin/python -m api token add|list|revoke <osoba> ...`.
 
+Ten sam klucz otwiera też małe widoki dla innych aplikacji (np. kafelki w prywatnym
+pulpicie): `GET /api/views` (spis) i `GET /api/views/<nazwa>?lang=pl|en` dla
+`recovery` (sen i regeneracja), `last-workout`, `next-workout` (następna sesja planu
+z poranną decyzją) i `forecast` (prognozy czasów i cele startów). Każda odpowiedź ma
+`page` i `url` — adres strony dashboardu ze szczegółami. Adres bierze się z nazwy,
+pod którą przyszło żądanie; gdy API jest wołane inną nazwą niż przeglądarka, ustaw
+`GARMIN_PUBLIC_URL=https://<adres dashboardu>`. Widoki liczy `analysis/views.py`
+z tych samych funkcji co strony; odpowiedzi mają ETag i są trzymane w `cache/` osoby.
+
 ## 5. Aplikacja na telefon (PWA — iPhone i Android, bez App Store)
 
 Ta sama ścieżka `/api` serwuje aplikację: `https://<komputer>.<tailnet>.ts.net/api/app/`.
