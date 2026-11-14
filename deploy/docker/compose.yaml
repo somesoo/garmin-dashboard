@@ -1,0 +1,26 @@
+# Na hoscie: /srv/apps/garmin-dashboard/{compose.yaml,data,tokens}
+# network_mode host: serwer i API slucha tylko na 127.0.0.1 hosta (tak zaklada kod:
+# api.py, security_flags); na zewnatrz wychodzi tylko przez `tailscale serve`.
+services:
+  garmin:
+    image: garmin-dashboard:local
+    network_mode: host
+    restart: always
+    user: "1000:1000"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      GARMIN_TOKENSTORE: /tokens
+      GARMIN_AUTO_FETCH_H: "6"
+      GARMIN_API_PORT: "8502"
+    volumes:
+      - ./data:/app/data
+      - ./tokens:/tokens
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8501/_stcore/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s

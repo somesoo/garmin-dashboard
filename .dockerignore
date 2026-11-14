@@ -1,0 +1,11 @@
+.git
+.claude
+.venv
+data
+*.tar.gz
+export*.zip
+__pycache__
+*.pyc
+tests
+docs/screen-shots
+.DS_Store
