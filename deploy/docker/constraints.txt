@@ -1,0 +1,2 @@
+# wormer: i5-3210M (Ivy Bridge) nie ma AVX2; duckdb 2.x wymaga AVX2 (SIGILL przy imporcie)
+duckdb<2
