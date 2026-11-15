@@ -52,7 +52,15 @@ def alive(pid: int, marker: str) -> bool:
     except OSError:
         return False
     # Guard against a recycled pid: it must still be the same program.
-    command = subprocess.run(["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True).stdout
+    # Linux, also slim containers without ``ps``: read the command line from /proc.
+    try:
+        return marker in Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+    except OSError:
+        pass
+    try:
+        command = subprocess.run(["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True).stdout
+    except OSError:  # no ps either: the process exists, so trust it
+        return True
     return marker in command
 
 
