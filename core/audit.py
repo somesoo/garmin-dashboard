@@ -37,7 +37,9 @@ KEEP_DAYS = 92
 EVENTS = ("signin", "refused", "api_read", "api_ingest", "archive", "erase", "consent", "withdraw",
           "garmin_connect", "garmin_disconnect", "admin", "inactive_erase", "policy",
           # A coach (core/team.py): consent given or withdrawn, the first look in a browser session.
-          "coach_grant", "coach_revoke", "coach_view")
+          "coach_grant", "coach_revoke", "coach_view",
+          # Self-signup into an open place (tenant.enroll).
+          "signup")
 # The phone app polls; one line an hour per key says the same as sixty.
 API_EVERY_S = 3600
 

@@ -276,6 +276,50 @@ def by_identity(value: str | None) -> User | None:
     return matches[0] if len(matches) == 1 else None
 
 
+SIGNUP_ENV = "GARMIN_OPEN_SIGNUP"
+
+
+def signup_limit() -> int:
+    """How many people may still join on their own (0 = closed, the default)."""
+    try:
+        return max(0, int(os.getenv(SIGNUP_ENV, "0") or 0))
+    except ValueError:
+        return 0
+
+
+def enroll(email: str) -> User | None:
+    """Self-signup: a verified, unknown e-mail becomes a new person, up to ``GARMIN_OPEN_SIGNUP`` of them.
+
+    Only people who joined this way (``"joined": true``) count against the limit,
+    so the people added by hand do not use up the places. None = closed or full.
+    """
+    wanted = (email or "").strip().lower()
+    limit = signup_limit()
+    if not limit or "@" not in wanted:
+        return None
+    payload = _read_registry()
+    if payload is None:
+        return None
+    entries = payload["users"]
+    if any(wanted in [str(i).strip().lower() for i in e.get("identities", ())] for e in entries.values()):
+        return by_identity(wanted)
+    if sum(1 for e in entries.values() if e.get("joined")) >= limit:
+        return None
+    base = re.sub(r"[^a-z0-9_-]", "", wanted.split("@")[0])[:24].lstrip("_-") or "gosc"
+    user_id, n = base, 1
+    while user_id in entries:
+        n += 1
+        user_id = f"{base}{n}"
+    entry = {"name": user_id, "source": "garmin", "identities": [wanted], "joined": True}
+    user = _user(user_id, entry)
+    entries[user_id] = entry
+    _write_registry(payload)
+    user.root.mkdir(parents=True, exist_ok=True)
+    from core import level
+    level.remember(level.NEW_PERSON, user.ui_settings)
+    return user
+
+
 def local_user() -> User | None:
     """The person a browser on this machine is, when exactly one is marked ``local``."""
     marked = [user for user in users().values() if user.local]

@@ -26,6 +26,8 @@ Environment=GARMIN_TOKENSTORE=/home/garmin/.garminconnect
 Environment=GARMIN_AUTO_FETCH_H=6
 # API (pushe z iPhone'a, PWA pod /api/app/) - takze przy jednej osobie.
 Environment=GARMIN_API_PORT=8502
+# Samodzielne wejscie: pierwsze N nieznanych kont Google dostaje wlasne konto (0/brak = zamkniete).
+# Environment=GARMIN_OPEN_SIGNUP=10
 Environment=PYTHONUNBUFFERED=1
 # "Dzis", noce i pora snu licza sie w czasie lokalnym; serwery chodza zwykle w UTC.
 Environment=TZ=Europe/Warsaw

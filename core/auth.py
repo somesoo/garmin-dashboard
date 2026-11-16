@@ -108,7 +108,12 @@ def identify() -> tuple[tenant.User | None, str | None]:
         # type a friend's e-mail into a fresh account at some providers.
         if st.user.get("email_verified") is False:
             return None, email or None
-        return tenant.by_identity(email), email or None
+        person = tenant.by_identity(email)
+        if person is None and email:
+            person = tenant.enroll(email)  # open places (GARMIN_OPEN_SIGNUP); None when closed or full
+            if person is not None:
+                audit.record("signup", person.id, ip=_ip())
+        return person, email or None
 
     header = os.getenv(HEADER_ENV, "").strip()
     if header:

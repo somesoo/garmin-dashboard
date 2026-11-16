@@ -32,6 +32,7 @@ module.exports = {
         GARMIN_TOKENSTORE: "/home/garmin/.garminconnect",
         GARMIN_AUTO_FETCH_H: "6",
         GARMIN_API_PORT: "8502",
+        // GARMIN_OPEN_SIGNUP: "10",  // pierwsze N nieznanych kont Google wchodzi samo
         PYTHONUNBUFFERED: "1",
       },
     },

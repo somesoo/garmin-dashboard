@@ -116,6 +116,29 @@ class Identify(unittest.TestCase):
         self.assertEqual(self.who(), ("x", "x@example.com"))
 
 
+    def _google(self, email):
+        user = mock.Mock(is_logged_in=True)
+        user.get.side_effect = {"email": email, "email_verified": True}.get
+        return mock.patch.object(auth.st, "user", user)
+
+    def test_unknown_email_joins_while_places_are_open(self):
+        self.enterContext(people(TWO))
+        self.enter(mock.patch.object(auth, "_oidc_configured", return_value=True),
+                   mock.patch.dict(os.environ, {"GARMIN_OPEN_SIGNUP": "2"}), *_context({}, ip=None))
+        for email, expected in (("Ala.K@gmail.com", "alak"), ("ola@gmail.com", "ola"), ("ewa@gmail.com", None)):
+            with self._google(email):
+                self.assertEqual(self.who()[0], expected)
+        with self._google("ala.k@gmail.com"):  # a returning person is still let in
+            self.assertEqual(self.who()[0], "alak")
+
+    def test_signup_is_closed_by_default(self):
+        self.enterContext(people(TWO))
+        self.enter(mock.patch.object(auth, "_oidc_configured", return_value=True),
+                   mock.patch.dict(os.environ, {"GARMIN_OPEN_SIGNUP": ""}), *_context({}, ip=None))
+        with self._google("ala@gmail.com"):
+            self.assertEqual(self.who(), (None, "ala@gmail.com"))
+
+
 class Setup(unittest.TestCase):
     def test_secrets_file_is_private_and_refuses_plain_http(self):
         with tempfile.TemporaryDirectory() as folder, mock.patch.object(auth, "SECRETS", Path(folder) / "s.toml"), \
